@@ -1,6 +1,6 @@
+import { colors, spacing } from '@/theme';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors, spacing } from '@/theme';
 import { NeoBox } from './NeoBox';
 import { Text } from './Text';
 
