@@ -61,3 +61,24 @@ export const settings = sqliteTable('settings', {
   value: text('value').notNull(), // JSON-encoded
   updatedAt: integer('updated_at').notNull(),
 });
+
+export const tasks = sqliteTable('tasks', {
+  ...base,
+  title: text('title').notNull(),
+  subjectId: text('subject_id').notNull(),
+  date: integer('date').notNull(),            // local midnight in epoch ms
+  startMinute: integer('start_minute').notNull(),
+  endMinute: integer('end_minute').notNull(), // duration = end - start, never stored
+  done: integer('done', { mode: 'boolean' }).notNull().default(false),
+  source: text('source').notNull().default('manual'), // manual | generated
+  planId: text('plan_id'),
+  movable: integer('movable', { mode: 'boolean' }).notNull().default(false),
+  hasPomodoro: integer('has_pomodoro', { mode: 'boolean' }).notNull().default(false),
+  notificationSound: text('notification_sound').notNull().default('Silent'),
+});
+
+export const profile = sqliteTable('profile', {
+  ...base,
+  displayName: text('display_name').notNull().default(''),
+  pictureUri: text('picture_uri'),
+});

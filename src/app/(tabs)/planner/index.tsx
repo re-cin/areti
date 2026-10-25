@@ -2,22 +2,22 @@ import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
+import { setTaskDone } from '@/db/queries/tasks';
+import { toCardTask, type CardTask } from '@/features/planner/cardTask';
+import { useSubjects } from '@/hooks/useSubjects';
+import { useTaskDays } from '@/hooks/useTaskDays';
+import { useTasksForDate } from '@/hooks/useTasksForDate';
+import { DAY_NAMES, addDays, sameDay, startOfDay, startOfWeek, weekDays, weekLabel } from '@/lib/dates';
 import { borders, colors, radii, spacing } from '@/theme';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRef, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+// TODO: move these into @/theme
 const extra = {
   sheet: '#E9E3DC',
   dayStrip: '#F2EDE4',
@@ -28,45 +28,10 @@ const extra = {
   finishedBg: '#EFE9E1',
   finishedShadow: '#6B6560',
 };
-const subject = {
-  physics: colors.pill.physics,
-  calculus: '#D0605E',
-  biology: '#4FA66B',
-};
-
-type Task = {
-  id: string;
-  time: string;
-  duration: string;
-  title: string;
-  subject: string;
-  color: string;
-  done: boolean;
-};
-
-const DAYS = [
-  { label: 'Mon', date: 14, dot: false },
-  { label: 'Tue', date: 14, dot: false },
-  { label: 'Wed', date: 16, dot: false },
-  { label: 'Thu', date: 17, dot: false },
-  { label: 'Fri', date: 18, dot: false },
-  { label: 'Sat', date: 19, dot: true },
-  { label: 'Sun', date: 20, dot: false },
-];
-
-// TODO: replace with data from the planner store / db
-const INITIAL_TASKS: Task[] = [
-  { id: '1', time: '10 am', duration: '1 hr', title: 'Physics Finals', subject: 'Physics', color: subject.physics, done: false },
-  { id: '2', time: '2 pm', duration: '1 hr', title: 'Calculus Prep & Limits', subject: 'Calculus', color: subject.calculus, done: false },
-  { id: '3', time: '1 pm', duration: '1 hr', title: 'Chapter 1 - Cells', subject: 'Biology', color: subject.biology, done: true },
-  { id: '4', time: '3 pm', duration: '45 mins', title: 'Thermodynamics Problem Set', subject: 'Physics', color: subject.physics, done: false },
-  { id: '5', time: '4 pm', duration: '1.5 hrs', title: 'Integration by Parts Drills', subject: 'Calculus', color: subject.calculus, done: false },
-  { id: '6', time: '5 pm', duration: '1 hr', title: 'Genetics & DNA Lab Review', subject: 'Biology', color: subject.biology, done: false },
-  { id: '7', time: '6 pm', duration: '30 mins', title: 'Electromagnetism Formulas', subject: 'Physics', color: subject.physics, done: false },
-  { id: '8', time: '7 pm', duration: '1 hr', title: 'Derivatives & Chain Rule', subject: 'Calculus', color: subject.calculus, done: true },
-];
+const dotColor = colors.pill.physics;
 
 function Header() {
+  // TODO: show the profile picture the user chose in Account settings, and open Settings from the gear.
   return (
     <View style={styles.header}>
       <View style={styles.headerLeft}>
@@ -82,15 +47,15 @@ function Header() {
   );
 }
 
-function WeekBar({ title }: { title: string }) {
+function WeekBar({ title, onPrev, onNext }: { title: string; onPrev: () => void; onNext: () => void }) {
   return (
     <View style={styles.weekBar}>
       <View style={styles.weekNav}>
-        <Pressable hitSlop={10}>
+        <Pressable onPress={onPrev} hitSlop={10}>
           <Ionicons name="chevron-back" size={20} color={colors.ink} />
         </Pressable>
         <Text variant="subheading">{title}</Text>
-        <Pressable hitSlop={10}>
+        <Pressable onPress={onNext} hitSlop={10}>
           <Ionicons name="chevron-forward" size={20} color={colors.ink} />
         </Pressable>
       </View>
@@ -106,19 +71,30 @@ function WeekBar({ title }: { title: string }) {
   );
 }
 
-function DayStrip({ selected, onSelect }: { selected: number; onSelect: (i: number) => void }) {
+function DayStrip({
+  days,
+  selectedDate,
+  markedDays,
+  onSelect,
+}: {
+  days: number[];
+  selectedDate: number;
+  markedDays: Set<number>;
+  onSelect: (day: number) => void;
+}) {
   return (
     <View style={styles.dayStrip}>
       <View style={styles.dayStripInner}>
-        {DAYS.map((d, i) => {
-          const active = i === selected;
+        {days.map((day) => {
+          const active = sameDay(day, selectedDate);
           const fg = active ? colors.white : colors.ink;
+          const date = new Date(day);
           return (
-            <Pressable key={d.label} onPress={() => onSelect(i)} style={[styles.day, active && styles.dayActive]}>
-              <Text variant="captionStrong" color={fg}>{d.label}</Text>
-              <Text variant="smallStrong" color={fg}>{d.date}</Text>
+            <Pressable key={day} onPress={() => onSelect(day)} style={[styles.day, active && styles.dayActive]}>
+              <Text variant="captionStrong" color={fg}>{DAY_NAMES[date.getDay()]}</Text>
+              <Text variant="smallStrong" color={fg}>{date.getDate()}</Text>
               {active && <View style={[styles.dot, { backgroundColor: colors.white }]} />}
-              {!active && d.dot && <View style={[styles.dot, { backgroundColor: subject.physics }]} />}
+              {!active && markedDays.has(day) && <View style={[styles.dot, { backgroundColor: dotColor }]} />}
             </Pressable>
           );
         })}
@@ -128,10 +104,11 @@ function DayStrip({ selected, onSelect }: { selected: number; onSelect: (i: numb
 }
 
 function ExamBanner() {
+  // TODO: nearest upcoming exam from the database; "No upcoming exams" when there is none.
   return (
     <View style={styles.banner}>
       <View style={styles.bannerLeft}>
-        <View style={[styles.bannerDot, { backgroundColor: subject.physics }]} />
+        <View style={[styles.bannerDot, { backgroundColor: dotColor }]} />
         <Text variant="captionStrong" numberOfLines={1} style={{ flexShrink: 1 }}>
           Physics exam and 3 more in <Text variant="captionStrong" color={extra.orange}>9 days</Text>
         </Text>
@@ -144,7 +121,8 @@ function ExamBanner() {
   );
 }
 
-function StreakCard() {
+function StreakCard({ remaining }: { remaining: number }) {
+  // TODO: streak and minutes studied come from the daily statistics.
   return (
     <View style={styles.streakWrap}>
       <View style={styles.streakCard}>
@@ -156,7 +134,9 @@ function StreakCard() {
         <View style={styles.streakDivider} />
         <View style={{ flex: 1, paddingLeft: 4 }}>
           <Text variant="captionStrong">30 mins. studied today</Text>
-          <Text variant="captionStrong" color={extra.tealText}>3 tasks remaining</Text>
+          <Text variant="captionStrong" color={extra.tealText}>
+            {remaining} {remaining === 1 ? 'task' : 'tasks'} remaining
+          </Text>
         </View>
       </View>
       <View style={styles.bubbleTail} />
@@ -165,6 +145,7 @@ function StreakCard() {
 }
 
 function Mascot() {
+  // TODO: level and XP come from the ghost state.
   return (
     <View style={styles.mascotRow}>
       <View style={styles.mascotSide}>
@@ -181,7 +162,7 @@ function Mascot() {
   );
 }
 
-function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
+function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => void }) {
   const done = task.done;
   const fg = done ? extra.muted : colors.ink;
   return (
@@ -205,6 +186,7 @@ function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
         </Text>
         <View style={styles.taskMeta}>
           <Pill label={task.subject} color={task.color} />
+          {/* TODO: only show the clock when the task has a linked Pomodoro (task.hasPomodoro) */}
           {!done && <Ionicons name="time" size={16} color={task.color} />}
         </View>
       </View>
@@ -222,40 +204,32 @@ function TaskCard({ task, onToggle }: { task: Task; onToggle: () => void }) {
 }
 
 export default function PlannerScreen() {
-  const [selected, setSelected] = useState(1);
-  const [tasks, setTasks] = useState<Task[]>(INITIAL_TASKS);
+  const today = startOfDay(new Date());
+  const [selectedDate, setSelectedDate] = useState(today);
 
-  // Collapsing-header measurements
+  const { date: dateParam, n } = useLocalSearchParams<{ date?: string; n?: string }>();
+
+  useEffect(() => {
+    if (dateParam) setSelectedDate(startOfDay(new Date(Number(dateParam))));
+  }, [dateParam, n]);
+
+  const weekStart = startOfWeek(selectedDate); // TODO: follow the "first day of week" setting
+  const days = weekDays(weekStart);
+
+  const { byId } = useSubjects();
+  const { todo, finished } = useTasksForDate(selectedDate);
+  const { todo: todayTodo } = useTasksForDate(today);
+  const markedDays = useTaskDays(days[0], days[6]);
+
+  // Layout measurements for the sticky header and the cream sheet
   const [viewportH, setViewportH] = useState(0);
   const [stickyH, setStickyH] = useState(0);
-  const [sheetY, setSheetY] = useState(0);
-  const [collapsed, setCollapsed] = useState(false);
-  const collapsedRef = useRef(false);
-
-  const toggle = (id: string) =>
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
-
-  const todo = tasks.filter((t) => !t.done);
-  const finished = tasks.filter((t) => t.done);
-
-  // Scroll distance at which the sheet's top edge reaches the pinned week bar + day strip.
-  const collapseY = Math.max(sheetY - stickyH - 8, 1);
-
-  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const next = e.nativeEvent.contentOffset.y >= collapseY;
-    if (next !== collapsedRef.current) {
-      collapsedRef.current = next;
-      setCollapsed(next);
-    }
-  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <ScrollView
         style={styles.scroll}
         stickyHeaderIndices={[1]}
-        onScroll={onScroll}
-        scrollEventThrottle={16}
         onLayout={(e: LayoutChangeEvent) => setViewportH(e.nativeEvent.layout.height)}
         showsVerticalScrollIndicator={false}>
         {/* 0: scrolls away */}
@@ -265,21 +239,23 @@ export default function PlannerScreen() {
 
         {/* 1: pinned to the top once the header has scrolled off */}
         <View style={styles.sticky} onLayout={(e) => setStickyH(e.nativeEvent.layout.height)}>
-          <WeekBar title='September Week 3' />
-          <DayStrip selected={selected} onSelect={setSelected} />
+          <WeekBar
+            title={weekLabel(weekStart)}
+            onPrev={() => setSelectedDate(addDays(selectedDate, -7))}
+            onNext={() => setSelectedDate(addDays(selectedDate, 7))}
+          />
+          <DayStrip days={days} selectedDate={selectedDate} markedDays={markedDays} onSelect={setSelectedDate} />
         </View>
 
         {/* 2: slides up underneath the pinned block */}
         <View style={styles.pad}>
           <ExamBanner />
-          <StreakCard />
+          <StreakCard remaining={todayTodo.length} />
           <Mascot />
         </View>
 
         {/* 3: the cream panel */}
-        <View
-          style={[styles.sheet, { minHeight: Math.max(viewportH - stickyH, 0) }]}
-          onLayout={(e) => setSheetY(e.nativeEvent.layout.y)}>
+        <View style={[styles.sheet, { minHeight: Math.max(viewportH - stickyH, 0) }]}>
           <View style={styles.sectionRow}>
             <Text variant="smallStrong" color={extra.muted}>Daily Tasks</Text>
             <Pressable style={styles.editBtn} hitSlop={10}>
@@ -290,7 +266,7 @@ export default function PlannerScreen() {
 
           <View style={styles.taskList}>
             {todo.map((t) => (
-              <TaskCard key={t.id} task={t} onToggle={() => toggle(t.id)} />
+              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, true)} />
             ))}
           </View>
 
@@ -301,7 +277,7 @@ export default function PlannerScreen() {
 
           <View style={styles.taskList}>
             {finished.map((t) => (
-              <TaskCard key={t.id} task={t} onToggle={() => toggle(t.id)} />
+              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, false)} />
             ))}
           </View>
         </View>
@@ -318,7 +294,9 @@ export default function PlannerScreen() {
             backgroundColor={extra.terracotta}
             icon={<Ionicons name="add-circle-outline" size={20} color={colors.ink} />}
             style={{ flex: 1 }}
-            onPress={() => {}}
+            onPress={() =>
+              router.push({ pathname: '/planner/add-task', params: { date: String(selectedDate) } })
+            }
           />
           <NeoButton
             label="Set Exam"
@@ -388,7 +366,7 @@ const styles = StyleSheet.create({
     backgroundColor: extra.dayStrip,
     borderRadius: 22,
   },
-  day: { width: 42, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginVertical: 3,},
+  day: { width: 42, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginVertical: 3 },
   dayActive: { backgroundColor: colors.ink },
   dot: { width: 5, height: 5, borderRadius: 3, position: 'absolute', bottom: 4 },
 
@@ -495,7 +473,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: subject.biology,
+    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -510,7 +488,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.lg,
     paddingHorizontal: spacing.xl,
-    paddingTop: 35,         // Controls the height of the fade area above the buttons
+    paddingTop: 35, // Controls the height of the fade area above the buttons
     paddingBottom: 15, // Keeps buttons positioned above the bottom safe area
   },
 });
