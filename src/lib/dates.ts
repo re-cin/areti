@@ -28,5 +28,36 @@ export function weekLabel(weekStart: number): string {
   return `${MONTHS[mid.getMonth()]} Week ${Math.ceil(mid.getDate() / 7)}`;
 }
 
+/** "September 2026". */
+export function monthLabel(ms: number): string {
+  const d = new Date(ms);
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Same day of the month, `n` months later. Clamps to the month's last day (Jan 31 + 1 → Feb 28/29). */
+export function addMonths(ms: number, n: number): number {
+  const d = new Date(ms);
+  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const daysInTarget = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(d.getDate(), daysInTarget));
+  return startOfDay(target);
+}
+
+/** The weeks (rows of 7 days) a month calendar shows for the month containing `ms`, padded with the neighbouring months' days. */
+export function monthWeeks(ms: number, weekStartsOn = 1): number[][] {
+  const d = new Date(ms);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getTime();
+  const weeks: number[][] = [];
+  for (let w = startOfWeek(first, weekStartsOn); w <= last; w = addDays(w, 7)) weeks.push(weekDays(w));
+  return weeks;
+}
+
+export const sameMonth = (a: number, b: number) => {
+  const x = new Date(a);
+  const y = new Date(b);
+  return x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth();
+};
+
 export const sameDay = (a: number, b: number) => startOfDay(a) === startOfDay(b);
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;

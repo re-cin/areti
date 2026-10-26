@@ -4,17 +4,38 @@ import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
 import { setTaskDone } from '@/db/queries/tasks';
 import { toCardTask, type CardTask } from '@/features/planner/cardTask';
+import { MonthGrid } from '@/features/planner/MonthGrid';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useTaskDays } from '@/hooks/useTaskDays';
+import { useTasksByDay } from '@/hooks/useTasksByDay';
 import { useTasksForDate } from '@/hooks/useTasksForDate';
-import { DAY_NAMES, addDays, sameDay, startOfDay, startOfWeek, weekDays, weekLabel } from '@/lib/dates';
+import {
+  DAY_NAMES,
+  addDays,
+  addMonths,
+  monthLabel,
+  monthWeeks,
+  sameDay,
+  startOfDay,
+  startOfWeek,
+  weekDays,
+  weekLabel,
+} from '@/lib/dates';
 import { borders, colors, radii, spacing } from '@/theme';
 import Feather from '@expo/vector-icons/Feather';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 // TODO: move these into @/theme
@@ -30,6 +51,12 @@ const extra = {
 };
 const dotColor = colors.pill.physics;
 
+// Calendar expand / collapse
+const STRIP_INNER_H = 60; // one row of day cells: 54 tall + 3 margin above and below
+const CARD_CHROME = 11; // outline (1.5 x 2) + teal padding (4 x 2) around the calendar's cream track
+const BUTTONS_H = 100; // the Add Task / Set Exam bar drawn over the bottom of the screen
+const EXPAND_MS = 380;
+
 function Header() {
   // TODO: show the profile picture the user chose in Account settings, and open Settings from the gear.
   return (
@@ -38,7 +65,7 @@ function Header() {
         <View style={styles.avatar}>
           <Feather name="user" size={16} color={colors.ink} />
         </View>
-        <Text variant="title">Pomodoro</Text>
+        <Text variant="title">Planner</Text>
       </View>
       <Pressable hitSlop={10}>
         <Ionicons name="settings-outline" size={24} color={colors.ink} />
@@ -47,7 +74,19 @@ function Header() {
   );
 }
 
-function WeekBar({ title, onPrev, onNext }: { title: string; onPrev: () => void; onNext: () => void }) {
+function WeekBar({
+  title,
+  expanded,
+  onPrev,
+  onNext,
+  onToggleCalendar,
+}: {
+  title: string;
+  expanded: boolean;
+  onPrev: () => void;
+  onNext: () => void;
+  onToggleCalendar: () => void;
+}) {
   return (
     <View style={styles.weekBar}>
       <View style={styles.weekNav}>
@@ -60,8 +99,8 @@ function WeekBar({ title, onPrev, onNext }: { title: string; onPrev: () => void;
         </Pressable>
       </View>
       <View style={styles.weekIcons}>
-        <Pressable hitSlop={10}>
-          <Ionicons name="calendar-outline" size={17} color={colors.ink} />
+        <Pressable onPress={onToggleCalendar} hitSlop={10} accessibilityLabel={expanded ? 'Show week' : 'Show month'}>
+          <Ionicons name={expanded ? 'calendar' : 'calendar-outline'} size={17} color={colors.ink} />
         </Pressable>
         <Pressable hitSlop={10}>
           <Ionicons name="grid-outline" size={17} color={colors.ink} />
@@ -71,7 +110,7 @@ function WeekBar({ title, onPrev, onNext }: { title: string; onPrev: () => void;
   );
 }
 
-function DayStrip({
+function DayRow({
   days,
   selectedDate,
   markedDays,
@@ -83,8 +122,7 @@ function DayStrip({
   onSelect: (day: number) => void;
 }) {
   return (
-    <View style={styles.dayStrip}>
-      <View style={styles.dayStripInner}>
+    <View style={styles.dayRow}>
         {days.map((day) => {
           const active = sameDay(day, selectedDate);
           const fg = active ? colors.white : colors.ink;
@@ -98,7 +136,6 @@ function DayStrip({
             </Pressable>
           );
         })}
-      </View>
     </View>
   );
 }
@@ -221,30 +258,98 @@ export default function PlannerScreen() {
   const { todo: todayTodo } = useTasksForDate(today);
   const markedDays = useTaskDays(days[0], days[6]);
 
+  // Month view (opened from the calendar icon)
+  const [expanded, setExpanded] = useState(false);
+  const weeks = monthWeeks(selectedDate); // TODO: follow the "first day of week" setting
+  const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const progress = useSharedValue(0); // 0 = week strip, 1 = full month
+
+  useEffect(() => {
+    progress.set(withTiming(expanded ? 1 : 0, { duration: EXPAND_MS, easing: Easing.out(Easing.cubic) }));
+  }, [expanded, progress]);
+
+  const toggleCalendar = () => {
+    if (!expanded) scrollRef.current?.scrollTo({ y: 0, animated: true });
+    setExpanded(!expanded);
+  };
+
   // Layout measurements for the sticky header and the cream sheet
   const [viewportH, setViewportH] = useState(0);
   const [stickyH, setStickyH] = useState(0);
+  const [headerH, setHeaderH] = useState(0);
+  const [weekBarH, setWeekBarH] = useState(0);
+
+  // The month fills the screen down to the action buttons.
+  const monthInnerH = Math.max(
+    viewportH - headerH - weekBarH - spacing.md - CARD_CHROME - styles.sticky.paddingBottom - BUTTONS_H,
+    320,
+  );
+
+  // Slide down: the cream track grows from one row to the whole month, revealing it top to bottom.
+  const trackStyle = useAnimatedStyle(() => ({
+    height: interpolate(progress.get(), [0, 1], [STRIP_INNER_H, monthInnerH]),
+  }));
+  const weekRowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0, 0.35], [1, 0], Extrapolation.CLAMP),
+  }));
+  const monthStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.get(), [0.1, 0.6], [0, 1], Extrapolation.CLAMP),
+  }));
+  const spacerStyle = useAnimatedStyle(() => ({ height: progress.get() * BUTTONS_H }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.get() }));
 
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <ScrollView
+        ref={scrollRef}
+        scrollEnabled={!expanded}
         style={styles.scroll}
         stickyHeaderIndices={[1]}
         onLayout={(e: LayoutChangeEvent) => setViewportH(e.nativeEvent.layout.height)}
         showsVerticalScrollIndicator={false}>
         {/* 0: scrolls away */}
-        <View style={styles.pad}>
+        <View style={styles.pad} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
           <Header />
         </View>
 
         {/* 1: pinned to the top once the header has scrolled off */}
         <View style={styles.sticky} onLayout={(e) => setStickyH(e.nativeEvent.layout.height)}>
-          <WeekBar
-            title={weekLabel(weekStart)}
-            onPrev={() => setSelectedDate(addDays(selectedDate, -7))}
-            onNext={() => setSelectedDate(addDays(selectedDate, 7))}
-          />
-          <DayStrip days={days} selectedDate={selectedDate} markedDays={markedDays} onSelect={setSelectedDate} />
+          {/* Cream backdrop that rises behind the open month */}
+          <Animated.View pointerEvents="none" style={[styles.monthBackdrop, backdropStyle]} />
+
+          <View onLayout={(e) => setWeekBarH(e.nativeEvent.layout.height)}>
+            <WeekBar
+              title={expanded ? monthLabel(selectedDate) : weekLabel(weekStart)}
+              expanded={expanded}
+              onPrev={() => setSelectedDate(expanded ? addMonths(selectedDate, -1) : addDays(selectedDate, -7))}
+              onNext={() => setSelectedDate(expanded ? addMonths(selectedDate, 1) : addDays(selectedDate, 7))}
+              onToggleCalendar={toggleCalendar}
+            />
+          </View>
+
+          <View style={styles.dayStrip}>
+            <Animated.View style={[styles.dayStripInner, trackStyle]}>
+              <Animated.View style={weekRowStyle} pointerEvents={expanded ? 'none' : 'auto'}>
+                <DayRow days={days} selectedDate={selectedDate} markedDays={markedDays} onSelect={setSelectedDate} />
+              </Animated.View>
+              <Animated.View
+                style={[styles.monthLayer, { height: monthInnerH }, monthStyle]}
+                pointerEvents={expanded ? 'auto' : 'none'}>
+                <MonthGrid
+                  weeks={weeks}
+                  selectedDate={selectedDate}
+                  tasksByDay={tasksByDay}
+                  subjectsById={byId}
+                  onSelect={(day) => {
+                    setSelectedDate(day);
+                    setExpanded(false);
+                  }}
+                />
+              </Animated.View>
+            </Animated.View>
+          </View>
+          <Animated.View style={spacerStyle} />
         </View>
 
         {/* 2: slides up underneath the pinned block */}
@@ -361,10 +466,21 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   dayStripInner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     backgroundColor: extra.dayStrip,
     borderRadius: 22,
+    overflow: 'hidden', // clips the month while it slides open
+  },
+  dayRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  monthLayer: { position: 'absolute', top: 0, left: 0, right: 0 },
+  monthBackdrop: {
+    position: 'absolute',
+    top: '45%',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: extra.sheet,
+    borderTopLeftRadius: 160,
+    borderTopRightRadius: 160,
   },
   day: { width: 42, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginVertical: 3 },
   dayActive: { backgroundColor: colors.ink },

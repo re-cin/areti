@@ -41,3 +41,13 @@ export const tasksInRangeQuery = (from: number, to: number) =>
     .select({ date: tasks.date })
     .from(tasks)
     .where(and(gte(tasks.date, from), lte(tasks.date, to), isNull(tasks.deletedAt)));
+
+/** Tasks between two days (inclusive) with what the month calendar's chips need, sorted by day then start time. */
+export const taskChipsInRangeQuery = (from: number, to: number) =>
+  db
+    .select({ id: tasks.id, title: tasks.title, subjectId: tasks.subjectId, date: tasks.date, done: tasks.done })
+    .from(tasks)
+    .where(and(gte(tasks.date, from), lte(tasks.date, to), isNull(tasks.deletedAt)))
+    .orderBy(asc(tasks.date), asc(tasks.startMinute));
+
+export type TaskChip = { id: string; title: string; subjectId: string; date: number; done: boolean };
