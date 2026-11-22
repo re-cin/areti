@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
-  Alert,
   Animated,
   Easing,
   Pressable,
@@ -150,7 +149,7 @@ export default function Auth() {
             {!isSignUp && (
               <Pressable
                 hitSlop={8}
-                onPress={() => Alert.alert('Forgot password', 'Password reset is coming soon.')}>
+                onPress={() => router.push({ pathname: '/forgot-password', params: { email } })}>
                 <Text style={styles.forgot}>Forgot?</Text>
               </Pressable>
             )}

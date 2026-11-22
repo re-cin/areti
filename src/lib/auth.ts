@@ -15,6 +15,9 @@ export type AuthErrorCode =
   | 'wrong-credentials'
   | 'confirm-email' // account exists but the email isn't confirmed yet
   | 'weak-password'
+  | 'wrong-code' // reset code is wrong or expired
+  | 'same-password' // new password is the same as the old one
+  | 'rate-limited' // too many emails / attempts, try again later
   | 'offline'
   | 'not-configured'
   | 'unknown';
@@ -72,6 +75,30 @@ export async function deleteAccount() {
   await supabase.auth.signOut({ scope: 'local' });
 }
 
+/**
+ * Forgot Password, step 1: emails a reset code to the address.
+ * (Supabase's "Reset Password" email template must include {{ .Token }}.)
+ * For privacy Supabase doesn't say whether the email has an account; it just sends if it does.
+ */
+export async function sendPasswordResetCode(email: string) {
+  ensureConfigured();
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
+  if (error) throw toAuthError(error);
+}
+
+/** Forgot Password, step 2: checks the emailed code, sets the new password, and signs in. */
+export async function resetPasswordWithCode(email: string, code: string, newPassword: string) {
+  ensureConfigured();
+  const { error: codeError } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: code.replace(/\s/g, ''),
+    type: 'recovery',
+  });
+  if (codeError) throw toAuthError(codeError);
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw toAuthError(error);
+}
+
 /** The saved session (works offline), or null when signed out. */
 export async function getSession(): Promise<Session | null> {
   if (!supabaseConfigured) return null;
@@ -94,6 +121,14 @@ function toAuthError(error: { code?: string; status?: number; message: string })
       return new AuthError('confirm-email', error.message);
     case 'weak_password':
       return new AuthError('weak-password', error.message);
+    case 'otp_expired':
+    case 'otp_disabled':
+      return new AuthError('wrong-code', error.message);
+    case 'same_password':
+      return new AuthError('same-password', error.message);
+    case 'over_email_send_rate_limit':
+    case 'over_request_rate_limit':
+      return new AuthError('rate-limited', error.message);
   }
   if (!error.status || /network|fetch/i.test(error.message)) return new AuthError('offline', error.message);
   return new AuthError('unknown', error.message);
