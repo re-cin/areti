@@ -1,5 +1,5 @@
 import type { Session } from '@supabase/supabase-js';
-import { finishAndClearLocalData } from '@/sync/sync';
+import { clearLocalData, finishAndClearLocalData } from '@/sync/sync';
 import { supabase, supabaseConfigured } from './supabase';
 
 /**
@@ -48,6 +48,28 @@ export async function signIn(email: string, password: string) {
 export async function signOut() {
   await finishAndClearLocalData();
   await supabase.auth.signOut();
+}
+
+/**
+ * Permanently deletes the signed-in account: profile picture, the account itself and all
+ * its synced data (every cloud table is linked to the account and deleted with it), then
+ * this phone's copy. Needs internet. Throws AuthError('offline') if the server can't be reached.
+ */
+export async function deleteAccount() {
+  ensureConfigured();
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user.id;
+  if (!userId) throw new AuthError('unknown', 'Not signed in.');
+
+  // Profile picture file (ignore "not found").
+  await supabase.storage.from('avatars').remove([`${userId}/avatar.jpg`]);
+
+  const { error } = await supabase.rpc('delete_my_account');
+  if (error) throw toAuthError(error);
+
+  await clearLocalData();
+  // The account is gone on the server; just forget the session on this phone.
+  await supabase.auth.signOut({ scope: 'local' });
 }
 
 /** The saved session (works offline), or null when signed out. */

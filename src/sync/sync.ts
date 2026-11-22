@@ -123,6 +123,12 @@ export function startAutoSync(): () => void {
  */
 export async function finishAndClearLocalData() {
   if (supabaseConfigured) await syncNow();
+  await clearLocalData();
+}
+
+/** Wipes all synced data from this phone (no upload first). */
+export async function clearLocalData() {
+  if (running) await running; // let a sync in progress finish first
   pulling = true;
   try {
     for (const { table } of TABLES) await db.delete(table);

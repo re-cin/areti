@@ -1,23 +1,48 @@
 import { useState } from 'react';
+import { router } from 'expo-router';
 import { Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AccountInfoSection } from '@/components/settings/AccountInfoSection';
 import { DangerZone } from '@/components/settings/DangerZone';
+import { DeleteAccountModal } from '@/components/settings/DeleteAccountModal';
 import { EditNameModal } from '@/components/settings/EditNameModal';
 import { ProfileHeader } from '@/components/settings/ProfileHeader';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { saveDisplayName } from '@/db/queries/profile';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { AuthError, deleteAccount } from '@/lib/auth';
 import { pickAndUploadAvatar, removeAvatar } from '@/lib/avatar';
 import { confirmSignOut } from '@/lib/confirmSignOut';
 import { mockUser } from '@/mocks/ui';
 import { colors, spacing } from '@/theme';
 
-// Name, profile picture and Sign Out work; Delete Account is UI only so far.
+// Name, profile picture, Sign Out and Delete Account all work.
 export default function AccountSettingsScreen() {
   const user = useCurrentUser();
   const [editingName, setEditingName] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const runDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      setConfirmingDelete(false);
+      if (router.canDismiss()) router.dismissAll();
+      router.replace('/auth');
+    } catch (e) {
+      setDeleting(false);
+      setConfirmingDelete(false);
+      Alert.alert(
+        'Could not delete your account',
+        e instanceof AuthError && e.code === 'offline'
+          ? 'Deleting needs an internet connection. Check your connection and try again.'
+          : 'Something went wrong. Please try again.',
+      );
+    }
+  };
 
   const saveName = async (name: string) => {
     if (!user) return;
@@ -67,8 +92,15 @@ export default function AccountSettingsScreen() {
           onEditName={() => setEditingName(true)}
         />
         <AccountInfoSection email={user?.email ?? ''} synced onSignOut={confirmSignOut} />
-        <DangerZone />
+        <DangerZone onDelete={() => setConfirmingDelete(true)} deleting={deleting} />
       </ScrollView>
+
+      <DeleteAccountModal
+        visible={confirmingDelete}
+        deleting={deleting}
+        onCancel={() => setConfirmingDelete(false)}
+        onConfirm={runDelete}
+      />
 
       <EditNameModal
         visible={editingName}
