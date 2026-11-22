@@ -4,11 +4,18 @@ export const colors = {
   page: '#EFE7DC', // warm cream page background
   surface: '#FBF7F0', // card / sheet background
   white: '#FFFFFF',
+  splash: '#E8E2DA', // splash screen background (from the splash design)
+  wordmark: '#111417', // "areti" wordmark
+  welcomeTeal: '#8EC7C5', // welcome screen header
+  peach: '#D99063', // welcome "Get Started" button, ghost circle
+  buttonTeal: '#79B7B2', // onboarding "Next" / "Allow Permission"
+  buttonPeach: '#D69C79', // onboarding "Back"
   ink: '#111111', // outlines, hard shadows, primary text
   muted: '#5B5650', // secondary text
-  mutedSoft: '#B3ABA0', // locked / disabled
-  divider: '#D8D0C5', // hairlines between list rows
+  mutedSoft: '#B3ABA0', // locked / disabled, drag handles
   avatar: '#E2D9CD', // empty profile picture
+  line: '#DDD5CA', // thin dividers inside cards (Pomodoro, Statistics, Settings)
+  chartBg: '#E6DED3', // bar chart well (Statistics)
   teal: '#7FC4C0', // main accent
   tealSoft: '#C9E8E5',
   tealDark: '#3E8F8A', // teal text on light backgrounds (XP)
@@ -32,4 +39,28 @@ export const colors = {
     chemistry: '#1F6F6A',
     other: '#5B5650',
   },
+
+  // Planner + Add Task
+  sheet: '#E9E3DC', // cream panel under the day strip, form screens
+  sheetRaised: '#F1EAE1', // bottom sheets drawn above the panel (New Subject)
+  dayStrip: '#F2EDE4', // inner track of the day strip
+  finishedBg: '#EFE9E1', // finished task card background
+  finishedShadow: '#6B6560', // gray hard shadow (finished cards, dark buttons)
+  orange: '#C2570C', // "9 days" highlight
+  tealText: '#1E8A8A', // teal text on cream ("3 tasks remaining")
+  inkSoft: '#2D2D2D', // slightly softer than ink, for secondary labels
+  placeholder: '#8A847D', // input placeholders and quiet captions
+  divider: '#D8D1C8', // thin separators inside lists
+
+  // Swatches offered when creating a subject (first four match the pill colors)
+  subjectPalette: [
+    '#7B4FD6',
+    '#B3261E',
+    '#2E7D4F',
+    '#1F6F6A',
+    '#E0A33A',
+    '#4C8BD9',
+    '#D96FA8',
+    '#8A6D4B',
+  ],
 } as const;

@@ -6,7 +6,7 @@ import { Text } from '@/components/ui/Text';
 import { colors, spacing } from '@/theme';
 
 /** Red "Danger Zone" heading with the Delete Account card. */
-export function DangerZone({ onDelete }: { onDelete?: () => void }) {
+export function DangerZone({ onDelete, deleting }: { onDelete?: () => void; deleting?: boolean }) {
   return (
     <View style={{ gap: spacing.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
@@ -23,7 +23,8 @@ export function DangerZone({ onDelete }: { onDelete?: () => void }) {
           </Text>
         </View>
         <NeoButton
-          label="DELETE EVERYTHING"
+          label={deleting ? 'DELETING…' : 'DELETE EVERYTHING'}
+          disabled={deleting}
           icon="trash"
           textVariant="label"
           backgroundColor={colors.dangerButton}

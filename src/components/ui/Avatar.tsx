@@ -1,4 +1,5 @@
-import { Pressable, View } from 'react-native';
+import { Image } from 'expo-image';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { borders, colors } from '@/theme';
 import { Icon } from './Icon';
 
@@ -9,11 +10,15 @@ type Props = {
   /** Show the teal camera badge (Account Settings). */
   editable?: boolean;
   backgroundColor?: string;
+  /** Profile picture link; shows the person glyph when empty. */
+  uri?: string | null;
+  /** Show a spinner over the picture (e.g. while uploading). */
+  loading?: boolean;
   onPress?: () => void;
 };
 
-/** Round profile picture placeholder. Shows a person glyph until photos exist. */
-export function Avatar({ size = 48, outlined, editable, backgroundColor = colors.avatar, onPress }: Props) {
+/** Round profile picture. Shows a person glyph when there's no photo. */
+export function Avatar({ size = 48, outlined, editable, backgroundColor = colors.avatar, uri, loading, onPress }: Props) {
   const badge = Math.round(size * 0.3);
   const body = (
     <View style={{ width: size, height: size }}>
@@ -28,7 +33,30 @@ export function Avatar({ size = 48, outlined, editable, backgroundColor = colors
           alignItems: 'center',
           justifyContent: 'center',
         }}>
-        <Icon name="user" size={Math.round(size * 0.42)} strokeWidth={2.2} />
+        {uri ? (
+          <Image
+            source={{ uri }}
+            style={{ width: size, height: size, borderRadius: size / 2 }}
+            contentFit="cover"
+            transition={150}
+            accessibilityLabel="Profile picture"
+          />
+        ) : (
+          <Icon name="user" size={Math.round(size * 0.42)} strokeWidth={2.2} />
+        )}
+        {loading && (
+          <View
+            style={{
+              position: 'absolute',
+              inset: 0,
+              borderRadius: size / 2,
+              backgroundColor: 'rgba(0,0,0,0.35)',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+            <ActivityIndicator color={colors.white} />
+          </View>
+        )}
       </View>
       {editable && (
         <View
