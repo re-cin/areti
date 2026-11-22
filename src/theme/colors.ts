@@ -4,6 +4,12 @@ export const colors = {
   page: '#EFE7DC', // warm cream page background
   surface: '#FBF7F0', // card / sheet background
   white: '#FFFFFF',
+  splash: '#E8E2DA', // splash screen background (from the splash design)
+  wordmark: '#111417', // "areti" wordmark
+  welcomeTeal: '#8EC7C5', // welcome screen header
+  peach: '#D99063', // welcome "Get Started" button, ghost circle
+  buttonTeal: '#79B7B2', // onboarding "Next" / "Allow Permission"
+  buttonPeach: '#D69C79', // onboarding "Back"
   ink: '#111111', // outlines, hard shadows, primary text
   muted: '#5B5650', // secondary text
   mutedSoft: '#B3ABA0', // locked / disabled, drag handles

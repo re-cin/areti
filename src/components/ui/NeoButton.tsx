@@ -19,6 +19,8 @@ type Props = {
   textVariant?: 'heading' | 'subheading' | 'label';
   /** Applied to the outer Pressable (e.g. `{ flex: 1 }` in a row). */
   style?: StyleProp<ViewStyle>;
+  /** Applied to the button face, e.g. `{ paddingVertical: 15 }` for a taller button. */
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 export function NeoButton({
@@ -31,6 +33,7 @@ export function NeoButton({
   disabled,
   textVariant = 'subheading',
   style,
+  contentStyle,
 }: Props) {
   const offset = borders.shadowOffset;
   return (
@@ -47,14 +50,17 @@ export function NeoButton({
             shadowColor={shadowColor}
             radius={radii.button}
             backgroundColor={backgroundColor}
-            style={{
-              paddingVertical: spacing.md -1,
-              paddingHorizontal: spacing.xl,
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexDirection: 'row',
-              gap: 8,
-            }}>
+            style={[
+              {
+                paddingVertical: spacing.md - 1,
+                paddingHorizontal: spacing.xl,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexDirection: 'row',
+                gap: 8,
+              },
+              contentStyle,
+            ]}>
             {typeof icon === 'string' ? (
               <Icon name={icon as IconName} size={textVariant === 'label' ? 16 : 20} />
             ) : (

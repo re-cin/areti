@@ -6,14 +6,15 @@ import { ProfileCard } from '@/components/settings/ProfileCard';
 import { SettingsMenu, type SettingsMenuItem } from '@/components/settings/SettingsMenu';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Text } from '@/components/ui/Text';
+import { confirmSignOut } from '@/lib/confirmSignOut';
 import { mockUser } from '@/mocks/ui';
 import { colors, spacing } from '@/theme';
 
-// UI only: menu rows don't navigate yet except the profile card.
+// UI only: menu rows don't navigate yet except the profile card and Data & Privacy.
 const MENU: SettingsMenuItem[] = [
   { key: 'subjects', label: 'Subjects', icon: 'book' },
   { key: 'preferences', label: 'Preferences', icon: 'sliders' },
-  { key: 'privacy', label: 'Data & Privacy', icon: 'shield' },
+  { key: 'privacy', label: 'Data & Privacy', icon: 'shield', onPress: () => router.push('/settings/privacy') },
   { key: 'help', label: 'Help & Support', icon: 'help' },
   { key: 'terms', label: 'Terms & Policies', icon: 'info' },
 ];
@@ -25,7 +26,12 @@ export default function UserSettingsScreen() {
         contentContainerStyle={{ flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.lg }}
         showsVerticalScrollIndicator={false}>
         <ScreenHeader title="User Settings" leading="back" />
-        <ProfileCard name={mockUser.name} email={mockUser.email} onPress={() => router.push('/settings/account')} />
+        <ProfileCard
+          name={mockUser.name}
+          email={mockUser.email}
+          onPress={() => router.push('/settings/account')}
+          onSignOut={confirmSignOut}
+        />
         <PremiumBanner />
         <SettingsMenu items={MENU} />
 

@@ -1,10 +1,10 @@
 import { Dropdown } from '@/components/ui/Dropdown';
-import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { addTask } from '@/db/queries/tasks';
-import { NewSubjectSheet } from '@/features/planner/newSubjectSheet';
+import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
+import { TimePill } from '@/components/planner/TimePill';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
 import { startOfDay } from '@/lib/dates';
@@ -27,14 +27,6 @@ const SOUNDS = ['Silent', 'Default', 'Chime', 'Bell'];
 const fmtDate = (ts: number) =>
   new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
 
-/** minutes since midnight -> "7 : 30 am" */
-function fmtTime(min: number) {
-  const h24 = Math.floor(min / 60);
-  const m = min % 60;
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12} : ${String(m).padStart(2, '0')} ${h24 < 12 ? 'am' : 'pm'}`;
-}
-
 function fmtDuration(min: number) {
   if (min <= 0) return '--';
   if (min < 60) return `${min} mins`;
@@ -47,25 +39,6 @@ const minToDate = (min: number) => {
   d.setHours(Math.floor(min / 60), min % 60, 0, 0);
   return d;
 };
-
-function TimePill({ min, color, onPress }: { min: number; color: string; onPress: () => void }) {
-  const offset = borders.shadowOffset;
-  return (
-    <Pressable onPress={onPress} style={{ flex: 1 }} accessibilityRole="button">
-      {({ pressed }) => (
-        <View style={{ transform: pressed ? [{ translateX: offset }, { translateY: offset }] : [] }}>
-          <NeoBox
-            shadow={!pressed}
-            radius={radii.pill}
-            backgroundColor={color}
-            style={{ paddingVertical: 10, alignItems: 'center' }}>
-            <Text variant="smallStrong">{fmtTime(min)}</Text>
-          </NeoBox>
-        </View>
-      )}
-    </Pressable>
-  );
-}
 
 export default function AddTaskScreen() {
   const insets = useSafeAreaInsets();
