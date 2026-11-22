@@ -3,7 +3,7 @@ import { getSetting, SETTING_KEYS, setSetting } from '@/features/settings/settin
 import { cancelTimerNotifications, scheduleTimerNotifications } from './notifications';
 import { loadPomodoroSettings, type PomodoroSettings } from './pomodoroSettings';
 import { catchUp, phaseMs, projectTimeline, startRun, type Run, type TimerConfig } from './session';
-import { recordFocus } from './timerRepo';
+import { endPlannedSession, recordFocus } from './timerRepo';
 
 // The timer never counts down with setInterval. It stores `endsAt` and derives the
 // remaining time from the clock (see timerMath.ts), so it survives the app being
@@ -79,9 +79,9 @@ export const useTimer = create<TimerStore>((set, get) => {
   };
 
   const reschedule = () => {
-    const { status, run, endsAt, cfg } = get();
+    const { status, run, endsAt, cfg, sound } = get();
     if (status === 'running' && run && endsAt && cfg) {
-      void scheduleTimerNotifications(projectTimeline(run, endsAt, cfg));
+      void scheduleTimerNotifications(projectTimeline(run, endsAt, cfg, true), sound?.notificationSound === 'Silent');
     } else {
       void cancelTimerNotifications();
     }
@@ -176,6 +176,8 @@ export const useTimer = create<TimerStore>((set, get) => {
           completed: false,
         });
       }
+      // Ending a scheduled session takes it out of Upcoming Sessions.
+      if (s.plannedSessionId) await endPlannedSession(s.plannedSessionId);
       set({ ...IDLE, now });
       persist();
       reschedule();
@@ -188,13 +190,17 @@ export const useTimer = create<TimerStore>((set, get) => {
       if (ticking || s.status !== 'running' || !s.run || !s.endsAt || !s.cfg || now < s.endsAt) return;
       ticking = true;
       try {
-        const res = catchUp(s.run, s.endsAt, s.cfg, now);
+        // After a break the next focus block waits (paused, full length) until play is pressed.
+        const res = catchUp(s.run, s.endsAt, s.cfg, now, true);
         const focusMs = phaseMs('focus', s.cfg);
         // Update state first so a second tick cannot record the same block twice.
         const phaseEndedAt = res.ended.length ? res.ended[res.ended.length - 1].endedAt : null;
-        if (res.run) set({ run: res.run, endsAt: res.endsAt, phaseEndedAt });
+        if (res.run && res.waiting)
+          set({ run: res.run, status: 'paused', endsAt: null, remainingMs: phaseMs(res.run.phase, s.cfg), phaseEndedAt });
+        else if (res.run) set({ run: res.run, endsAt: res.endsAt, phaseEndedAt });
         else set({ ...IDLE, phaseEndedAt });
         persist();
+        if (res.waiting) reschedule();
         for (const end of res.ended) {
           if (end.ended.phase !== 'focus') continue;
           await recordFocus({

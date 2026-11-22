@@ -1,6 +1,7 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useAudioFocus } from '@/stores/audioFocus';
+import { showNotice } from '@/stores/notice';
 import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dropdown } from '@/components/ui/Dropdown';
@@ -37,8 +38,10 @@ export default function TimerSettingsScreen() {
   const preview = useSoundPreview();
   // Opened from Planner > Add Task > Schedule Pomodoro: saving also schedules that task.
   // Only a task passed in by Add Task counts; a plain visit (gear button) never shows the scheduling card.
-  const params = useLocalSearchParams<{ taskId?: string }>();
+  const params = useLocalSearchParams<{ taskId?: string; sound?: string }>();
   const taskId = typeof params.taskId === 'string' && params.taskId.length > 0 ? params.taskId : undefined;
+  // Notification sound picked on Add Task (same list as here), used as the starting value.
+  const taskSound = taskId && typeof params.sound === 'string' && params.sound ? params.sound : undefined;
 
   // Pause the running session's background sound while this screen is open, so previews don't overlap it.
   const setSettingsOpen = useAudioFocus((st) => st.setSettingsOpen);
@@ -63,9 +66,10 @@ export default function TimerSettingsScreen() {
 
   useEffect(() => {
     loadPomodoroSettings().then((s) => {
-      setForm(s);
+      setForm(taskSound ? { ...s, notificationSound: taskSound } : s);
       setLoaded(true);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const set = <K extends keyof PomodoroSettings>(key: K, value: PomodoroSettings[K]) =>
@@ -88,10 +92,10 @@ export default function TimerSettingsScreen() {
       }
       router.setParams({ taskId: '' });
       if (scheduled.date !== startOfDay(new Date()).getTime()) {
-        Alert.alert(
-          'Pomodoro scheduled',
-          `It will show in Upcoming Sessions on ${new Date(scheduled.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`,
-        );
+        const message = `It will show in Upcoming Sessions on ${new Date(scheduled.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`;
+        // Shown once this screen has closed and the Pomodoro tab is up: iOS can't open a popup
+        // while a screen is still being dismissed, so showing it right away made it vanish.
+        setTimeout(() => showNotice({ title: 'Pomodoro scheduled', message, icon: 'clock' }), 600);
       }
       // Show it in Upcoming Sessions
       if (router.canDismiss()) router.dismissAll();

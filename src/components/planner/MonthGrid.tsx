@@ -38,7 +38,7 @@ export function MonthGrid({ weeks, selectedDate, tasksByDay, subjectsById, onSel
               <Pressable
                 key={day}
                 onPress={() => onSelect(day)}
-                style={[styles.cell, !inMonth && styles.cellOutside, active && styles.cellActive]}>
+                style={[styles.cell, active && styles.cellActive]}>
                 <Text variant="heading" color={numColor} style={styles.dayNum}>
                   {new Date(day).getDate()}
                 </Text>
@@ -75,7 +75,6 @@ const styles = StyleSheet.create({
   headCell: { flex: 1, textAlign: 'center' },
   weekRow: { flex: 1, flexDirection: 'row' },
   cell: { flex: 1, borderRadius: 10, paddingHorizontal: 3, paddingTop: 4, gap: 3, overflow: 'hidden' },
-  cellOutside: { backgroundColor: colors.finishedBg },
   cellActive: { backgroundColor: colors.ink },
   dayNum: { fontSize: 17, lineHeight: 22, paddingLeft: 4, marginBottom: 2 },
   chip: {

@@ -56,13 +56,18 @@ export function catchUp(
   endsAt: number,
   cfg: TimerConfig,
   now: number,
-): { run: Run | null; endsAt: number | null; ended: PhaseEnd[] } {
+  /** Stop when a break ends: the next focus block waits for the user to press play. */
+  waitAfterBreak = false,
+): { run: Run | null; endsAt: number | null; ended: PhaseEnd[]; waiting?: boolean } {
   const ended: PhaseEnd[] = [];
   let current: Run | null = run;
   let end = endsAt;
   while (current && now >= end) {
     const next = nextRun(current, cfg);
     ended.push({ endedAt: end, ended: current, next });
+    if (waitAfterBreak && current.phase !== 'focus' && next) {
+      return { run: next, endsAt: null, ended, waiting: true };
+    }
     current = next;
     if (next) end += phaseMs(next.phase, cfg);
   }
@@ -70,13 +75,14 @@ export function catchUp(
 }
 
 /** Every future phase end of a running run (used to schedule notifications). */
-export function projectTimeline(run: Run, endsAt: number, cfg: TimerConfig): PhaseEnd[] {
+export function projectTimeline(run: Run, endsAt: number, cfg: TimerConfig, waitAfterBreak = false): PhaseEnd[] {
   const out: PhaseEnd[] = [];
   let current: Run | null = run;
   let end = endsAt;
   while (current && out.length < 64) {
     const next = nextRun(current, cfg);
     out.push({ endedAt: end, ended: current, next });
+    if (waitAfterBreak && current.phase !== 'focus') break; // the run pauses here until play is pressed
     current = next;
     if (next) end += phaseMs(next.phase, cfg);
   }

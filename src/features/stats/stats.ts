@@ -1,6 +1,6 @@
 // Pure statistics math. Input: focus sessions; output: numbers the Statistics screen shows.
 import { addDays, dayKey, daysBetween, startOfDay, startOfMonth, startOfWeek } from '@/lib/dateHelpers';
-import { xpForFocus } from '@/features/pet/xp';
+import { creditedMinutes, DAILY_CREDIT_CAP_MIN } from '@/features/pet/xp';
 
 export type StatSession = {
   startedAt: number;
@@ -60,7 +60,7 @@ export function daySummary(sessions: StatSession[], day: Date): DaySummary {
   return {
     minutes: mine.reduce((a, s) => a + s.durationSec / 60, 0),
     sessions: mine.length,
-    xp: mine.reduce((a, s) => a + xpForFocus(s.durationSec, s.completed), 0),
+    xp: Math.min(mine.reduce((a, s) => a + creditedMinutes(s.durationSec), 0), DAILY_CREDIT_CAP_MIN),
   };
 }
 

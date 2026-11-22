@@ -16,6 +16,7 @@ import { EmailTakenError, getProfile, updateProfile, type Profile } from '@/feat
 import { AuthError, deleteAccount } from '@/lib/auth';
 import { pickAndUploadAvatar, removeAvatar } from '@/lib/avatar';
 import { bumpData } from '@/stores/dataVersion';
+import { showNotice } from '@/stores/notice';
 import { useTimer } from '@/features/timer/timerStore';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 
@@ -86,18 +87,21 @@ export default function AccountSettingsScreen() {
   const editPhoto = () => {
     if (!profile.id || uploading) return;
     if (!profile.pictureUri) return void upload();
-    Alert.alert('Profile picture', undefined, [
-      { text: 'Choose a new photo', onPress: upload },
-      {
-        text: 'Remove photo',
-        style: 'destructive',
-        onPress: () =>
-          removeAvatar(profile.id)
-            .then(bumpData)
-            .catch(() => Alert.alert('Could not remove the photo', 'Please try again.')),
-      },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    // areti's white popup: terracotta "Choose a new photo", white "Remove photo" and "Cancel".
+    showNotice({
+      title: 'Profile picture',
+      actions: [
+        { label: 'Choose a new photo', color: colors.terracotta, onPress: () => setTimeout(() => void upload(), 350) },
+        {
+          label: 'Remove photo',
+          onPress: () =>
+            removeAvatar(profile.id)
+              .then(bumpData)
+              .catch(() => showNotice({ title: 'Could not remove the photo', message: 'Please try again.' })),
+        },
+        { label: 'Cancel' },
+      ],
+    });
   };
 
   // Deletes the Supabase account, all its synced data and this phone's copy (needs internet).
@@ -222,7 +226,8 @@ export default function AccountSettingsScreen() {
         </View>
       </View>
 
-      <Pressable onPress={() => setEditingEmail(true)} accessibilityRole="button" accessibilityLabel="Edit email" disabled={editingEmail}>
+      {/* Email can't be changed from here for now (read-only). The editing code below is kept for later. */}
+      <Pressable disabled accessibilityLabel={`Email ${profile.email}`}>
         <NeoBox backgroundColor={colors.surface} style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg }}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text variant="caption" color={colors.muted} style={{ fontFamily: fonts.semiBold }}>
@@ -246,7 +251,6 @@ export default function AccountSettingsScreen() {
               <Text style={{ fontFamily: fonts.semiBold }}>{profile.email || 'Add your email'}</Text>
             )}
           </View>
-          <Icon name="chevronRight" size={20} strokeWidth={2.5} />
         </NeoBox>
       </Pressable>
 

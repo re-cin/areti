@@ -4,10 +4,11 @@ import { newId } from '@/db/id';
 import { focusSessions, plannedSessions, settings as settingsTable, subjects, tasks } from '@/db/schema';
 import { startOfDay } from '@/lib/dateHelpers';
 import { awardXp } from '@/features/pet/petRepo';
-import { xpForFocus } from '@/features/pet/xp';
+import { creditedMinutes, creditWithDailyCap } from '@/features/pet/xp';
 import { bumpData } from '@/stores/dataVersion';
 import { getSetting, setSetting } from '@/features/settings/settingsRepo';
 import { DEFAULT_POMODORO, loadPomodoroSettings, type PomodoroSettings } from './pomodoroSettings';
+import { refreshSessionReminders } from './reminders';
 
 /** Sessions added by hand from the Pomodoro screen (not created by the planner engine). */
 export const MANUAL_PLAN_ID = 'manual';
@@ -61,6 +62,8 @@ export async function listUpcomingToday(now = new Date()): Promise<UpcomingSessi
         isNull(plannedSessions.deletedAt),
         eq(plannedSessions.excluded, false),
         sql`${plannedSessions.completedBlocks} < ${plannedSessions.blocks}`,
+        // A session made from a Planner task goes away when that task is deleted.
+        sql`(${plannedSessions.planId} not like 'task:%' or (${tasks.id} is not null and ${tasks.deletedAt} is null))`,
       ),
     )
     .orderBy(asc(plannedSessions.startMinute));
@@ -102,13 +105,48 @@ export async function addPlannedSession(input: { subjectId: string; startMinute:
     locked: true, // the user placed it, the planner must not move it
     updatedAt: Date.now(),
   });
+  bumpData();  void refreshSessionReminders();
+}
+
+/**
+ * "End session" on a scheduled session: it leaves Upcoming Sessions (and its reminders stop), but is
+ * kept as a record, and the focus time already done stays in Statistics.
+ */
+export async function endPlannedSession(id: string) {
+  await db.update(plannedSessions).set({ excluded: true, updatedAt: Date.now() }).where(eq(plannedSessions.id, id));
+  await removeLinkedTask(id); // its Planner task is gone too (not moved to Finished)
   bumpData();
+  void refreshSessionReminders();
+}
+
+/**
+ * A session made from a Planner task ("Schedule Pomodoro") that is completed or ended: mark that task done,
+ * so it moves from Daily Tasks to Finished (Pomodoro tasks have no tick box to do it by hand).
+ */
+async function linkedTaskId(plannedId: string) {
+  const [p] = await db.select({ planId: plannedSessions.planId }).from(plannedSessions).where(eq(plannedSessions.id, plannedId));
+  return p?.planId?.startsWith('task:') ? p.planId.slice('task:'.length) : null;
+}
+
+/** Ended early: the session's Planner task is deleted (soft, so it syncs). */
+async function removeLinkedTask(plannedId: string) {
+  const taskId = await linkedTaskId(plannedId);
+  if (!taskId) return;
+  const now = Date.now();
+  await db.update(tasks).set({ deletedAt: now, updatedAt: now }).where(eq(tasks.id, taskId));
+}
+
+async function finishLinkedTask(plannedId: string) {
+  const [p] = await db.select({ planId: plannedSessions.planId }).from(plannedSessions).where(eq(plannedSessions.id, plannedId));
+  if (!p?.planId?.startsWith('task:')) return;
+  const taskId = p.planId.slice('task:'.length);
+  await db.update(tasks).set({ done: true, updatedAt: Date.now() }).where(eq(tasks.id, taskId));
 }
 
 export async function deletePlannedSession(id: string) {
   const now = Date.now();
   await db.update(plannedSessions).set({ deletedAt: now, updatedAt: now }).where(eq(plannedSessions.id, id));
-  bumpData();
+  bumpData();  void refreshSessionReminders();
 }
 
 /**
@@ -123,6 +161,13 @@ export async function recordFocus(input: {
   completed: boolean;
 }) {
   if (input.durationSec < 60) return;
+  // Credit already given today (for the ~10 hour daily cap), counted before this block is saved.
+  const dayStart = startOfDay(new Date(input.startedAt)).getTime();
+  const todays = await db
+    .select({ durationSec: focusSessions.durationSec })
+    .from(focusSessions)
+    .where(and(isNull(focusSessions.deletedAt), sql`${focusSessions.startedAt} >= ${dayStart}`, sql`${focusSessions.startedAt} < ${dayStart + 86_400_000}`));
+  const creditedToday = todays.reduce((a, r) => a + creditedMinutes(r.durationSec), 0);
   await db.insert(focusSessions).values({
     id: newId(),
     subjectId: input.subjectId,
@@ -137,8 +182,15 @@ export async function recordFocus(input: {
       .update(plannedSessions)
       .set({ completedBlocks: sql`${plannedSessions.completedBlocks} + 1`, updatedAt: Date.now() })
       .where(eq(plannedSessions.id, input.plannedSessionId));
+    // Last block done: the session is complete, so its Planner task moves to Finished.
+    const [p] = await db
+      .select({ blocks: plannedSessions.blocks, completedBlocks: plannedSessions.completedBlocks })
+      .from(plannedSessions)
+      .where(eq(plannedSessions.id, input.plannedSessionId));
+    if (p && p.completedBlocks >= p.blocks) await finishLinkedTask(input.plannedSessionId);
   }
-  await awardXp(xpForFocus(input.durationSec, input.completed));
+  // XP = credited minutes (whole minutes, 0 under 15), completed or cancelled, within the daily cap.
+  await awardXp(creditWithDailyCap(input.durationSec, creditedToday));
   bumpData();
 }
 
@@ -189,5 +241,6 @@ export async function scheduleTaskPomodoro(taskId: string, chosen: PomodoroSetti
   }
   await db.update(tasks).set({ hasPomodoro: true, updatedAt: now }).where(eq(tasks.id, taskId));
   bumpData();
+  void refreshSessionReminders();
   return { date: task.date };
 }

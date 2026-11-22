@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GhostAvatar } from '@/components/GhostAvatar';
@@ -31,6 +32,21 @@ export default function StatisticsScreen() {
   const [month, setMonth] = useState<Date>(startOfMonth(today));
   const [period, setPeriod] = useState<Period>('month');
 
+  // Leaving the tab resets the page (top of the page, today, this month), so it looks fresh when you come back.
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        const t = startOfDay(new Date());
+        setSelected(t);
+        setMonth(startOfMonth(t));
+        setPeriod('month');
+      },
+      [],
+    ),
+  );
+
   const sessions = useDbQuery(loadStatSessions, [], [] as StatSession[]);
   const subjects = useDbQuery(subjectLookup, [], new Map<string, SubjectRow>());
   const ghost = useDbQuery(getGhost, [], { id: '', level: 1, xp: 0, xpToNext: 200 });
@@ -44,14 +60,11 @@ export default function StatisticsScreen() {
   const summary = useMemo(() => periodSummary(sessions, period, anchor, today), [sessions, period, anchor, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
   const subjectItems: SubjectTime[] = useMemo(
     () =>
-      subjectTotals(sessions, summary.range).map(({ subjectId, minutes }) => {
+      // Only real subjects: focus time without a subject (the plain play button), or for a subject that
+      // was deleted, is left out of this list. It still counts toward the totals and the streak.
+      subjectTotals(sessions, summary.range).flatMap(({ subjectId, minutes }) => {
         const s = subjectId ? subjects.get(subjectId) : undefined;
-        return {
-          key: subjectId ?? 'none',
-          name: s?.name ?? 'No subject',
-          color: s?.color ?? colors.pill.other,
-          minutes,
-        };
+        return s ? [{ key: subjectId!, name: s.name, color: s.color, minutes }] : [];
       }),
     [sessions, summary.range, subjects],
   );
@@ -71,7 +84,7 @@ export default function StatisticsScreen() {
         <ScreenHeader title="Statistics" gearHref="/settings/account" />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
         {/* Teal backdrop with a rounded bottom edge, scrolls with the content */}
         <View
           pointerEvents="none"

@@ -16,6 +16,7 @@ import {
 } from '@/db/schema';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -137,6 +138,7 @@ export async function clearLocalData() {
     pulling = false;
   }
   bumpData();
+  void refreshSessionReminders();
 }
 
 // ---------------------------------------------------------------------------
@@ -160,6 +162,7 @@ async function syncOnce() {
     }),
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
+  void refreshSessionReminders();
 }
 
 async function push({ table, conflict, updatedAt }: SyncedTable, userId: string) {

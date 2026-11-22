@@ -17,7 +17,8 @@ export const BACKGROUND_SOUND_FILES: Record<string, AudioSource | null> = {
   'White Noise': require('../../../assets/sounds/background/white-noise.m4a'),
 };
 
-export const NOTIFICATION_SOUND_FILES: Record<string, AudioSource> = {
+export const NOTIFICATION_SOUND_FILES: Record<string, AudioSource | null> = {
+  Silent: null, // no chime, and phone notifications arrive without a sound
   'Singing Tibetan Bowl': require('../../../assets/sounds/notification/tibetan-bowl.m4a'),
   'Soft Chime': require('../../../assets/sounds/notification/soft-chime.m4a'),
   'Desk Bell': require('../../../assets/sounds/notification/desk-bell.m4a'),
@@ -29,5 +30,8 @@ export const BACKGROUND_SOUNDS = Object.keys(BACKGROUND_SOUND_FILES);
 export const NOTIFICATION_SOUNDS = Object.keys(NOTIFICATION_SOUND_FILES);
 
 export const backgroundSource = (name: string): AudioSource | null => BACKGROUND_SOUND_FILES[name] ?? null;
-export const notificationSource = (name: string): AudioSource =>
-  NOTIFICATION_SOUND_FILES[name] ?? NOTIFICATION_SOUND_FILES[NOTIFICATION_SOUNDS[0]];
+/** The chime file for a sound name, or null for Silent. Unknown names fall back to the first real sound. */
+export const notificationSource = (name: string): AudioSource | null =>
+  name in NOTIFICATION_SOUND_FILES ? NOTIFICATION_SOUND_FILES[name] : NOTIFICATION_SOUND_FILES['Singing Tibetan Bowl'];
+
+export const isSilent = (name: string | null | undefined) => name === 'Silent';

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Alert, Linking, Pressable, Share, View } from 'react-native';
+import { Linking, Pressable, Share, View } from 'react-native';
+import { showNotice } from '@/stores/notice';
+import { useTimer } from '@/features/timer/timerStore';
 import { SettingsScaffold } from '@/components/settings/SettingsScaffold';
 import { Icon } from '@/components/ui/Icon';
 import { IconButton } from '@/components/ui/IconButton';
@@ -29,10 +31,13 @@ export default function PrivacyScreen() {
   const onPermission = async () => {
     if (permission === 'granted' || permission === 'unsupported') return;
     if (permission === 'denied') {
-      Alert.alert('Notifications are off', 'Turn them on in your phone settings so the timer can tell you when a block ends.', [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Open settings', onPress: () => void Linking.openSettings() },
-      ]);
+      showNotice({
+        title: 'Notifications are off',
+        message: 'Turn them on in your phone settings so the timer can tell you when a block ends.',
+        cancelLabel: 'Not now',
+        buttonLabel: 'Open settings',
+        onPress: () => void Linking.openSettings(),
+      });
       return;
     }
     await requestNotificationPermission();
@@ -45,7 +50,7 @@ export default function PrivacyScreen() {
     setSyncing(true);
     await syncNow(); // never throws; failed syncs retry automatically
     setSyncing(false);
-    Alert.alert('Synced', 'Your progress is saved to your account. It also syncs automatically while the app is open.');
+    showNotice({ title: 'Synced', message: 'Your progress is saved to your account. It also syncs automatically while the app is open.' });
   };
 
   const onExport = async () => {
@@ -53,19 +58,23 @@ export default function PrivacyScreen() {
       const json = await exportAllData();
       await Share.share({ title: 'areti data export', message: json });
     } catch (e) {
-      Alert.alert('Export failed', e instanceof Error ? e.message : String(e));
+      showNotice({ title: 'Export failed', message: e instanceof Error ? e.message : String(e) });
     }
   };
 
   const onClear = () =>
-    Alert.alert(
-      'Clear study history?',
-      'This erases all logged focus sessions, so your statistics and streaks start again. Subjects, plans, settings and Reti’s level stay.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear history', style: 'destructive', onPress: () => void clearStudyHistory() },
-      ],
-    );
+    // areti's white popup: white Cancel, terracotta Clear history.
+    showNotice({
+      title: 'Clear study history?',
+      message:
+        'This erases all your tasks, scheduled Pomodoro sessions and logged focus time, so your statistics, streak and Reti’s level and XP start again, on every phone. Your subjects and settings stay.',
+      cancelLabel: 'Cancel',
+      buttonLabel: 'Clear history',
+      onPress: () => {
+        useTimer.getState().reset(); // a running session would belong to the cleared history
+        void clearStudyHistory();
+      },
+    });
 
   const granted = permission === 'granted';
 
@@ -131,7 +140,7 @@ export default function PrivacyScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontFamily: fonts.semiBold, fontSize: 17 }}>Clear study history</Text>
             <Text variant="caption" color={colors.muted}>
-              Only erase your study logs
+              Erase tasks, sessions and statistics
             </Text>
           </View>
           <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="Clear history">

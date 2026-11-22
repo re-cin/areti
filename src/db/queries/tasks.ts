@@ -1,7 +1,9 @@
 import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
 import { db } from '../client';
 import { newId } from '../id';
-import { tasks } from '../schema';
+import { plannedSessions, tasks } from '../schema';
+import { bumpData } from '@/stores/dataVersion';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 
 /** Query builder for one day's tasks, sorted by start time. Pass it to useLiveQuery. */
 export const tasksForDateQuery = (date: number) =>
@@ -20,19 +22,29 @@ export async function addTask(input: {
   startMinute: number;
   endMinute: number;
   notificationSound?: string;
+  hasPomodoro?: boolean;
 }) {
   const id = newId();
   await db.insert(tasks).values({ id, updatedAt: Date.now(), ...input });
+  void refreshSessionReminders(); // 5-minute and start reminders with its Notification Sound
   return id;
 }
 
 export async function setTaskDone(id: string, done: boolean) {
   await db.update(tasks).set({ done, updatedAt: Date.now() }).where(eq(tasks.id, id));
+  void refreshSessionReminders(); // a ticked task doesn't remind
 }
 
 export async function deleteTask(id: string) {
   const now = Date.now();
   await db.update(tasks).set({ deletedAt: now, updatedAt: now }).where(eq(tasks.id, id)); // soft delete
+  // Its Pomodoro session (if scheduled) goes too, so it leaves Upcoming Sessions on every phone.
+  await db
+    .update(plannedSessions)
+    .set({ deletedAt: now, updatedAt: now })
+    .where(and(eq(plannedSessions.planId, `task:${id}`), isNull(plannedSessions.deletedAt)));
+  bumpData();
+  void refreshSessionReminders();
 }
 
 /** Tasks between two days (inclusive). Used for the "has tasks" dots on the day strip. */

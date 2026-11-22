@@ -1,6 +1,7 @@
 import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects } from '@/db/schema';
+import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects, tasks } from '@/db/schema';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 import { saveDisplayName } from '@/db/queries/profile';
 import { AuthError } from '@/lib/auth';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
@@ -102,9 +103,18 @@ export async function exportAllData(): Promise<string> {
   return JSON.stringify(data, null, 2);
 }
 
-/** "Clear study history": soft-deletes focus logs only. Subjects, plans, XP and settings stay. */
+/**
+ * "Clear study history": soft-deletes (so it syncs to every phone) all focus logs (statistics and streak),
+ * scheduled Pomodoro sessions and Planner tasks, and resets Reti to level 1 with 0 XP (XP comes from that
+ * focus time). Subjects and settings stay.
+ */
 export async function clearStudyHistory(): Promise<void> {
   const now = Date.now();
-  await db.update(focusSessions).set({ deletedAt: now, updatedAt: now }).where(isNull(focusSessions.deletedAt));
+  const gone = { deletedAt: now, updatedAt: now };
+  await db.update(focusSessions).set(gone).where(isNull(focusSessions.deletedAt));
+  await db.update(plannedSessions).set(gone).where(isNull(plannedSessions.deletedAt));
+  await db.update(tasks).set(gone).where(isNull(tasks.deletedAt));
+  await db.update(ghostState).set({ level: 1, xp: 0, updatedAt: now }).where(isNull(ghostState.deletedAt));
   bumpData();
+  void refreshSessionReminders(); // no more reminders for the cleared tasks and sessions
 }

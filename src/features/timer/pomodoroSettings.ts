@@ -27,7 +27,7 @@ export const DEFAULT_POMODORO: PomodoroSettings = {
 /** Stepper limits: [min, max, step]. */
 export const POMODORO_LIMITS = {
   focusCount: [1, 8, 1],
-  focusMin: [5, 120, 5],
+  focusMin: [15, 120, 5], // 15 = the least that earns credit
   breakMin: [1, 30, 1],
   longBreakMin: [5, 60, 5],
 } as const;
@@ -37,7 +37,8 @@ export { BACKGROUND_SOUNDS, NOTIFICATION_SOUNDS } from '@/features/audio/sounds'
 
 export async function loadPomodoroSettings(): Promise<PomodoroSettings> {
   const saved = await getSetting<Partial<PomodoroSettings>>(SETTING_KEYS.pomodoro, {});
-  return { ...DEFAULT_POMODORO, ...saved };
+  const s = { ...DEFAULT_POMODORO, ...saved };
+  return { ...s, focusMin: Math.max(POMODORO_LIMITS.focusMin[0], s.focusMin) };
 }
 
 export async function savePomodoroSettings(value: PomodoroSettings): Promise<void> {
