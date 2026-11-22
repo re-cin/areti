@@ -8,9 +8,10 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import migrations from '../../drizzle/migrations';
+import { startAutoSync } from '@/sync/sync';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -19,6 +20,12 @@ export default function RootLayout() {
   const { success: dbReady, error: dbError } = useMigrations(db, migrations);
 
   const ready = Boolean((fontsLoaded || fontError) && (dbReady || dbError));
+
+  // Sync with Supabase (when signed in) once the local database is ready.
+  useEffect(() => {
+    if (!dbReady) return;
+    return startAutoSync();
+  }, [dbReady]);
   // The splash overlay stays on top (and hides the native splash) until it has faded out.
   const [splashDone, setSplashDone] = useState(false);
   const finishSplash = useCallback(() => setSplashDone(true), []);
@@ -41,8 +48,6 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           {/* Sign in fades its own content in (see auth.tsx), so no slide here. */}
           <Stack.Screen name="auth" options={{ animation: 'none' }} />
-          {/* Fades in out of the welcome screen's ghost zoom. */}
-          <Stack.Screen name="onboarding/intro" options={{ animation: 'fade' }} />
         </Stack>
       </>
     );

@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Every table follows the same sync-ready pattern:
 //  - id: UUID created ON THE DEVICE (use newId() from ./id), never auto-increment
@@ -82,18 +82,3 @@ export const profile = sqliteTable('profile', {
   displayName: text('display_name').notNull().default(''),
   pictureUri: text('picture_uri'),
 });
-
-// Local accounts (stored only on this device until cloud sync exists).
-// Passwords are never stored: only a salted, repeatedly hashed value (see src/db/queries/accounts.ts).
-export const accounts = sqliteTable(
-  'accounts',
-  {
-    ...base,
-    email: text('email').notNull(), // lowercased + trimmed
-    passwordHash: text('password_hash').notNull(), // hex SHA-256
-    passwordSalt: text('password_salt').notNull(), // hex, random per account
-    passwordRounds: integer('password_rounds').notNull(), // hashing rounds used, so it can be raised later
-    createdAt: integer('created_at').notNull(),
-  },
-  (t) => [uniqueIndex('accounts_email_unique').on(t.email)],
-);

@@ -9,15 +9,19 @@ type Props = {
   name: string;
   joined: string;
   isPro?: boolean;
+  /** Profile picture link (null = default icon). */
+  pictureUri?: string | null;
+  /** Spinner over the picture while it uploads. */
+  uploading?: boolean;
   onEditPhoto?: () => void;
   onEditName?: () => void;
 };
 
 /** Account Settings top block: big avatar with camera badge, name + pencil, PRO tag, join date. */
-export function ProfileHeader({ name, joined, isPro, onEditPhoto, onEditName }: Props) {
+export function ProfileHeader({ name, joined, isPro, pictureUri, uploading, onEditPhoto, onEditName }: Props) {
   return (
     <View style={{ alignItems: 'center', gap: spacing.sm }}>
-      <Avatar size={80} editable onPress={onEditPhoto} />
+      <Avatar size={80} editable uri={pictureUri} loading={uploading} onPress={uploading ? undefined : onEditPhoto} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.xs }}>
         <Text variant="heading">{name}</Text>
         <Pressable onPress={onEditName} hitSlop={10} accessibilityRole="button" accessibilityLabel="Edit name">

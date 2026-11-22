@@ -4,13 +4,15 @@ import journal from './meta/_journal.json';
 import m0000 from './0000_safe_hitman.sql';
 import m0001 from './0001_icy_diamondback.sql';
 import m0002 from './0002_accounts.sql';
+import m0003 from './0003_drop_local_accounts.sql';
 
   export default {
     journal,
     migrations: {
       m0000,
 m0001,
-m0002
+m0002,
+m0003
     }
   }
   

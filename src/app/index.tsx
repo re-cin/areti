@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Redirect, type Href } from 'expo-router';
-import { getSession } from '@/db/queries/accounts';
+import { getSession } from '@/lib/auth';
 
 /**
  * Start route. Signed-in users go straight to the app; everyone else

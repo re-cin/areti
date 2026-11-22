@@ -4,8 +4,6 @@ import {
   Alert,
   Animated,
   Easing,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,12 +14,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { router, useLocalSearchParams } from 'expo-router';
+import { PasswordField } from '@/components/auth/PasswordField';
 import { Wordmark } from '@/components/brand/Wordmark';
-import { Icon } from '@/components/ui/Icon';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError, signIn, signUp } from '@/db/queries/accounts';
+import { AuthError, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
+import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
 
 const MASCOT = require('../../assets/images/areti-mascot.png');
@@ -31,7 +30,7 @@ type Mode = (typeof MODES)[number];
 
 /** How far the curved bottom of the teal header dips below its straight sides. */
 const CURVE_DEPTH = 60;
-const MIN_PASSWORD = 8;
+const MIN_PASSWORD = MIN_PASSWORD_LENGTH;
 
 /**
  * Sign In / Sign Up (email only; Google and Apple are left out for now).
@@ -50,6 +49,8 @@ export default function Auth() {
   const [busy, setBusy] = useState(false);
 
   const isSignUp = mode === 'Sign Up';
+  // Keep the focused field visible above the phone keyboard.
+  const { scrollRef, onScroll, onFocus, keyboardPadding } = useKeyboardAwareScroll();
 
   // Arrival: everything fades (and slides slightly) in. When coming from the onboarding
   // animation, Reti is already standing in this exact spot, so it stays solid.
@@ -82,9 +83,11 @@ export default function Auth() {
     if (problem) return;
 
     setBusy(true);
+    const started = Date.now();
     try {
       if (isSignUp) await signUp(email, password);
       else await signIn(email, password);
+      if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
       router.replace('/planner');
     } catch (e) {
       setError(errorMessage(e));
@@ -95,9 +98,12 @@ export default function Auth() {
 
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        ref={scrollRef}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[styles.content, { paddingBottom: keyboardPadding }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         bounces={false}>
@@ -128,6 +134,7 @@ export default function Auth() {
 
           <Text style={[styles.label, styles.firstLabel]}>Email address</Text>
           <TextField
+            onFocus={onFocus}
             value={email}
             onChangeText={setEmail}
             placeholder="you@example.com"
@@ -149,6 +156,7 @@ export default function Auth() {
             )}
           </View>
           <PasswordField
+            onFocus={onFocus}
             value={password}
             onChangeText={setPassword}
             autoComplete={isSignUp ? 'new-password' : 'current-password'}
@@ -161,6 +169,7 @@ export default function Auth() {
             <>
               <Text style={styles.label}>Re-enter password</Text>
               <PasswordField
+                onFocus={onFocus}
                 value={confirm}
                 onChangeText={setConfirm}
                 autoComplete="new-password"
@@ -194,31 +203,7 @@ export default function Auth() {
           <Text style={styles.legalLink}>Privacy Policy</Text>.
         </Animated.Text>
       </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-/** Password input with an eye button that shows or hides what's typed. */
-function PasswordField(props: Omit<React.ComponentProps<typeof TextField>, 'secureTextEntry' | 'right'>) {
-  const [visible, setVisible] = useState(false);
-  return (
-    <TextField
-      placeholder="••••••••"
-      autoCapitalize="none"
-      autoCorrect={false}
-      {...props}
-      secureTextEntry={!visible}
-      right={
-        <Pressable
-          onPress={() => setVisible((v) => !v)}
-          hitSlop={10}
-          style={styles.eye}
-          accessibilityRole="button"
-          accessibilityLabel={visible ? 'Hide password' : 'Show password'}>
-          <Icon name={visible ? 'eye-off' : 'eye'} size={20} color={colors.muted} />
-        </Pressable>
-      }
-    />
+    </View>
   );
 }
 
@@ -241,12 +226,23 @@ function validate({
 }
 
 function errorMessage(e: unknown) {
-  if (e instanceof AuthError) {
-    return e.code === 'email-taken'
-      ? 'An account with this email already exists. Sign in instead.'
-      : 'Wrong email or password.';
+  if (!(e instanceof AuthError)) return 'Something went wrong. Please try again.';
+  switch (e.code) {
+    case 'email-taken':
+      return 'An account with this email already exists. Sign in instead.';
+    case 'wrong-credentials':
+      return 'Wrong email or password.';
+    case 'confirm-email':
+      return 'Check your email and tap the confirmation link, then sign in.';
+    case 'weak-password':
+      return 'That password is too weak. Try a longer one with letters and numbers.';
+    case 'offline':
+      return "Can't reach the server. Check your internet connection and try again.";
+    case 'not-configured':
+      return 'Accounts are not set up yet (missing Supabase settings in .env).';
+    default:
+      return e.message || 'Something went wrong. Please try again.';
   }
-  return 'Something went wrong. Please try again.';
 }
 
 /** Rectangle whose bottom edge is a circular arc dipping CURVE_DEPTH below the sides. */
@@ -299,10 +295,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.terracottaDark,
     marginBottom: 7,
-  },
-  eye: {
-    paddingHorizontal: 4,
-    paddingVertical: 4,
   },
   error: {
     fontFamily: fonts.medium,

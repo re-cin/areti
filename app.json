@@ -34,7 +34,13 @@
         }
       ],
       "expo-sqlite",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "areti uses your photos so you can choose a profile picture."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { borders, colors, spacing } from '@/theme';
 import { Avatar } from './Avatar';
 import { Icon } from './Icon';
@@ -17,6 +18,7 @@ type Props = {
 
 /** Title row with the thick underline used at the top of every screen. */
 export function ScreenHeader({ title, leading = 'none', onAvatarPress, trailing }: Props) {
+  const user = useCurrentUser();
   return (
     <View
       style={{
@@ -32,7 +34,7 @@ export function ScreenHeader({ title, leading = 'none', onAvatarPress, trailing 
           <Icon name="chevron-left" size={24} strokeWidth={2.8} />
         </Pressable>
       )}
-      {leading === 'avatar' && <Avatar size={40} backgroundColor={colors.surface} onPress={onAvatarPress} />}
+      {leading === 'avatar' && <Avatar size={40} backgroundColor={colors.surface} uri={user?.pictureUri} onPress={onAvatarPress} />}
       <Text variant={leading === 'back' ? 'heading' : 'title'} style={{ flex: 1 }}>
         {title}
       </Text>

@@ -7,6 +7,7 @@ import { SettingsMenu, type SettingsMenuItem } from '@/components/settings/Setti
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Text } from '@/components/ui/Text';
 import { confirmSignOut } from '@/lib/confirmSignOut';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { mockUser } from '@/mocks/ui';
 import { colors, spacing } from '@/theme';
 
@@ -20,6 +21,7 @@ const MENU: SettingsMenuItem[] = [
 ];
 
 export default function UserSettingsScreen() {
+  const user = useCurrentUser();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
       <ScrollView
@@ -27,8 +29,9 @@ export default function UserSettingsScreen() {
         showsVerticalScrollIndicator={false}>
         <ScreenHeader title="User Settings" leading="back" />
         <ProfileCard
-          name={mockUser.name}
-          email={mockUser.email}
+          name={user?.name ?? ''}
+          email={user?.email ?? ''}
+          pictureUri={user?.pictureUri}
           onPress={() => router.push('/settings/account')}
           onSignOut={confirmSignOut}
         />
