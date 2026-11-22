@@ -1,14 +1,14 @@
+import { Text } from '@/components/ui/Text';
+import { db } from '@/db/client';
+import { colors } from '@/theme';
 import { Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
+import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { useEffect } from 'react';
 import { View } from 'react-native';
-import { Text } from '@/components/ui/Text';
-import { db } from '@/db/client';
-import { colors } from '@/theme';
 import migrations from '../../drizzle/migrations';
 
 SplashScreen.preventAutoHideAsync();
@@ -35,7 +35,7 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="dark" />
-      <Stack screenOptions={{ headerShown: false }} />
+      <Stack screenOptions={{ headerShown: false}} />
     </>
   );
 }

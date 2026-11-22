@@ -1,5 +1,5 @@
-import { Pressable, View } from 'react-native';
 import { borders, colors, radii, spacing } from '@/theme';
+import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Icon, type IconName } from './Icon';
 import { NeoBox } from './NeoBox';
 import { Text } from './Text';
@@ -8,40 +8,62 @@ type Props = {
   label: string;
   onPress?: () => void;
   backgroundColor?: string;
+  /** Label color. Defaults to ink. */
+  textColor?: string;
+  /** Shadow color. Defaults to ink. */
+  shadowColor?: string;
+  /** Optional icon shown before the label: an icon name, or any element. */
+  icon?: IconName | React.ReactNode;
   disabled?: boolean;
-  /** Optional icon shown before the label. */
-  icon?: IconName;
   /** "label" renders small uppercase text (e.g. DELETE EVERYTHING). */
   textVariant?: 'heading' | 'subheading' | 'label';
+  /** Applied to the outer Pressable (e.g. `{ flex: 1 }` in a row). */
+  style?: StyleProp<ViewStyle>;
 };
 
 export function NeoButton({
   label,
   onPress,
   backgroundColor = colors.teal,
-  disabled,
+  textColor = colors.ink,
+  shadowColor = colors.ink,
   icon,
-  textVariant = 'heading',
+  disabled,
+  textVariant = 'subheading',
+  style,
 }: Props) {
   const offset = borders.shadowOffset;
   return (
-    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityState={{ disabled }}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={style}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}>
       {({ pressed }) => (
         <View style={{ opacity: disabled ? 0.5 : 1, transform: pressed ? [{ translateX: offset }, { translateY: offset }] : [] }}>
           <NeoBox
             shadow={!pressed}
+            shadowColor={shadowColor}
             radius={radii.button}
             backgroundColor={backgroundColor}
             style={{
-              paddingVertical: spacing.md + 2,
+              paddingVertical: spacing.md -1,
               paddingHorizontal: spacing.xl,
               alignItems: 'center',
               justifyContent: 'center',
               flexDirection: 'row',
-              gap: spacing.sm,
+              gap: 8,
             }}>
-            {icon && <Icon name={icon} size={textVariant === 'label' ? 16 : 20} />}
-            <Text variant={textVariant} style={textVariant === 'label' ? { fontSize: 13 } : undefined}>
+            {typeof icon === 'string' ? (
+              <Icon name={icon as IconName} size={textVariant === 'label' ? 16 : 20} />
+            ) : (
+              icon
+            )}
+            <Text
+              variant={textVariant}
+              color={textColor}
+              style={textVariant === 'label' ? { fontSize: 13 } : undefined}>
               {label}
             </Text>
           </NeoBox>

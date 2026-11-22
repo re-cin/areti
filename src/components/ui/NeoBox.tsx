@@ -1,5 +1,5 @@
+import { colors, radii } from '@/theme';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import { borders, colors, radii } from '@/theme';
 
 type Props = {
   children?: React.ReactNode;
@@ -7,6 +7,8 @@ type Props = {
   backgroundColor?: string;
   radius?: number;
   offset?: number;
+  /** Color of the hard offset shadow. Defaults to ink. */
+  shadowColor?: string;
   /** Set false to hide the shadow (e.g. while pressed). Layout space is always reserved. */
   shadow?: boolean;
 };
@@ -20,7 +22,8 @@ export function NeoBox({
   style,
   backgroundColor = colors.surface,
   radius = radii.card,
-  offset = borders.shadowOffset,
+  offset = 2, // Default drop shadow offset set to 2
+  shadowColor = colors.ink,
   shadow = true,
 }: Props) {
   return (
@@ -30,13 +33,13 @@ export function NeoBox({
           pointerEvents="none"
           style={[
             StyleSheet.absoluteFill,
-            { top: offset, left: offset, right: -offset, bottom: -offset, backgroundColor: colors.ink, borderRadius: radius },
+            { top: offset, left: offset, right: -offset, bottom: -offset, backgroundColor: shadowColor, borderRadius: radius },
           ]}
         />
       )}
       <View
         style={[
-          { backgroundColor, borderColor: colors.ink, borderWidth: borders.width, borderRadius: radius },
+          { backgroundColor, borderColor: colors.ink, borderWidth: 1.5, borderRadius: radius }, // Border line set to 1.5
           style,
         ]}>
         {children}

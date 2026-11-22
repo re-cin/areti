@@ -1,5 +1,5 @@
+import { colors, radii } from '@/theme';
 import { View } from 'react-native';
-import { borders, colors, radii } from '@/theme';
 import { Text } from './Text';
 
 export function Pill({ label, color = colors.pill.physics }: { label: string; color?: string }) {
@@ -8,7 +8,7 @@ export function Pill({ label, color = colors.pill.physics }: { label: string; co
       style={{
         backgroundColor: color,
         borderColor: colors.ink,
-        borderWidth: 2,
+        borderWidth: 1,
         borderRadius: radii.pill,
         paddingHorizontal: 9,
         paddingVertical: 2,

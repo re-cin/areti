@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { Icon, type IconName } from '@/components/ui/Icon';
-import { colors, fonts } from '@/theme';
+import { borders, colors, fonts } from '@/theme';
 
 /** Tab icon with the terracotta blob behind it when the tab is active. */
 function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
@@ -32,17 +32,16 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: colors.ink,
-        tabBarInactiveTintColor: colors.ink,
-        tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopWidth: 0,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          height: 80,
-          paddingTop: 10,
+        tabBarInactiveTintColor: colors.muted,
+        tabBarStyle: { 
+          backgroundColor: colors.surface, 
+          borderTopColor: colors.ink, 
+          borderTopWidth: borders.width, 
+          height: 72 
         },
-        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11, marginTop: 4 },
+        tabBarLabelStyle: { fontFamily: fonts.semiBold, fontSize: 11 },
       }}>
       <Tabs.Screen
         name="planner"
@@ -63,3 +62,4 @@ export default function TabsLayout() {
     </Tabs>
   );
 }
+
