@@ -1,9 +1,11 @@
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
+import { PlanAccessCard, type StudyPlanAccess } from '@/components/planner/PlanAccessCard';
 import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
 import type { ExamPreferences } from '@/features/planner/examsRepo';
+import type { ExamPriority } from '@/features/subscription/entitlements';
 import { studyWindows } from '@/features/planner/engine';
 import { addDays, monthLabel, startOfDay, startOfWeek } from '@/lib/dates';
 import { formatDuration, formatTime } from '@/lib/format';
@@ -24,6 +26,7 @@ export type ExamStudyPlanContentProps = {
   sessions: StudyPlanCard[]; shortfall: number; error: string; status: string;
   saving: boolean; loadingPreview: boolean; protectedCount: number;
   deleting?: boolean;
+  access: StudyPlanAccess;
   actions: {
     back: () => void; settings: () => void; subject: () => void;
     difficulty: (value: number) => void; defaultUrgency: () => void; examDate: () => void;
@@ -33,6 +36,7 @@ export type ExamStudyPlanContentProps = {
     toggleExtra: () => void; toggleWeekday: (day: number) => void;
     protectSubjects: () => void; regenerate: () => void; save: () => void;
     deletePlan: () => void;
+    priority: (priority: ExamPriority) => void; upgrade: () => void; rescheduleMissed: () => void;
   };
 };
 
@@ -83,6 +87,8 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
         </View>
         {!!p.status && <Text accessibilityLiveRegion="polite" variant="caption" style={styles.status}>{p.status}</Text>}
       </View>
+
+      <PlanAccessCard access={p.access} busy={p.saving} onPriority={actions.priority} onUpgrade={actions.upgrade} onReschedule={actions.rescheduleMissed} />
 
       <NeoBox radius={18} offset={1} shadowColor={colors.divider} backgroundColor={palette.surface} style={styles.card}>
         <View style={styles.between}>
@@ -160,7 +166,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
         {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.shortfall} focus blocks won’t fit before the exam. Adjust your study range or daily goal.</Text>}
         {!!p.error && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.error}</Text>}
         <View style={styles.divider} />
-        {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error} onPress={actions.regenerate} /><View style={styles.divider} /></>}
+        {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error || !p.access.scheduled} onPress={actions.regenerate} /><View style={styles.divider} /></>}
 
         <View style={styles.between}><Text variant="smallStrong">Pomodoro</Text><Text variant="caption" color={colors.terracottaDark}>Target: {prefs.focusCount} blocks</Text></View>
         <SettingRow label="Focus count" value={String(prefs.focusCount)} onMinus={() => actions.adjust('focusCount', -1)} onPlus={() => actions.adjust('focusCount', 1)} />
@@ -179,7 +185,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
             <Text variant="caption" style={styles.scopeHint}>The focus goal is shared across exams each calendar day. Harder exams receive a larger share of available study time. Difficulty applies only to the current exam.</Text>
         </>}
       </NeoBox>
-      <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error} onPress={actions.save} /></View>
+      <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error || !p.access.scheduled} onPress={actions.save} /></View>
       <Pressable onPress={actions.deletePlan} disabled={p.saving || p.deleting} accessibilityRole="button" accessibilityLabel="Delete this study plan" style={styles.deletePlan}>
         <Icon name="trash" size={16} color={colors.dangerDark} /><Text variant="smallStrong" color={colors.dangerDark}>{p.deleting ? 'Deleting study plan…' : 'Delete study plan'}</Text>
       </Pressable>

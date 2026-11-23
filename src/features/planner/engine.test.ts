@@ -199,3 +199,35 @@ describe('student scheduling', () => {
     expect(result.sessions.filter(s => s.date === day).every(s => s.planId === 'easy')).toBe(true);
   });
 });
+
+describe('exam priority (Premium)', () => {
+  // 12 + 12 blocks wanted, but only 4 blocks a day for 4 days (16): the exams compete for time.
+  const two = (priority: number | undefined) => {
+    const result = generateSchedule({ now: today, dailyGoalMin: 100, busy: [], plans: [
+      plan({ id: 'math', subjectId: 'math', examDate: addDays(day, 4), remainingBlocks: 12, priority }),
+      plan({ id: 'sci', subjectId: 'sci', examDate: addDays(day, 4), remainingBlocks: 12 }),
+    ] });
+    const blocks = (id: string) => result.sessions.filter(s => s.planId === id).reduce((sum, s) => sum + s.blocks, 0);
+    return { math: blocks('math'), sci: blocks('sci'), total: result.sessions.reduce((sum, s) => sum + s.blocks, 0) };
+  };
+
+  it('is a neutral default: no priority and priority 1 schedule identically', () => {
+    expect(two(undefined)).toEqual(two(1));
+  });
+
+  it('does not change totals when there is room for everything, only the order', () => {
+    const room = (priority: number) => generateSchedule({ now: today, dailyGoalMin: 100, busy: [], plans: [
+      plan({ id: 'math', examDate: addDays(day, 4), remainingBlocks: 8, priority }),
+      plan({ id: 'sci', subjectId: 'sci', examDate: addDays(day, 4), remainingBlocks: 8 })] });
+    expect(room(2).shortfallBlocks).toBe(0);
+    expect(room(2).sessions.reduce((sum, s) => sum + s.blocks, 0)).toBe(room(1).sessions.reduce((sum, s) => sum + s.blocks, 0));
+  });
+
+  it('gives a prioritized exam a larger share of the same study time when exams compete', () => {
+    const normal = two(1);
+    const highest = two(2);
+    expect(highest.math).toBeGreaterThan(normal.math);
+    expect(highest.sci).toBeLessThan(normal.sci);
+    expect(highest.total).toBe(normal.total); // time is shared differently, never added
+  });
+});

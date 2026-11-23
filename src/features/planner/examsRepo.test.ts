@@ -9,7 +9,8 @@ import { addSubject, deleteSubject, listSubjects } from '@/features/subjects/sub
 import { listUpcomingToday, recordFocus, scheduleTaskPomodoro } from '@/features/timer/timerRepo';
 import { useTimer } from '@/features/timer/timerStore';
 import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
-import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamPreferences, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
+import { SUBSCRIPTION_SETTING_KEY, PremiumRequiredError, type PlanTier } from '@/features/subscription/entitlements';
+import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, setExamPriority, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
 
 jest.mock('@/db/client', () => {
   const { DatabaseSync } = jest.requireActual('node:sqlite');
@@ -43,12 +44,18 @@ const now = new Date(2026, 10, 23, 8);
 const day = startOfDay(now);
 const activeSessions = () => db.select().from(plannedSessions).where(isNull(plannedSessions.deletedAt)).all();
 const activeTasks = () => db.select().from(tasks).where(isNull(tasks.deletedAt)).all();
+const setTier = (plan: PlanTier, expiresAt: number | null = null) => {
+  const value = JSON.stringify({ plan, expiresAt });
+  db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value, updatedAt: Date.now() })
+    .onConflictDoUpdate({ target: settings.key, set: { value } }).run();
+};
 
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(now);
   for (const table of [tasks, plannedSessions, focusSessions, ghostState, studyPlans, subjects, settings]) db.delete(table).run();
   useTimer.setState({ status: 'idle', plannedSessionId: null, run: null, cfg: null });
   db.insert(subjects).values({ id: 'math', name: 'Math', color: '#ffffff', updatedAt: now.getTime() }).run();
+  setTier('premium'); // The original tests describe adaptive (Premium) scheduling. Free is covered below.
 });
 afterEach(() => jest.useRealTimers());
 
@@ -447,4 +454,95 @@ it('keeps logged study in the daily budget after its plan is deleted', async () 
   await deleteStudyPlan(id);
   const second = await createExam({ name: 'Next exam', subjectId: 'math', date: addDays(day, 2) });
   expect(activeSessions().filter(session => session.planId === second && session.date === day).reduce((sum, session) => sum + session.blocks * 25, 0)).toBeLessThanOrEqual(75);
+});
+
+// ---------------------------------------------------------------------------
+// Free vs Premium: one engine, capabilities switched on by subscription tier
+// ---------------------------------------------------------------------------
+describe('Free vs Premium', () => {
+  const addScience = () => db.insert(subjects).values({ id: 'sci', name: 'Science', color: '#eeeeee', updatedAt: now.getTime() }).run();
+  const blocksFor = (planId: string) => activeSessions().filter(s => s.planId === planId).reduce((sum, s) => sum + s.blocks, 0);
+
+  it('treats a missing, unreadable or expired subscription as Free', async () => {
+    db.delete(settings).run();
+    expect((await getExamAccess('none')).entitlements.tier).toBe('free');
+    db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value: '{not json', updatedAt: 1 }).run();
+    expect((await getExamAccess('none')).entitlements.tier).toBe('free');
+    setTier('premium', now.getTime() - 1);
+    expect((await getExamAccess('none')).entitlements.tier).toBe('free');
+    setTier('premium', now.getTime() + 86_400_000);
+    expect((await getExamAccess('none')).entitlements.tier).toBe('premium');
+  });
+
+  it('lets Free students keep unlimited exams but schedules only the nearest one', async () => {
+    setTier('free'); addScience();
+    const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 6) });
+    expect((await examsQuery()).map(e => e.id).sort()).toEqual([math, sci].sort()); // both stay listed
+    expect(blocksFor(math)).toBeGreaterThan(0);
+    expect(blocksFor(sci)).toBe(0);
+    expect((await getExamAccess(math)).scheduled).toBe(true);
+    expect((await getExamAccess(sci)).scheduled).toBe(false);
+    await expect(previewStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES })).rejects.toBeInstanceOf(PremiumRequiredError);
+    await expect(saveStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES })).rejects.toBeInstanceOf(PremiumRequiredError);
+  });
+
+  it('schedules every exam after upgrading and withdraws extra generated work after a downgrade', async () => {
+    setTier('free'); addScience();
+    const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 6) });
+    setTier('premium'); await regenerateSchedules();
+    expect(blocksFor(math)).toBeGreaterThan(0);
+    expect(blocksFor(sci)).toBeGreaterThan(0);
+    setTier('free'); await regenerateSchedules();
+    expect(blocksFor(math)).toBeGreaterThan(0);
+    expect(blocksFor(sci)).toBe(0);
+    expect(activeTasks().some(t => t.planId === sci)).toBe(false);
+    expect((await examsQuery()).some(e => e.id === sci)).toBe(true); // the exam itself is never lost
+  });
+
+  it('marks a missed session for Free students and moves it only when they regenerate', async () => {
+    setTier('free');
+    const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    const missed = activeSessions().find(s => s.date === day)!;
+    expect(missed).toBeTruthy();
+    const late = new Date(2026, 10, 23, 22);
+    jest.setSystemTime(late);
+    await regenerateSchedules(late); // automatic refresh must not silently move it
+    expect(activeSessions().find(s => s.id === missed.id)).toMatchObject({ date: day, startMinute: missed.startMinute, completedBlocks: 0 });
+    expect(activeTasks().find(t => t.id === missed.id)?.done).toBe(false);
+    expect((await getPlanInsights(id, late)).missedSessions).toBe(1);
+    expect((await getPlanInsights(id, late)).detailed).toBeUndefined();
+    await saveStudySchedule(id, { ...DEFAULT_EXAM_PREFERENCES }); // the student asks for a new schedule
+    expect(activeSessions().every(s => s.date > day)).toBe(true);
+    expect((await getPlanInsights(id, late)).missedSessions).toBe(0);
+  });
+
+  it('recovers a missed session automatically for Premium students and reports detailed insights', async () => {
+    const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    const late = new Date(2026, 10, 23, 22);
+    jest.setSystemTime(late);
+    const result = await regenerateSchedules(late);
+    expect(activeSessions().every(s => s.date > day)).toBe(true);
+    expect(result.shortfallByPlan[id]).toBe(4); // today's blocks cannot fit again before the exam
+    const insights = await getPlanInsights(id, late);
+    expect(insights.detailed).toMatchObject({ enoughTime: false, shortfallBlocks: 4, daysLeft: 3 });
+  });
+
+  it('keeps priority controls Premium-only and never changes the total study time', async () => {
+    addScience();
+    const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });
+    const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 4) });
+    const total = () => blocksFor(math) + blocksFor(sci);
+    const before = { math: blocksFor(math), sci: blocksFor(sci), total: total() };
+    await setExamPriority(math, 'highest');
+    expect((await getExamAccess(math)).priority).toBe('highest');
+    expect(blocksFor(math)).toBeGreaterThan(before.math);
+    expect(blocksFor(sci)).toBeLessThan(before.sci);
+    expect(total()).toBe(before.total); // redistributed, not added
+    setTier('free');
+    await expect(setExamPriority(math, 'normal')).rejects.toBeInstanceOf(PremiumRequiredError);
+    await regenerateSchedules(); // a stale saved priority is ignored once the subscription lapses
+    expect((await getExamAccess(math)).priority).toBe('normal');
+  });
 });

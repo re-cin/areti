@@ -5,7 +5,9 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { borders, colors, radii, spacing } from '@/theme';
 
-export type StudyPlanListItem = { id: string; title: string; subject: string; color: string; examDate: number };
+export type StudyPlanListItem = { id: string; title: string; subject: string; color: string; examDate: number;
+  /** false = listed for manual tracking only (beyond the Free plan's one automatically scheduled exam). */
+  autoScheduled?: boolean };
 
 export function StudyPlansSheet({ visible, plans, onClose, onDismiss, onView, onDelete, onCreate }: {
   visible: boolean; plans: StudyPlanListItem[]; onClose: () => void; onView: (id: string) => void;
@@ -25,6 +27,7 @@ export function StudyPlansSheet({ visible, plans, onClose, onDismiss, onView, on
             <Text variant="smallStrong">{plan.title}</Text>
             <View style={[styles.subject, { backgroundColor: plan.color }]}><Text variant="label" color={colors.white}>{plan.subject}</Text></View>
             <Text variant="caption" color={colors.muted}>{new Date(plan.examDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</Text>
+            {plan.autoScheduled === false && <Text variant="caption" color={colors.muted}>Manual tracking · Premium schedules several exams</Text>}
           </Pressable>
           <Pressable onPress={() => onDelete(plan)} accessibilityRole="button" accessibilityLabel={`Delete ${plan.title} study plan`} hitSlop={8} style={styles.delete}><Icon name="trash" size={20} color={colors.dangerDark} /></Pressable>
           <Pressable onPress={() => onView(plan.id)} accessibilityLabel={`View ${plan.title}`} hitSlop={8}><Icon name="chevronRight" size={20} /></Pressable>

@@ -1,11 +1,14 @@
 import { ExamStudyPlanContent, type StudyPlanCard } from '@/components/planner/ExamStudyPlanContent';
 import { ProtectedSubjectsSheet } from '@/components/planner/ProtectedSubjectsSheet';
+import type { StudyPlanAccess } from '@/components/planner/PlanAccessCard';
 import { Text } from '@/components/ui/Text';
 import {
-  DEFAULT_EXAM_PREFERENCES, examName, getExam, getExamPreferences, getProtectedSubjectIds,
-  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule,
+  DEFAULT_EXAM_PREFERENCES, examName, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds,
+  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule, setExamPriority,
   updateExam, updateExamDifficulty, type ExamPreferences,
 } from '@/features/planner/examsRepo';
+import { showComingSoon } from '@/features/account/accountAlerts';
+import { PremiumRequiredError, type ExamPriority } from '@/features/subscription/entitlements';
 import type { StudySession } from '@/features/planner/engine';
 import { updateSubjectUrgency } from '@/features/subjects/subjectsRepo';
 import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
@@ -50,6 +53,8 @@ export default function ExamStudyPlanScreen() {
   const [protectedIds, setProtectedIds] = useState<string[]>([]);
   const [protectedDraft, setProtectedDraft] = useState<string[]>([]);
   const [protectOpen, setProtectOpen] = useState(false);
+  // Free until the server confirms otherwise; `loaded` stops us previewing before we know the tier.
+  const [access, setAccess] = useState<StudyPlanAccess & { loaded: boolean }>({ tier: 'free', scheduled: true, priority: 'normal', insights: null, loaded: false });
   const today = useToday();
   const { todo } = useTasksForDate(selectedDate);
   const subject = byId.get(exam?.subjectId ?? '');
@@ -61,13 +66,15 @@ export default function ExamStudyPlanScreen() {
     if (!id) { setLoadError('No exam was selected.'); return; }
     let live = true;
     (async () => {
-      const [row, names, protectedSubjects] = await Promise.all([getExam(id), getStudyPlanLabels(), getProtectedSubjectIds()]);
+      const [row, names, protectedSubjects, planAccess, insights] = await Promise.all([getExam(id), getStudyPlanLabels(), getProtectedSubjectIds(),
+        getExamAccess(id), getPlanInsights(id)]);
       if (!row) throw new Error('This exam no longer exists.');
       const name = names[id] ?? await examName(id, 'Subject');
       const firstLoad = initialized.current !== id;
       const saved = firstLoad ? await getExamPreferences(id) : null;
       if (!live) return;
       setExam(row); setTitle(name); setLabels(names); setProtectedIds(protectedSubjects);
+      setAccess({ tier: planAccess.entitlements.tier, scheduled: planAccess.scheduled, priority: planAccess.priority, insights, loaded: true });
       if (firstLoad) {
         setPrefs({ ...DEFAULT_EXAM_PREFERENCES, ...saved, longBreakMin: Math.max(30, saved?.longBreakMin ?? 30) });
         setSelectedDate(startOfDay(Date.now()));
@@ -80,9 +87,11 @@ export default function ExamStudyPlanScreen() {
   }, [id, version]));
 
   useEffect(() => {
-    if (!loaded || !id) return;
+    if (!loaded || !id || !access.loaded) return;
     let live = true;
     const timeout = setTimeout(() => {
+      // An exam beyond the Free automatic-scheduling limit has no generated schedule to preview.
+      if (!access.scheduled) { setPreview([]); setShortfall(0); setPreviewError(''); setLoadingPreview(false); return; }
       setLoadingPreview(true);
       previewStudySchedule(id, prefs).then(result => {
         if (!live) return;
@@ -92,7 +101,7 @@ export default function ExamStudyPlanScreen() {
         .finally(() => { if (live) setLoadingPreview(false); });
     }, 180);
     return () => { live = false; clearTimeout(timeout); };
-  }, [id, loaded, prefs, version]);
+  }, [id, loaded, prefs, version, access.loaded, access.scheduled]);
 
   const cards = useMemo<StudyPlanCard[]>(() => {
     const generated = preview.filter(session => session.date === selectedDate).map((session, index) => {
@@ -119,8 +128,23 @@ export default function ExamStudyPlanScreen() {
       const result = await previewStudySchedule(exam.id, next);
       setPreview(result.sessions); setShortfall(result.shortfallBlocks);
       if (leave) router.dismissTo('/planner');
-    } catch (error) { Alert.alert('Could not save study plan', String(error)); }
+    } catch (error) {
+      if (error instanceof PremiumRequiredError) upgrade(error.message);
+      else Alert.alert('Could not save study plan', String(error));
+    }
     finally { setSaving(false); }
+  };
+  const upgrade = (message?: string) => {
+    // Payments aren't built yet; this is the single place that will open the upgrade flow.
+    if (message) Alert.alert('Premium feature', message, [{ text: 'Not now', style: 'cancel' }, { text: 'See Premium', onPress: () => showComingSoon('Premium') }]);
+    else showComingSoon('Premium');
+  };
+  const changePriority = (priority: ExamPriority) => {
+    if (!exam || saving) return;
+    setSaving(true);
+    void setExamPriority(exam.id, priority).then(() => setStatus('Priority updated. Your available time is shared again; total study time is unchanged.'))
+      .catch(error => { if (error instanceof PremiumRequiredError) upgrade(error.message); else Alert.alert('Could not update priority', String(error)); })
+      .finally(() => setSaving(false));
   };
   const pickTime = (key: 'start' | 'end') => {
     const value = prefs[key];
@@ -173,6 +197,7 @@ export default function ExamStudyPlanScreen() {
       difficulty={exam.difficulty} urgency={subject?.urgency === 1 ? 'default' : 'exam'} examDate={exam.examDate}
       today={today} selectedDate={selectedDate} prefs={prefs} excluded={editingDates ? excludedDraft : prefs.excluded}
       editingDates={editingDates} extraOpen={extraOpen} sessions={cards} shortfall={shortfall} error={previewError} status={status}
+      access={access}
       saving={saving || deletion.busy} deleting={deletion.busy} loadingPreview={loadingPreview} protectedCount={protectedIds.length}
       actions={{
         back: () => router.back(), settings: () => router.push('/settings'),
@@ -202,6 +227,7 @@ export default function ExamStudyPlanScreen() {
         protectSubjects: () => { setProtectedDraft([...protectedIds]); setProtectOpen(true); },
         regenerate: () => void persist(prefs, false), save: () => void persist(prefs, true),
         deletePlan: () => { if (!saving) deletion.request(exam.id, title); },
+        priority: changePriority, upgrade: () => upgrade(), rescheduleMissed: () => void persist(prefs, false),
       }} />
     <ProtectedSubjectsSheet visible={protectOpen} subjects={subjects} selected={protectedDraft} saving={saving}
       onToggle={id => setProtectedDraft(old => old.includes(id) ? old.filter(value => value !== id) : [...old, id])}

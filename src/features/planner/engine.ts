@@ -7,6 +7,8 @@ export type SchedulePlan = {
   difficulty: number; urgency: number; start: number; end: number;
   focusMin: number; focusCount: number; breakMin: number; longBreakMin: number;
   excluded: number[]; studyDays?: number[]; planStartDate?: number;
+  /** Student-chosen emphasis (Premium). 1 = normal. Re-shares the same time; never adds study hours. */
+  priority?: number;
 };
 export type BusyTime = { date: number; startMinute: number; endMinute: number; focusMinutes?: number };
 export type StudySession = { planId: string; subjectId: string; date: number; startMinute: number; endMinute: number; blocks: number };
@@ -52,7 +54,7 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
       days++;
       lastStudyDates.set(p.id, date);
     }
-    return [p.id, Math.max(1, p.remainingBlocks * p.focusMin / Math.max(1, days)) * difficultyWeight(p.difficulty)];
+    return [p.id, Math.max(1, p.remainingBlocks * p.focusMin / Math.max(1, days)) * difficultyWeight(p.difficulty) * Math.max(0.1, p.priority ?? 1)];
   }));
   const used = new Map<string, number>();
   let cursor = input.now.getHours() * 60 + input.now.getMinutes() + (input.now.getSeconds() > 0 ? 1 : 0);

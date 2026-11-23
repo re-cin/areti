@@ -1,10 +1,10 @@
+import { getEntitlements } from '@/features/planner/examsRepo';
 import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects } from '@/db/schema';
 import { saveDisplayName } from '@/db/queries/profile';
 import { AuthError } from '@/lib/auth';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
-import { getSetting, SETTING_KEYS, setSetting } from '@/features/settings/settingsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
 export type Profile = {
@@ -36,15 +36,13 @@ export function nameFromEmail(email: string): string {
     .join(' ');
 }
 
-type SavedPlan = { plan?: Profile['plan'] };
-
 /**
  * The signed-in user's profile. Email and join date come from their Supabase account;
  * name and picture from the synced `profile` row (id = user id, see src/db/queries/profile.ts).
  */
 export async function getProfile(): Promise<Profile> {
-  const saved = await getSetting<SavedPlan>(SETTING_KEYS.profile, {});
-  const plan = saved.plan ?? 'free';
+  // The plan comes from the server-owned subscription cache, never from a value the student can edit.
+  const plan: Profile['plan'] = (await getEntitlements()).tier === 'premium' ? 'pro' : 'free';
   const user = supabaseConfigured ? (await supabase.auth.getSession()).data.session?.user : undefined;
   if (!user) return { id: '', name: '', email: '', pictureUri: null, plan, joinedAt: Date.now() };
 
@@ -66,11 +64,10 @@ export async function getProfile(): Promise<Profile> {
  * which emails a confirmation link; it only changes once confirmed (returns 'confirm-email').
  * Throws EmailTakenError if another account already has it.
  */
-export async function updateProfile(patch: Partial<Pick<Profile, 'name' | 'email' | 'plan'>>): Promise<'saved' | 'confirm-email'> {
+export async function updateProfile(patch: Partial<Pick<Profile, 'name' | 'email'>>): Promise<'saved' | 'confirm-email'> {
   let result: 'saved' | 'confirm-email' = 'saved';
   const current = await getProfile();
   if (patch.name !== undefined && current.id) await saveDisplayName(current.id, patch.name);
-  if (patch.plan !== undefined) await setSetting(SETTING_KEYS.profile, { plan: patch.plan });
   if (patch.email !== undefined) {
     const email = patch.email.trim().toLowerCase();
     if (email && email !== current.email.toLowerCase()) {

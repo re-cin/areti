@@ -16,6 +16,7 @@ import {
 } from '@/db/schema';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
+import { refreshSubscription } from '@/features/subscription/subscriptionRepo';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -54,7 +55,7 @@ const TABLES: SyncedTable[] = [
 ];
 
 /** Settings that belong to this phone only and are never uploaded. */
-const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state']); // timer.state = the Pomodoro running on this phone
+const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state', 'subscription.plan']); // timer.state = the Pomodoro running on this phone
 
 const PAGE = 500;
 
@@ -76,6 +77,7 @@ export function syncNow(): Promise<void> {
       again = false;
       try {
         await syncOnce();
+        await refreshSubscription(); // server-owned plan, cached locally for offline scheduling
       } catch (e) {
         if (__DEV__) console.warn('[sync] failed (will retry later):', e);
       }
