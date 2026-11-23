@@ -101,6 +101,7 @@ export default function RootLayout() {
           {/* Sign in fades its own content in (see auth.tsx), so no slide here. */}
           <Stack.Screen name="auth" options={{ animation: 'none' }} />
           <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="verify-email" />
         </Stack>
         <NoticeDialog />
       </>

@@ -21,7 +21,7 @@ export type AuthErrorCode =
   | 'wrong-credentials'
   | 'confirm-email' // account exists but the email isn't confirmed yet
   | 'weak-password'
-  | 'wrong-code' // reset code is wrong or expired
+  | 'wrong-code' // emailed code is wrong or expired
   | 'same-password' // new password is the same as the old one
   | 'rate-limited' // too many emails / attempts, try again later
   | 'offline'
@@ -35,7 +35,11 @@ export class AuthError extends Error {
   }
 }
 
-/** Creates an account. Throws AuthError('confirm-email') if Supabase wants the email confirmed first. */
+/**
+ * Creates an account. With email confirmation on (Supabase > Auth > Sign In / Providers > Confirm email),
+ * Supabase emails a 6-digit code and this throws AuthError('confirm-email'): show the code screen
+ * (app/verify-email.tsx), then call verifySignUpCode. The "Confirm signup" email template must include {{ .Token }}.
+ */
 export async function signUp(email: string, password: string) {
   ensureConfigured();
   const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: cleanPassword(password) });
@@ -51,6 +55,25 @@ export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   return data.session; // the SIGNED_IN event starts a sync (downloads this account's data)
+}
+
+/** Sign Up, step 2: checks the emailed code. On success the account is confirmed and signed in. */
+export async function verifySignUpCode(email: string, code: string) {
+  ensureConfigured();
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: code.replace(/\s/g, ''),
+    type: 'email',
+  });
+  if (error) throw toAuthError(error);
+  return data.session; // the SIGNED_IN event starts a sync
+}
+
+/** Emails a new sign-up code (also used when someone signs in before confirming). */
+export async function resendSignUpCode(email: string) {
+  ensureConfigured();
+  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
+  if (error) throw toAuthError(error);
 }
 
 /** Uploads anything not synced yet, clears this phone's copy, then signs out. */

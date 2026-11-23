@@ -18,8 +18,8 @@ import { Wordmark } from '@/components/brand/Wordmark';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
-import { showNotice } from '@/stores/notice';
+import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, resendSignUpCode, signIn, signUp } from '@/lib/auth';
+import { showWelcome } from '@/lib/welcome';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
 
@@ -89,12 +89,14 @@ export default function Auth() {
       else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
       router.replace('/planner');
-      // Welcome pop-up once the Planner is on screen.
-      const welcome = isSignUp
-        ? { title: 'Welcome to areti!', message: 'Your account is ready. Add your subjects and Reti will help you stay on track.' }
-        : { title: 'Welcome back!', message: 'Your study plans and progress are syncing to this phone.' };
-      setTimeout(() => showNotice({ ...welcome, buttonLabel: "Let's go" }), 450);
+      showWelcome(isSignUp ? 'new-account' : 'signed-in');
     } catch (e) {
+      if (e instanceof AuthError && e.code === 'confirm-email') {
+        // Sign up: Supabase just emailed the code. Sign in before confirming: send a fresh one.
+        if (!isSignUp) await resendSignUpCode(email).catch(() => {});
+        router.push({ pathname: '/verify-email', params: { email: email.trim() } });
+        return;
+      }
       setError(errorMessage(e));
     } finally {
       setBusy(false);
@@ -239,7 +241,7 @@ function errorMessage(e: unknown) {
     case 'wrong-credentials':
       return 'Wrong email or password.';
     case 'confirm-email':
-      return 'Check your email and tap the confirmation link, then sign in.';
+      return 'Enter the code we emailed you to finish creating your account.';
     case 'weak-password':
       return 'That password is too weak. Try a longer one with letters and numbers.';
     case 'offline':
