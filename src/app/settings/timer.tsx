@@ -12,10 +12,8 @@ import { Slider } from '@/components/ui/Slider';
 import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
 import {
-  BACKGROUND_SOUNDS,
   DEFAULT_POMODORO,
   loadPomodoroSettings,
-  NOTIFICATION_SOUNDS,
   POMODORO_LIMITS,
   savePomodoroSettings,
   type PomodoroSettings,
@@ -24,7 +22,8 @@ import { useTimer } from '@/features/timer/timerStore';
 import { getTaskSummary, scheduleTaskPomodoro, type TaskSummary } from '@/features/timer/timerRepo';
 import { formatClock, startOfDay } from '@/lib/dateHelpers';
 import { Pill } from '@/components/ui/Pill';
-import { backgroundSource, notificationSource } from '@/features/audio/sounds';
+import { backgroundSource, notificationSource, useBackgroundSoundNames, useNotificationSoundNames } from '@/features/audio/sounds';
+import { refreshRemoteSounds } from '@/features/audio/remoteSounds';
 import { useSoundPreview } from '@/features/audio/useSoundPreview';
 import { colors, fonts, spacing } from '@/theme';
 
@@ -36,6 +35,12 @@ export default function TimerSettingsScreen() {
   const [loaded, setLoaded] = useState(false);
   const running = useTimer((s) => s.status !== 'idle');
   const preview = useSoundPreview();
+  const backgroundNames = useBackgroundSoundNames();
+  const notificationNames = useNotificationSoundNames();
+  // Pick up music an admin added since the app opened.
+  useEffect(() => {
+    void refreshRemoteSounds().catch(() => {});
+  }, []);
   // Opened from Planner > Add Task > Schedule Pomodoro: saving also schedules that task.
   // Only a task passed in by Add Task counts; a plain visit (gear button) never shows the scheduling card.
   const params = useLocalSearchParams<{ taskId?: string; sound?: string }>();
@@ -187,7 +192,7 @@ export default function TimerSettingsScreen() {
           <Label>Background Sound</Label>
           <Dropdown
             value={form.backgroundSound}
-            options={BACKGROUND_SOUNDS}
+            options={backgroundNames}
             onChange={(v) => {
               set('backgroundSound', v);
               preview.play(backgroundSource(v), form.backgroundVolume, { background: v });
@@ -214,7 +219,7 @@ export default function TimerSettingsScreen() {
           <Label>Notification Sound</Label>
           <Dropdown
             value={form.notificationSound}
-            options={NOTIFICATION_SOUNDS}
+            options={notificationNames}
             onChange={(v) => {
               set('notificationSound', v);
               preview.play(notificationSource(v), form.notificationVolume);

@@ -51,3 +51,7 @@ example
 
 # local merge backups (not part of the app)
 .claude-backup-*/
+
+# admin website build output
+admin/dist/
+admin/dist-check/
