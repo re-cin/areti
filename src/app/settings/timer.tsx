@@ -170,7 +170,12 @@ export default function TimerSettingsScreen() {
           <SectionTitle>Time Interval</SectionTitle>
           {interval('focusCount', 'Focus count')}
           {interval('focusMin', 'Focus time', minutes)}
-          {interval('breakMin', 'Break time', minutes)}
+
+          {/* Short breaks come between blocks, so with 1 block there are none (setting disabled).
+              The long break always comes once, at the end. */}
+          <View pointerEvents={form.focusCount >= 2 ? 'auto' : 'none'} style={{ opacity: form.focusCount >= 2 ? 1 : 0.4 }}>
+            {interval('breakMin', 'Break time', minutes)}
+          </View>
           {interval('longBreakMin', 'Long break time', minutes)}
           {running && (
             <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.xs }}>

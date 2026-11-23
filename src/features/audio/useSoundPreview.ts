@@ -41,6 +41,14 @@ export function useSoundPreview() {
         p.play();
         applyVolume(p, volume);
         if (opts.background) playingBackground.current = opts.background;
+        // A freshly loaded file can ignore the first play() on iOS (the "nothing happens" glitch);
+        // nudge it once it has loaded, unless another preview took over or it was stopped.
+        const name = opts.background ?? null;
+        setTimeout(() => {
+          try {
+            if (player.current === p && playingBackground.current === name && !p.playing && name) p.play();
+          } catch {}
+        }, 400);
       } catch (e) {
         console.warn('[audio] preview', e);
       }
