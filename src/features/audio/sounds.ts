@@ -14,7 +14,7 @@ export const BACKGROUND_SOUND_FILES: Record<string, AudioSource | null> = {
   'Forest Birds': require('../../../assets/sounds/background/forest-birds.m4a'),
   'Ocean Waves': require('../../../assets/sounds/background/ocean-waves.m4a'),
   'Lo-fi Beats': require('../../../assets/sounds/background/lofi-beats.m4a'),
-  'White Noise': require('../../../assets/sounds/background/white-noise.m4a'),
+  'Velvet Espresso': require('../../../assets/sounds/background/velvet-espresso.m4a'),
 };
 
 export const NOTIFICATION_SOUND_FILES: Record<string, AudioSource | null> = {
@@ -29,7 +29,11 @@ export const NOTIFICATION_SOUND_FILES: Record<string, AudioSource | null> = {
 export const BACKGROUND_SOUNDS = Object.keys(BACKGROUND_SOUND_FILES);
 export const NOTIFICATION_SOUNDS = Object.keys(NOTIFICATION_SOUND_FILES);
 
-export const backgroundSource = (name: string): AudioSource | null => BACKGROUND_SOUND_FILES[name] ?? null;
+/** Old name of a sound -> its new name (so saved settings and scheduled sessions keep a sound). */
+const RENAMED: Record<string, string> = { 'White Noise': 'Velvet Espresso' };
+export const currentSoundName = (name: string) => RENAMED[name] ?? name;
+
+export const backgroundSource = (name: string): AudioSource | null => BACKGROUND_SOUND_FILES[currentSoundName(name)] ?? null;
 /** The chime file for a sound name, or null for Silent. Unknown names fall back to the first real sound. */
 export const notificationSource = (name: string): AudioSource | null =>
   name in NOTIFICATION_SOUND_FILES ? NOTIFICATION_SOUND_FILES[name] : NOTIFICATION_SOUND_FILES['Singing Tibetan Bowl'];

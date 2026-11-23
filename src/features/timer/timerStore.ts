@@ -120,7 +120,7 @@ export const useTimer = create<TimerStore>((set, get) => {
           notificationSound: settings.notificationSound,
           notificationVolume: settings.notificationVolume,
         },
-        endsAt: now + phaseMs(run.phase, cfg),
+        endsAt: now + phaseMs(run.phase, cfg, run.completedBlocks),
         remainingMs: null,
         subjectId: opts.subjectId ?? null,
         subjectName: opts.subjectName ?? null,
@@ -153,7 +153,7 @@ export const useTimer = create<TimerStore>((set, get) => {
     restartPhase: () => {
       const { status, run, cfg } = get();
       if (!run || !cfg || status === 'idle') return;
-      const full = phaseMs(run.phase, cfg);
+      const full = phaseMs(run.phase, cfg, run.completedBlocks);
       const now = Date.now();
       if (status === 'running') set({ endsAt: now + full, now });
       else set({ remainingMs: full, now });
@@ -167,7 +167,7 @@ export const useTimer = create<TimerStore>((set, get) => {
       const now = Date.now();
       if (s.run?.phase === 'focus' && s.cfg) {
         const remaining = s.status === 'running' && s.endsAt ? Math.max(0, s.endsAt - now) : (s.remainingMs ?? 0);
-        const elapsedMs = phaseMs('focus', s.cfg) - remaining;
+        const elapsedMs = phaseMs('focus', s.cfg, s.run.completedBlocks) - remaining;
         await recordFocus({
           subjectId: s.subjectId,
           plannedSessionId: s.plannedSessionId,
@@ -192,11 +192,10 @@ export const useTimer = create<TimerStore>((set, get) => {
       try {
         // After a break the next focus block waits (paused, full length) until play is pressed.
         const res = catchUp(s.run, s.endsAt, s.cfg, now, true);
-        const focusMs = phaseMs('focus', s.cfg);
         // Update state first so a second tick cannot record the same block twice.
         const phaseEndedAt = res.ended.length ? res.ended[res.ended.length - 1].endedAt : null;
         if (res.run && res.waiting)
-          set({ run: res.run, status: 'paused', endsAt: null, remainingMs: phaseMs(res.run.phase, s.cfg), phaseEndedAt });
+          set({ run: res.run, status: 'paused', endsAt: null, remainingMs: phaseMs(res.run.phase, s.cfg, res.run.completedBlocks), phaseEndedAt });
         else if (res.run) set({ run: res.run, endsAt: res.endsAt, phaseEndedAt });
         else set({ ...IDLE, phaseEndedAt });
         persist();
@@ -206,8 +205,8 @@ export const useTimer = create<TimerStore>((set, get) => {
           await recordFocus({
             subjectId: s.subjectId,
             plannedSessionId: s.plannedSessionId,
-            startedAt: end.endedAt - focusMs,
-            durationSec: focusMs / 1000,
+            startedAt: end.endedAt - phaseMs('focus', s.cfg, end.ended.completedBlocks),
+            durationSec: phaseMs('focus', s.cfg, end.ended.completedBlocks) / 1000,
             completed: true,
           });
         }

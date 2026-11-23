@@ -14,6 +14,7 @@ import { useDbQuery } from '@/lib/useDbQuery';
 import { getGhost } from '@/features/pet/petRepo';
 import { getNotificationPermission, requestNotificationPermission } from '@/features/timer/notifications';
 import { DEFAULT_POMODORO, loadPomodoroSettings } from '@/features/timer/pomodoroSettings';
+import { blockMin } from '@/features/timer/session';
 import { listUpcomingToday, type UpcomingSession } from '@/features/timer/timerRepo';
 import { selectRemainingMs, useTimer, type StartOptions } from '@/features/timer/timerStore';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
@@ -152,7 +153,7 @@ export default function PomodoroScreen() {
 
   const idle = timer.status === 'idle';
   // Idle shows a full focus block (e.g. 25:00) so the countdown starts from there, not from 00:00.
-  const displayMs = idle ? settings.focusMin * 60_000 : remaining;
+  const displayMs = idle ? blockMin(settings, 0) * 60_000 : remaining;
   const run = timer.run;
   const totalDots = run ? run.totalBlocks : settings.focusCount;
   const filledDots = run ? run.completedBlocks + (run.phase === 'focus' ? 1 : 0) : 0;
@@ -181,7 +182,7 @@ export default function PomodoroScreen() {
 
   // What "End session" will save: the minutes focused in the current block (under 1 min is not saved).
   const focusedMin =
-    run?.phase === 'focus' && timer.cfg ? Math.floor((timer.cfg.focusMin * 60_000 - remaining) / 60_000) : 0;
+    run?.phase === 'focus' && timer.cfg ? Math.floor((blockMin(timer.cfg, run.completedBlocks) * 60_000 - remaining) / 60_000) : 0;
   const stopHighlight =
     run?.phase !== 'focus'
       ? // On a break: show progress only when there is some (never "0 of 0 blocks done").
