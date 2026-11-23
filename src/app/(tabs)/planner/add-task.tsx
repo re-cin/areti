@@ -17,7 +17,7 @@ import { getSetting, setSetting } from '@/features/settings/settingsRepo';
 
 /** Settings key: true once "Don't remind me again" was ticked on the Schedule Pomodoro warning. */
 const SCHEDULE_WARNING_OFF = 'hint.schedulePomodoroWarning.off';
-import { NOTIFICATION_SOUNDS } from '@/features/audio/sounds';
+import { useNotificationSoundNames } from '@/features/audio/sounds';
 import { playChime } from '@/features/audio/playChime';
 import { loadPomodoroSettings } from '@/features/timer/pomodoroSettings';
 import { useEffect, useState } from 'react';
@@ -31,7 +31,6 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Same list as Pomodoro settings (src/features/audio/sounds.ts), including Silent.
-const SOUND_OPTIONS = NOTIFICATION_SOUNDS.map((s) => ({ key: s, label: s }));
 
 const fmtDate = (ts: number) =>
   new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -66,6 +65,8 @@ const minToDate = (min: number) => {
 };
 
 export default function AddTaskScreen() {
+  const soundNames = useNotificationSoundNames();
+  const SOUND_OPTIONS = soundNames.map((s) => ({ key: s, label: s }));
   const insets = useSafeAreaInsets();
 
   const navigation = useNavigation();
