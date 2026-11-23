@@ -50,6 +50,40 @@ export const colors = {
   placeholder: '#8A847D', // input placeholders and quiet captions
   divider: '#D8D1C8', // thin separators inside lists
 
+  // Reti (pet) tab, from the Figma "Pet" frames
+  pet: {
+    page: '#E8E2DA', // screen background under the grid
+    gridLine: '#D8CFCB', // grid backdrop lines
+    sheet: '#F7F2EB', // mood sheet, speech bubble, unlocked tiles
+    card: '#FAF7F2', // expressions card
+    outline: '#3B3430', // bubble, tiles, inputs, outline buttons
+    momentum: '#6FC2B6',
+    goal: '#D79C79',
+    xpToday: '#237B75',
+    current: '#BAE6E0', // tile of the expression shown right now
+    lockedBg: '#E8E2DA',
+    lockedBorder: '#73706B',
+    lockedGhost: '#C9BEB0',
+    lockedText: 'rgba(22,22,22,0.61)',
+    lockedLevel: 'rgba(120,113,108,0.54)',
+    caption: 'rgba(22,22,22,0.72)',
+    // Mood badge per expression. Only Neutral is in Figma; the rest are placeholders.
+    badge: {
+      neutral: '#5D5D5D',
+      slightlyHappy: '#3E8F8A',
+      overjoyed: '#C9733F',
+      sad: '#5B6F8F',
+      tired: '#8A847D',
+      focused: '#1F6F6A',
+      sleeping: '#4A4560',
+      nervous: '#7B4FD6',
+      tiredFocus: '#6B6560',
+      tiredNervous: '#6B5A86',
+      memoryFlash: '#B0812F',
+      goalCelebration: '#C9733F',
+    },
+  },
+
   // Swatches offered when creating a subject (first four match the pill colors)
   subjectPalette: [
     '#7B4FD6',

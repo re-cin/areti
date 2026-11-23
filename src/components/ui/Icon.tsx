@@ -38,7 +38,8 @@ export type IconName =
   | 'bell'
   | 'eye'
   | 'eye-off'
-  | 'download';
+  | 'download'
+  | 'lock';
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number };
 
@@ -211,6 +212,12 @@ export function Icon({ name, size = 24, color = colors.ink, strokeWidth = 2 }: P
         d="M2 21h20M4 21v-6a2 2 0 0 1 4 0v6M8 21V8a3 3 0 0 1 6 0v13M14 21V12a3 3 0 0 1 6 0v9"
         {...stroke}
       />
+    ),
+    lock: (
+      <>
+        <Rect x={4} y={11} width={16} height={11} rx={2.5} {...stroke} />
+        <Path d="M8 11V7a4 4 0 0 1 8 0v4" {...stroke} />
+      </>
     ),
     ghost: (
       <>
