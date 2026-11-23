@@ -22,6 +22,7 @@ import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notif
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
 import { loadNotifications } from '@/lib/notificationPermission';
 import { router, usePathname } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -119,9 +120,9 @@ export default function RootLayout() {
   // The splash is always the last child, so it stays mounted (and on top) while
   // the app appears underneath it, then removes itself after fading out.
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       {content}
       {splash}
-    </>
+    </GestureHandlerRootView>
   );
 }

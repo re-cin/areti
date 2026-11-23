@@ -7,11 +7,21 @@ import { cancelStudyPlanWork } from '@/features/planner/studyPlanLifecycle';
 import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
-export type SubjectRow = { id: string; name: string; color: string };
+export type SubjectRow = {
+  id: string;
+  name: string;
+  color: string;
+  difficulty: number;
+};
 
 export async function listSubjects(): Promise<SubjectRow[]> {
   const rows = await db
-    .select({ id: subjects.id, name: subjects.name, color: subjects.color })
+    .select({
+      id: subjects.id,
+      name: subjects.name,
+      color: subjects.color,
+      difficulty: subjects.difficulty,
+    })
     .from(subjects)
     .where(isNull(subjects.deletedAt))
     .orderBy(asc(subjects.sortOrder), asc(subjects.name));
@@ -45,6 +55,19 @@ export async function updateSubjectUrgency(id: string, urgency: number): Promise
   if (!Number.isInteger(urgency) || urgency < 1 || urgency > 5) throw new Error('Choose an urgency from 1 to 5.');
   await db.update(subjects).set({ urgency, updatedAt: Date.now() })
     .where(and(eq(subjects.id, id), isNull(subjects.deletedAt)));
+  bumpData();
+}
+
+export async function reorderSubjects(orderedIds: string[]): Promise<void> {
+  const now = Date.now();
+
+  for (const [index, id] of orderedIds.entries()) {
+    await db
+      .update(subjects)
+      .set({ sortOrder: index, updatedAt: now })
+      .where(eq(subjects.id, id));
+  }
+
   bumpData();
 }
 
