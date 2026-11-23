@@ -7,6 +7,12 @@ import { supabase, supabaseConfigured } from './supabase';
  * Study data stays in SQLite on the phone and syncs to Supabase (src/sync/sync.ts).
  */
 
+/**
+ * Spaces at the start or end of a password are ignored everywhere (sign up, sign in, reset).
+ * Android keyboards add a trailing space when you pick a suggestion, which you can't see.
+ */
+export const cleanPassword = (password: string) => password.trim();
+
 /** Shortest password allowed when creating one. */
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -32,7 +38,7 @@ export class AuthError extends Error {
 /** Creates an account. Throws AuthError('confirm-email') if Supabase wants the email confirmed first. */
 export async function signUp(email: string, password: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   // With email confirmation on, Supabase hides "already registered" by returning a user with no identities.
   if (data.user && data.user.identities?.length === 0) throw new AuthError('email-taken');
@@ -42,7 +48,7 @@ export async function signUp(email: string, password: string) {
 
 export async function signIn(email: string, password: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   return data.session; // the SIGNED_IN event starts a sync (downloads this account's data)
 }
@@ -95,7 +101,7 @@ export async function resetPasswordWithCode(email: string, code: string, newPass
     type: 'recovery',
   });
   if (codeError) throw toAuthError(codeError);
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  const { error } = await supabase.auth.updateUser({ password: cleanPassword(newPassword) });
   if (error) throw toAuthError(error);
 }
 

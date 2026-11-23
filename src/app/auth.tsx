@@ -18,7 +18,7 @@ import { Wordmark } from '@/components/brand/Wordmark';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
+import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
 
@@ -135,7 +135,7 @@ export default function Auth() {
           <TextField
             onFocus={onFocus}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => { setEmail(t); setError(null); }}
             placeholder="you@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -157,7 +157,7 @@ export default function Auth() {
           <PasswordField
             onFocus={onFocus}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => { setPassword(t); setError(null); }}
             autoComplete={isSignUp ? 'new-password' : 'current-password'}
             textContentType={isSignUp ? 'newPassword' : 'password'}
             returnKeyType={isSignUp ? 'next' : 'done'}
@@ -170,7 +170,7 @@ export default function Auth() {
               <PasswordField
                 onFocus={onFocus}
                 value={confirm}
-                onChangeText={setConfirm}
+                onChangeText={(t) => { setConfirm(t); setError(null); }}
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
@@ -218,9 +218,10 @@ function validate({
   isSignUp: boolean;
 }): string | null {
   if (!/^\S+@\S+\.\S+$/.test(email.trim())) return 'Enter a valid email address.';
-  if (!password) return 'Enter your password.';
-  if (isSignUp && password.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for your password.`;
-  if (isSignUp && password !== confirm) return "Passwords don't match.";
+  const pw = cleanPassword(password);
+  if (!pw) return 'Enter your password.';
+  if (isSignUp && pw.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for your password.`;
+  if (isSignUp && pw !== cleanPassword(confirm)) return "Passwords don't match.";
   return null;
 }
 
