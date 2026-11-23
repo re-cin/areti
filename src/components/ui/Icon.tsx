@@ -220,9 +220,13 @@ export function Icon({ name, size = 24, color = colors.ink, strokeWidth = 2 }: P
       </>
     ),
     ghost: (
+      // Reti: round dome head, sides that pinch in, a flared hem with four scallops, upright pill eyes.
       <>
-        <Path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z" {...stroke} />
-        <Path d="M9 10h.01M15 10h.01" {...stroke} />
+        <Path
+          d="M4 11.5a8 8 0 0 1 16 0c0 3 -.8 4.5 -.4 5.9c.3 1 .9 1.6 .9 2.4a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0c0-.8.6-1.4.9-2.4c.4-1.4-.4-2.9-.4-5.9Z"
+          {...stroke}
+        />
+        <Path d="M9.5 10.2v1.8M14.5 10.2v1.8" {...stroke} />
       </>
     ),
   };

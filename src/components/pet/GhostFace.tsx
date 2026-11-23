@@ -184,12 +184,15 @@ function CelebrationMouth({ scale }: { scale: number }) {
   );
 }
 
-/** The ghost's face for an expression, `scale` × the canvas size. Position it with FACE_BOX. */
-export function GhostFace({ expression, scale }: { expression: ExpressionId; scale: number }) {
+/**
+ * The ghost's face for an expression, `scale` × the canvas size. Position it with FACE_BOX.
+ * `still` = no blinking and no mouth animation (thumbnails).
+ */
+export function GhostFace({ expression, scale, still = false }: { expression: ExpressionId; scale: number; still?: boolean }) {
   const w = FACE_BOX.w * scale;
   const h = FACE_BOX.h * scale;
   const face = FACES[expression];
-  const blinkStyle = useBlink(Boolean(face.blink) && !FACE_IMAGES[expression]);
+  const blinkStyle = useBlink(Boolean(face.blink) && !FACE_IMAGES[expression] && !still);
 
   const image = FACE_IMAGES[expression];
   if (image) return <Image source={image} style={{ width: w, height: h }} contentFit="fill" />;
@@ -198,11 +201,11 @@ export function GhostFace({ expression, scale }: { expression: ExpressionId; sca
   return (
     <View style={{ width: w, height: h }}>
       {/* Mouth (doesn't blink) */}
-      {face.cheer ? (
+      {face.cheer && !still ? (
         <CelebrationMouth scale={scale} />
       ) : (
         <Svg width={w} height={h} viewBox={viewBox} style={{ position: 'absolute' }}>
-          {face.mouth}
+          {face.cheer ? openMouth : face.mouth}
         </Svg>
       )}
       {face.sweat?.map((d, i) => (

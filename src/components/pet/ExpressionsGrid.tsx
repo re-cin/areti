@@ -56,7 +56,7 @@ function Tile({ info, locked, current }: { info: ExpressionInfo; locked: boolean
         accessible
         accessibilityLabel={`${info.label}, locked, unlocks at level ${info.unlockLevel}${current ? ', previewing' : ''}`}>
         <View style={{ opacity: 0.7 }}>
-          <MiniGhost expression={info.id} faceColor={colors.pet.lockedBg} bodyColor={colors.pet.lockedGhost} blank width={32} />
+          <MiniGhost expression={info.id} bodyColor={colors.pet.lockedGhost} blank width={40} />
         </View>
         <View style={styles.lockIcon}>
           <Icon name="lock" size={26} color={colors.pet.lockedBorder} strokeWidth={2.2} />
@@ -76,7 +76,7 @@ function Tile({ info, locked, current }: { info: ExpressionInfo; locked: boolean
       style={[styles.fill, styles.tile, { backgroundColor: bg }]}
       accessible
       accessibilityLabel={`${info.label}${current ? ', showing now' : ''}`}>
-      <MiniGhost expression={info.id} faceColor={bg} />
+      <MiniGhost expression={info.id} width={40} />
       <Text numberOfLines={1} adjustsFontSizeToFit style={styles.name}>
         {info.label}
       </Text>
