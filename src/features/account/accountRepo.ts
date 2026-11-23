@@ -93,7 +93,10 @@ export async function exportAllData(): Promise<string> {
   const data = {
     app: 'areti',
     exportedAt: new Date().toISOString(),
+    note: 'Times are milliseconds since 1970-01-01 (UTC). Dates are the start of the day.',
+    profile: await db.select().from(profileTable).where(isNull(profileTable.deletedAt)),
     subjects: await db.select().from(subjects).where(isNull(subjects.deletedAt)),
+    tasks: await db.select().from(tasks).where(isNull(tasks.deletedAt)),
     studyPlans: await db.select().from(studyPlans).where(isNull(studyPlans.deletedAt)),
     plannedSessions: await db.select().from(plannedSessions).where(isNull(plannedSessions.deletedAt)),
     focusSessions: await db.select().from(focusSessions).where(isNull(focusSessions.deletedAt)),

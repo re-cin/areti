@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Linking, Pressable, Share, View } from 'react-native';
+import { Linking, Pressable, View } from 'react-native';
 import { showNotice } from '@/stores/notice';
 import { useTimer } from '@/features/timer/timerStore';
 import { SettingsScaffold } from '@/components/settings/SettingsScaffold';
@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
 import { useDbQuery } from '@/lib/useDbQuery';
+import { shareTextFile } from '@/lib/exportFile';
 import { syncNow, type SyncResult } from '@/sync/sync';
 import { clearStudyHistory, exportAllData } from '@/features/account/accountRepo';
 import {
@@ -71,7 +72,8 @@ export default function PrivacyScreen() {
   const onExport = async () => {
     try {
       const json = await exportAllData();
-      await Share.share({ title: 'areti data export', message: json });
+      const day = new Date().toISOString().slice(0, 10); // e.g. 2026-11-23
+      await shareTextFile(`areti-export-${day}.json`, json);
     } catch (e) {
       showNotice({ title: 'Export failed', message: e instanceof Error ? e.message : String(e) });
     }
