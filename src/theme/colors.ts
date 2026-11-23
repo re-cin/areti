@@ -14,6 +14,8 @@ export const colors = {
   muted: '#5B5650', // secondary text
   mutedSoft: '#B3ABA0', // locked / disabled, drag handles
   avatar: '#E2D9CD', // empty profile picture
+  line: '#DDD5CA', // thin dividers inside cards (Pomodoro, Statistics, Settings)
+  chartBg: '#E6DED3', // bar chart well (Statistics)
   teal: '#7FC4C0', // main accent
   tealSoft: '#C9E8E5',
   tealDark: '#3E8F8A', // teal text on light backgrounds (XP)

@@ -14,8 +14,8 @@ export function PlannerHeader() {
         title="Planner"
         leading="avatar"
         onAvatarPress={() => router.push('/settings')}
-        // TODO: decide what the Planner gear opens (there is no Planner settings screen yet).
-        trailing={<HeaderGear />}
+        // Gear opens Account Settings (same as Pomodoro and Statistics).
+        trailing={<HeaderGear onPress={() => router.push('/settings/account')} />}
       />
     </View>
   );

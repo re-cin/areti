@@ -36,8 +36,10 @@ export function DayRow({
 }
 
 const styles = StyleSheet.create({
-  dayRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  day: { width: 42, height: 54, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginVertical: 3 },
+  // 4px inset on every side, so the selected day (even Mon/Sun at the ends) never touches or gets clipped
+  // by the track's rounded edge. Total height stays 60 (52 + 4 + 4) to match STRIP_INNER_H.
+  dayRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 4 },
+  day: { width: 42, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   dayActive: { backgroundColor: colors.ink },
   dot: { width: 5, height: 5, borderRadius: 3, position: 'absolute', bottom: 4 },
 });

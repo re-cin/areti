@@ -12,10 +12,12 @@ type Props = {
   initialName: string;
   onCancel: () => void;
   onSave: (name: string) => void;
+  title?: string;
+  placeholder?: string;
 };
 
 /** Small centered card for changing the display name. */
-export function EditNameModal({ visible, initialName, onCancel, onSave }: Props) {
+export function EditNameModal({ visible, initialName, onCancel, onSave, title = 'Edit name', placeholder = 'Your name' }: Props) {
   const [name, setName] = useState(initialName);
   useEffect(() => {
     if (visible) setName(initialName);
@@ -28,12 +30,12 @@ export function EditNameModal({ visible, initialName, onCancel, onSave }: Props)
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} accessibilityLabel="Close" />
-        <NeoBox radius={20} backgroundColor={colors.surface} style={styles.card}>
-          <Text style={styles.title}>Edit name</Text>
+        <NeoBox backgroundColor={colors.white} style={styles.card}>
+          <Text style={styles.title}>{title}</Text>
           <TextField
             value={name}
             onChangeText={setName}
-            placeholder="Your name"
+            placeholder={placeholder}
             autoFocus
             autoCapitalize="words"
             maxLength={MAX_LENGTH}
@@ -41,12 +43,12 @@ export function EditNameModal({ visible, initialName, onCancel, onSave }: Props)
             onSubmitEditing={save}
           />
           <View style={styles.buttons}>
-            <NeoButton label="Cancel" onPress={onCancel} backgroundColor={colors.surface} style={styles.button} />
+            <NeoButton label="Cancel" onPress={onCancel} backgroundColor={colors.white} style={styles.button} />
             <NeoButton
               label="Save"
               onPress={save}
               disabled={!trimmed}
-              backgroundColor={colors.buttonTeal}
+              backgroundColor={colors.terracotta}
               style={styles.button}
             />
           </View>

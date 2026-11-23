@@ -15,6 +15,8 @@ import {
   tasks,
 } from '@/db/schema';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
+import { bumpData } from '@/stores/dataVersion';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -53,7 +55,7 @@ const TABLES: SyncedTable[] = [
 ];
 
 /** Settings that belong to this phone only and are never uploaded. */
-const LOCAL_ONLY_SETTINGS = new Set(['session']);
+const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state']); // timer.state = the Pomodoro running on this phone
 
 const PAGE = 500;
 
@@ -135,6 +137,8 @@ export async function clearLocalData() {
   } finally {
     pulling = false;
   }
+  bumpData();
+  void refreshSessionReminders();
 }
 
 // ---------------------------------------------------------------------------
@@ -158,6 +162,7 @@ async function syncOnce() {
     }),
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
+  void refreshSessionReminders();
 }
 
 async function push({ table, conflict, updatedAt }: SyncedTable, userId: string) {
@@ -218,6 +223,7 @@ async function pull({ table, key, updatedAt }: SyncedTable, userId: string) {
     } finally {
       pulling = false;
     }
+    bumpData(); // screens using useDbQuery re-read the downloaded rows
 
     const last = String((data[data.length - 1] as Record<string, unknown>).server_updated_at);
     // Same timestamp again means everything at it is already applied; stop to avoid looping.

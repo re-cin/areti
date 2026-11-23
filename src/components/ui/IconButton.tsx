@@ -1,39 +1,42 @@
 import { Pressable, View } from 'react-native';
-import { borders, colors, radii } from '@/theme';
+import { borders, colors } from '@/theme';
 import { Icon, type IconName } from './Icon';
 import { NeoBox } from './NeoBox';
 
 type Props = {
   icon: IconName;
   onPress?: () => void;
+  backgroundColor?: string;
   size?: number;
   iconSize?: number;
-  backgroundColor?: string;
   radius?: number;
   accessibilityLabel: string;
+  disabled?: boolean;
 };
 
-/** Square neo-brutalist button holding a single icon (timer controls, sign out). */
+/** Square outlined button with a hard shadow (timer controls, card actions). */
 export function IconButton({
   icon,
   onPress,
-  size = 56,
-  iconSize,
   backgroundColor = colors.surface,
-  radius = radii.button,
+  size = 40,
+  iconSize,
+  radius = 12,
   accessibilityLabel,
+  disabled,
 }: Props) {
-  const offset = borders.shadowOffset;
+  const offset = size >= 56 ? borders.shadowOffset : 3;
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+    <Pressable onPress={onPress} disabled={disabled} accessibilityRole="button" accessibilityLabel={accessibilityLabel} hitSlop={6}>
       {({ pressed }) => (
-        <View style={{ transform: pressed ? [{ translateX: offset }, { translateY: offset }] : [] }}>
+        <View style={{ opacity: disabled ? 0.5 : 1, transform: pressed ? [{ translateX: offset }, { translateY: offset }] : [] }}>
           <NeoBox
             shadow={!pressed}
+            offset={offset}
             radius={radius}
             backgroundColor={backgroundColor}
             style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon name={icon} size={iconSize ?? Math.round(size * 0.42)} strokeWidth={2.4} />
+            <Icon name={icon} size={iconSize ?? Math.round(size * 0.45)} />
           </NeoBox>
         </View>
       )}
