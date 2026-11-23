@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { syncNow } from '@/sync/sync';
+import { syncNow, type SyncResult } from '@/sync/sync';
 import { clearStudyHistory, exportAllData } from '@/features/account/accountRepo';
 import {
   getNotificationPermission,
@@ -22,6 +22,21 @@ const PERMISSION_LABEL: Record<PermissionState, string> = {
   denied: 'Denied',
   undetermined: 'Not asked',
   unsupported: 'Unavailable',
+};
+
+/** What to tell the user after tapping Cloud Sync, for each way a sync can end. */
+const SYNC_NOTICE: Record<SyncResult, { title: string; message: string }> = {
+  ok: { title: 'Synced', message: 'Your progress is saved to your account. It also syncs automatically while the app is open.' },
+  offline: {
+    title: "Couldn't sync",
+    message: "Check your internet connection and try again. Your changes are safe on this phone and will sync once you're back online.",
+  },
+  error: {
+    title: "Couldn't sync",
+    message: 'Something went wrong on the server. Your changes are safe on this phone; areti will try again automatically.',
+  },
+  'signed-out': { title: 'Not signed in', message: 'Sign in to save your progress to your account.' },
+  'not-configured': { title: 'Sync is off', message: 'This copy of areti is not connected to a server (missing Supabase settings).' },
 };
 
 export default function PrivacyScreen() {
@@ -48,9 +63,9 @@ export default function PrivacyScreen() {
   const onSync = async () => {
     if (syncing) return;
     setSyncing(true);
-    await syncNow(); // never throws; failed syncs retry automatically
+    const result = await syncNow(); // never throws; failed syncs also retry automatically
     setSyncing(false);
-    showNotice({ title: 'Synced', message: 'Your progress is saved to your account. It also syncs automatically while the app is open.' });
+    showNotice(SYNC_NOTICE[result]);
   };
 
   const onExport = async () => {

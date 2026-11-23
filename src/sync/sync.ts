@@ -63,28 +63,48 @@ const PAGE = 500;
 // Public API
 // ---------------------------------------------------------------------------
 
-let running: Promise<void> | null = null;
+/**
+ * How a sync went:
+ *  - 'ok': everything uploaded and downloaded
+ *  - 'offline': couldn't reach the server (no internet, timeout)
+ *  - 'error': the server answered with an error
+ *  - 'signed-out' / 'not-configured': nothing to sync
+ */
+export type SyncResult = 'ok' | 'offline' | 'error' | 'signed-out' | 'not-configured';
+
+let running: Promise<SyncResult> | null = null;
 let again = false;
 
-/** Runs one sync now (or right after the one in progress). Never throws. */
-export function syncNow(): Promise<void> {
+/**
+ * Runs one sync now (or right after the one in progress) and says how it went.
+ * Never throws; failed syncs are retried automatically later.
+ */
+export function syncNow(): Promise<SyncResult> {
   if (running) {
     again = true;
     return running;
   }
   running = (async () => {
+    let result: SyncResult = 'ok';
     do {
       again = false;
       try {
-        await syncOnce();
+        result = await syncOnce();
       } catch (e) {
-        if (__DEV__) console.warn('[sync] failed (will retry later):', e);
+        result = isNetworkError(e) ? 'offline' : 'error';
+        if (__DEV__) console.warn(`[sync] failed (${result}, will retry later):`, e);
       }
     } while (again);
+    return result;
   })().finally(() => {
     running = null;
   });
   return running;
+}
+
+function isNetworkError(e: unknown) {
+  const text = e instanceof Error ? `${e.name} ${e.message}` : typeof e === 'object' && e ? JSON.stringify(e) : String(e);
+  return /network|fetch|timed? ?out|offline|ENOTFOUND|ECONN/i.test(text);
 }
 
 /** Starts automatic syncing. Call once when the app starts; returns a stop function. */
@@ -147,11 +167,11 @@ export async function clearLocalData() {
 
 let pulling = false;
 
-async function syncOnce() {
-  if (!supabaseConfigured) return;
+async function syncOnce(): Promise<SyncResult> {
+  if (!supabaseConfigured) return 'not-configured';
   const { data } = await supabase.auth.getSession();
   const userId = data.session?.user.id;
-  if (!userId) return;
+  if (!userId) return 'signed-out';
 
   const started = Date.now();
   // All tables at the same time (each: upload, then download).
@@ -163,6 +183,7 @@ async function syncOnce() {
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
   void refreshSessionReminders();
+  return 'ok';
 }
 
 async function push({ table, conflict, updatedAt }: SyncedTable, userId: string) {
