@@ -18,7 +18,7 @@ import { startAutoSync } from '@/sync/sync';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notifications';
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
-import * as Notifications from 'expo-notifications';
+import { loadNotifications } from '@/lib/notificationPermission';
 import { router, usePathname } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
@@ -67,11 +67,12 @@ export default function RootLayout() {
     });
     setOnPermissionGranted(() => void refreshSessionReminders());
     void refreshSessionReminders();
-    const tap = Notifications.addNotificationResponseReceivedListener((r) => {
+    // Not available in Expo Go on Android (loadNotifications returns null there).
+    const tap = loadNotifications()?.addNotificationResponseReceivedListener((r) => {
       const data = r.notification.request.content.data as { kind?: string } | undefined;
       if (data?.kind === 'reminder') router.navigate('/pomodoro');
     });
-    return () => tap.remove();
+    return () => tap?.remove();
   }, [dbReady]);
   // The splash overlay stays on top (and hides the native splash) until it has faded out.
   const [splashDone, setSplashDone] = useState(false);

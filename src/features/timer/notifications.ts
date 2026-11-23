@@ -1,4 +1,6 @@
-import * as Notifications from 'expo-notifications';
+// expo-notifications is loaded lazily: importing it directly crashes Expo Go on Android
+// ("Cannot find native module 'ExpoTopicSubscriptionModule'"). See src/lib/notificationPermission.ts.
+import { loadNotifications } from '@/lib/notificationPermission';
 import { Platform } from 'react-native';
 import type { PhaseEnd } from './session';
 import { playChime } from '@/features/audio/playChime';
@@ -24,6 +26,8 @@ export function setReminderPopup(fn: (title: string, body: string, openPomodoro:
 
 /** Cancels only our scheduled notifications whose id starts with `prefix` (timer vs reminders). */
 async function cancelWithPrefix(prefix: string) {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
   const all = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     all.filter((n) => n.identifier.startsWith(prefix)).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
@@ -47,6 +51,8 @@ export type SessionReminder = {
  * Silent sessions remind without a sound. (Custom sounds need a dev build; Expo Go uses the phone's default.)
  */
 export async function scheduleSessionReminders(reminders: SessionReminder[]): Promise<void> {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
   if (!supported) return;
   try {
     await configure();
@@ -66,10 +72,12 @@ export async function scheduleSessionReminders(reminders: SessionReminder[]): Pr
     console.warn('[notifications] reminders', e);
   }
 }
-const supported = Platform.OS === 'ios' || Platform.OS === 'android';
+const supported = (Platform.OS === 'ios' || Platform.OS === 'android') && loadNotifications() !== null;
 let configured = false;
 
 async function configure() {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
   if (!supported || configured) return;
   configured = true;
   Notifications.setNotificationHandler({
@@ -96,6 +104,8 @@ async function configure() {
 export type PermissionState = 'granted' | 'denied' | 'undetermined' | 'unsupported';
 
 export async function getNotificationPermission(): Promise<PermissionState> {
+  const Notifications = loadNotifications();
+  if (!Notifications) return 'unsupported';
   if (!supported) return 'unsupported';
   try {
     const { status } = await Notifications.getPermissionsAsync();
@@ -106,6 +116,8 @@ export async function getNotificationPermission(): Promise<PermissionState> {
 }
 
 export async function requestNotificationPermission(): Promise<PermissionState> {
+  const Notifications = loadNotifications();
+  if (!Notifications) return 'unsupported';
   if (!supported) return 'unsupported';
   try {
     await configure();
@@ -128,6 +140,8 @@ function message(end: PhaseEnd): { title: string; body: string } {
 
 /** Replaces any scheduled timer notifications with one per upcoming phase end. */
 export async function scheduleTimerNotifications(timeline: PhaseEnd[], silent = false): Promise<void> {
+  const Notifications = loadNotifications();
+  if (!Notifications) return;
   if (!supported) return;
   try {
     await configure();

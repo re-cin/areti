@@ -18,7 +18,8 @@ type NotificationsModule = typeof import('expo-notifications');
 const missingNativeModule =
   Platform.OS === 'android' && requireOptionalNativeModule('ExpoTopicSubscriptionModule') == null;
 
-function loadNotifications(): NotificationsModule | null {
+/** The expo-notifications module, or null where it can't load (e.g. Expo Go on Android). */
+export function loadNotifications(): NotificationsModule | null {
   if (missingNativeModule) return null;
   try {
     return require('expo-notifications') as NotificationsModule;
