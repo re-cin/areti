@@ -102,6 +102,12 @@ export function syncNow(): Promise<SyncResult> {
   return running;
 }
 
+/** Wraps a Supabase error with which step and table failed, so logs say exactly what went wrong. */
+function syncError(step: string, error: { message: string; code?: string; details?: string | null; hint?: string | null }) {
+  const extra = [error.code && `code ${error.code}`, error.details, error.hint].filter(Boolean).join(' | ');
+  return new Error(`${step}: ${error.message}${extra ? ` (${extra})` : ''}`);
+}
+
 function isNetworkError(e: unknown) {
   const text = e instanceof Error ? `${e.name} ${e.message}` : typeof e === 'object' && e ? JSON.stringify(e) : String(e);
   return /network|fetch|timed? ?out|offline|ENOTFOUND|ECONN/i.test(text);
@@ -205,7 +211,7 @@ async function push({ table, conflict, updatedAt }: SyncedTable, userId: string)
       .map((r) => ({ ...toRemote(table, r), user_id: userId }));
     if (upload.length) {
       const { error } = await supabase.from(name).upsert(upload, { onConflict: conflict });
-      if (error) throw error;
+      if (error) throw syncError(`upload ${name}`, error);
     }
 
     cursor = Number(rows[rows.length - 1].updatedAt);
@@ -226,7 +232,7 @@ async function pull({ table, key, updatedAt }: SyncedTable, userId: string) {
       .gte('server_updated_at', cursor)
       .order('server_updated_at')
       .limit(PAGE);
-    if (error) throw error;
+    if (error) throw syncError(`download ${name}`, error);
     if (!data || data.length === 0) return;
 
     pulling = true;
