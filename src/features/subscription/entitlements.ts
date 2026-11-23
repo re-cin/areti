@@ -1,13 +1,22 @@
 // Free vs Premium rules. Pure TypeScript: NO imports from Expo, React Native or the database.
-// Free = basic automatic planning. Premium = adaptive automatic planning.
-// Both tiers use the same scheduling engine; these flags only switch capabilities on.
+// Free = exams and manual sessions, plus a few schedule generations a month.
+// Premium = automatic, adaptive scheduling. Both tiers use the same scheduling engine;
+// these flags only switch capabilities on.
 
 export type PlanTier = 'free' | 'premium';
 
+/** Schedule generations a Free student gets per calendar month (UTC). Must match the server function. */
+export const FREE_MONTHLY_GENERATIONS = 3;
+
 export type Entitlements = {
   tier: PlanTier;
-  /** How many exams get an automatic study schedule at once. Exams themselves are unlimited. */
-  maxScheduledPlans: number;
+  /**
+   * Schedules refresh on their own (new exams, edits, missed work). Free students keep unlimited exams
+   * and manual sessions, but a schedule is only generated when they ask for one (see monthlyGenerations).
+   */
+  autoScheduling: boolean;
+  /** How many times a month the student can generate or regenerate a schedule. Infinity = unlimited. */
+  monthlyGenerations: number;
   /** Student-adjusted exam priority (Normal / High / Highest). */
   priorityControls: boolean;
   /** Missed sessions are moved automatically; Free students reschedule them by hand. */
@@ -17,10 +26,12 @@ export type Entitlements = {
 };
 
 const FREE: Entitlements = {
-  tier: 'free', maxScheduledPlans: 1, priorityControls: false, autoMissedRecovery: false, detailedInsights: false,
+  tier: 'free', autoScheduling: false, monthlyGenerations: FREE_MONTHLY_GENERATIONS,
+  priorityControls: false, autoMissedRecovery: false, detailedInsights: false,
 };
 const PREMIUM: Entitlements = {
-  tier: 'premium', maxScheduledPlans: Infinity, priorityControls: true, autoMissedRecovery: true, detailedInsights: true,
+  tier: 'premium', autoScheduling: true, monthlyGenerations: Infinity,
+  priorityControls: true, autoMissedRecovery: true, detailedInsights: true,
 };
 
 export const entitlementsFor = (tier: PlanTier): Entitlements => (tier === 'premium' ? PREMIUM : FREE);
@@ -67,11 +78,5 @@ export class PremiumRequiredError extends Error {
   }
 }
 
-/**
- * Which exams receive automatic scheduling. Everything stays visible and trackable; only the
- * nearest deadlines (up to the tier's limit) are scheduled. Deterministic: date, then id.
- */
-export function scheduledPlanIds(plans: { id: string; examDate: number }[], max: number): Set<string> {
-  const ordered = [...plans].sort((a, b) => a.examDate - b.examDate || a.id.localeCompare(b.id));
-  return new Set((Number.isFinite(max) ? ordered.slice(0, Math.max(0, max)) : ordered).map(p => p.id));
-}
+/** True when generating a schedule is capped per month, so each generation must be reserved on the server. */
+export const generationsAreLimited = (entitlements: Entitlements): boolean => Number.isFinite(entitlements.monthlyGenerations);

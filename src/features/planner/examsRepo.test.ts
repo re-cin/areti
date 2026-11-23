@@ -10,6 +10,7 @@ import { listUpcomingToday, recordFocus, scheduleTaskPomodoro } from '@/features
 import { useTimer } from '@/features/timer/timerStore';
 import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
 import { SUBSCRIPTION_SETTING_KEY, PremiumRequiredError, type PlanTier } from '@/features/subscription/entitlements';
+import { GenerationLimitError, GenerationUnavailableError } from '@/features/subscription/generationQuota';
 import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, setExamPriority, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
 
 jest.mock('@/db/client', () => {
@@ -38,6 +39,11 @@ jest.mock('@/db/client', () => {
 });
 jest.mock('@/db/id', () => ({ newId: () => jest.requireActual('node:crypto').randomUUID() }));
 jest.mock('@/lib/supabase', () => ({ supabaseConfigured: false, supabase: {} }));
+// The server counts Free generations; the tests stand in for it with a simple monthly counter.
+const mockReserve = jest.fn();
+jest.mock('@/features/subscription/generationQuotaRepo', () => ({
+  reserveGeneration: () => mockReserve(), getGenerationQuota: jest.fn(),
+}));
 jest.mock('@/features/timer/notifications', () => ({ cancelTimerNotifications: jest.fn(), scheduleTimerNotifications: jest.fn() }));
 
 const now = new Date(2026, 10, 23, 8);
@@ -56,6 +62,7 @@ beforeEach(() => {
   useTimer.setState({ status: 'idle', plannedSessionId: null, run: null, cfg: null });
   db.insert(subjects).values({ id: 'math', name: 'Math', color: '#ffffff', updatedAt: now.getTime() }).run();
   setTier('premium'); // The original tests describe adaptive (Premium) scheduling. Free is covered below.
+  mockReserve.mockReset();
 });
 afterEach(() => jest.useRealTimers());
 
@@ -474,36 +481,84 @@ describe('Free vs Premium', () => {
     expect((await getExamAccess('none')).entitlements.tier).toBe('premium');
   });
 
-  it('lets Free students keep unlimited exams but schedules only the nearest one', async () => {
-    setTier('free'); addScience();
+  /** Stands in for the server: `limit` generations succeed, then GenerationLimitError. */
+  const allowGenerations = (limit: number) => {
+    let used = 0;
+    mockReserve.mockImplementation(async () => {
+      if (used >= limit) throw new GenerationLimitError(limit, Date.UTC(2026, 11, 1));
+      used++;
+    });
+  };
+
+  it('lets Free students add unlimited exams but never schedules them automatically', async () => {
+    setTier('free'); addScience(); allowGenerations(3);
     const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
     const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 6) });
     expect((await examsQuery()).map(e => e.id).sort()).toEqual([math, sci].sort()); // both stay listed
-    expect(blocksFor(math)).toBeGreaterThan(0);
-    expect(blocksFor(sci)).toBe(0);
-    expect((await getExamAccess(math)).scheduled).toBe(true);
-    expect((await getExamAccess(sci)).scheduled).toBe(false);
-    await expect(previewStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES })).rejects.toBeInstanceOf(PremiumRequiredError);
-    await expect(saveStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES })).rejects.toBeInstanceOf(PremiumRequiredError);
+    await regenerateSchedules();
+    expect(activeSessions()).toHaveLength(0);
+    expect(activeTasks()).toHaveLength(0);
+    expect(mockReserve).not.toHaveBeenCalled(); // automatic refreshes never use a generation
+    const preview = await previewStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES }); // previewing is free
+    expect(preview.sessions.length).toBeGreaterThan(0);
+    expect(mockReserve).not.toHaveBeenCalled();
+    expect(activeSessions()).toHaveLength(0);
   });
 
-  it('schedules every exam after upgrading and withdraws extra generated work after a downgrade', async () => {
-    setTier('free'); addScience();
+  it('lets Free students keep their own manual sessions while nothing is generated', async () => {
+    setTier('free');
+    const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    db.insert(tasks).values({ id: 'mine', title: 'Read chapter 4', subjectId: 'math', date: day, startMinute: 600, endMinute: 660,
+      source: 'manual', movable: true, hasPomodoro: false, done: false, updatedAt: now.getTime() }).run();
+    await regenerateSchedules();
+    expect(activeTasks().map(t => t.id)).toEqual(['mine']);
+    expect(await getExam(id)).toBeTruthy();
+  });
+
+  it('generates for every exam on request and stops after three Free generations in a month', async () => {
+    setTier('free'); addScience(); allowGenerations(3);
     const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
     const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 6) });
-    setTier('premium'); await regenerateSchedules();
+    await saveStudySchedule(math, { ...DEFAULT_EXAM_PREFERENCES });
+    expect(mockReserve).toHaveBeenCalledTimes(1);
     expect(blocksFor(math)).toBeGreaterThan(0);
+    expect(blocksFor(sci)).toBeGreaterThan(0); // one generation schedules all exams together
+    await saveStudySchedule(math, { ...DEFAULT_EXAM_PREFERENCES }); // Regenerate counts too
+    await saveStudySchedule(sci, { ...DEFAULT_EXAM_PREFERENCES });
+    const before = activeSessions();
+    const error = await saveStudySchedule(math, { ...DEFAULT_EXAM_PREFERENCES }).catch(e => e);
+    expect(error).toBeInstanceOf(GenerationLimitError);
+    expect(error).toBeInstanceOf(PremiumRequiredError); // the screen turns this into the upgrade prompt
+    expect(activeSessions()).toEqual(before); // refused: nothing changed
+    expect((await examsQuery()).length).toBe(2);
+  });
+
+  it('does not generate when the server cannot confirm a Free generation', async () => {
+    setTier('free');
+    mockReserve.mockRejectedValue(new GenerationUnavailableError());
+    const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    await expect(saveStudySchedule(id, { ...DEFAULT_EXAM_PREFERENCES })).rejects.toBeInstanceOf(GenerationUnavailableError);
+    expect(activeSessions()).toHaveLength(0);
+  });
+
+  it('never counts Premium generations, and keeps existing sessions when the plan changes', async () => {
+    setTier('premium'); addScience(); allowGenerations(0);
+    const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 6) });
+    expect(blocksFor(math)).toBeGreaterThan(0); // Premium schedules automatically
     expect(blocksFor(sci)).toBeGreaterThan(0);
-    setTier('free'); await regenerateSchedules();
-    expect(blocksFor(math)).toBeGreaterThan(0);
-    expect(blocksFor(sci)).toBe(0);
-    expect(activeTasks().some(t => t.planId === sci)).toBe(false);
-    expect((await examsQuery()).some(e => e.id === sci)).toBe(true); // the exam itself is never lost
+    await saveStudySchedule(math, { ...DEFAULT_EXAM_PREFERENCES });
+    expect(mockReserve).not.toHaveBeenCalled();
+    const before = activeSessions();
+    setTier('free'); await regenerateSchedules(); // a lapsed subscription stops automatic changes, it doesn't erase plans
+    expect(activeSessions()).toEqual(before);
+    expect((await examsQuery()).some(e => e.id === sci)).toBe(true);
   });
 
   it('marks a missed session for Free students and moves it only when they regenerate', async () => {
-    setTier('free');
+    setTier('free'); allowGenerations(3);
     const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
+    await saveStudySchedule(id, { ...DEFAULT_EXAM_PREFERENCES }); // their first generation
     const missed = activeSessions().find(s => s.date === day)!;
     expect(missed).toBeTruthy();
     const late = new Date(2026, 10, 23, 22);
@@ -513,7 +568,8 @@ describe('Free vs Premium', () => {
     expect(activeTasks().find(t => t.id === missed.id)?.done).toBe(false);
     expect((await getPlanInsights(id, late)).missedSessions).toBe(1);
     expect((await getPlanInsights(id, late)).detailed).toBeUndefined();
-    await saveStudySchedule(id, { ...DEFAULT_EXAM_PREFERENCES }); // the student asks for a new schedule
+    await saveStudySchedule(id, { ...DEFAULT_EXAM_PREFERENCES }); // the student spends another generation
+    expect(mockReserve).toHaveBeenCalledTimes(2);
     expect(activeSessions().every(s => s.date > day)).toBe(true);
     expect((await getPlanInsights(id, late)).missedSessions).toBe(0);
   });

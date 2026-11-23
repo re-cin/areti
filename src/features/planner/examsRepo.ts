@@ -9,9 +9,10 @@ import { generateSchedule, sessionMinutes, type BusyTime, type SchedulePlan } fr
 import { cancelStudyPlanWork } from './studyPlanLifecycle';
 import { buildInsights, type PlanInsights } from './insights';
 import {
-  PRIORITY_MULTIPLIER, PremiumRequiredError, SUBSCRIPTION_SETTING_KEY, entitlementsFor, isExamPriority,
-  parseSubscription, resolveTier, scheduledPlanIds, type Entitlements, type ExamPriority,
+  PRIORITY_MULTIPLIER, PremiumRequiredError, SUBSCRIPTION_SETTING_KEY, entitlementsFor, generationsAreLimited, isExamPriority,
+  parseSubscription, resolveTier, type Entitlements, type ExamPriority,
 } from '@/features/subscription/entitlements';
+import { reserveGeneration } from '@/features/subscription/generationQuotaRepo';
 import type { Run, TimerConfig } from '@/features/timer/session';
 
 export const examsQuery = () => db.select().from(studyPlans)
@@ -152,12 +153,9 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
   const allSettings = db.select().from(settings).all();
   const stored = new Map(allSettings.map(s => [s.key, s.value]));
   // One engine for everyone: the tier only decides which capabilities are switched on.
-  const entitlements = entitlementsFor(resolveTier(parseSubscription(stored.get(SUBSCRIPTION_SETTING_KEY)), now.getTime()));
-  const scheduledIds = scheduledPlanIds(allExams, entitlements.maxScheduledPlans);
-  if (override && allExams.some(e => e.id === override.id) && !scheduledIds.has(override.id)) {
-    throw new PremiumRequiredError('Automatic scheduling for more than one exam');
-  }
-  const exams = allExams.filter(e => scheduledIds.has(e.id));
+  const entitlements = entitlementsAt(stored.get(SUBSCRIPTION_SETTING_KEY), now.getTime());
+  // Every active exam is scheduled together; Free students reach this only by asking for a generation.
+  const exams = allExams;
   // Free students recover missed sessions themselves (Regenerate); Premium recovers them automatically.
   const autoRecovery = entitlements.autoMissedRecovery || !!override;
   const protectedSubjectIds = readJson<string[]>(stored.get('planner.protectedSubjects') ?? '[]', []);
@@ -266,7 +264,12 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
     : readJson(stored.get('planner.dailyGoalMin') ?? 'null', null as number | null)
       ?? Math.max(0, ...[...prefs.values()].map(p => p.dailyGoalMin ?? p.focusCount * p.focusMin));
   const result = generateSchedule({ now, plans, busy, dailyGoalMin });
-  return { ...result, prefs, old, allTasks, stored, retained, fixed, managedIds, exams, allExams, protectedSubjectIds, entitlements, autoRecovery };
+  return { ...result, prefs, old, allTasks, stored, retained, fixed, managedIds, exams, protectedSubjectIds, entitlements, autoRecovery };
+}
+
+/** The tier's capabilities from the locally cached subscription (Free when missing, unreadable or expired). */
+function entitlementsAt(raw: string | undefined, now: number): Entitlements {
+  return entitlementsFor(resolveTier(parseSubscription(raw), now));
 }
 
 export async function previewStudySchedule(id: string, prefs: ExamPreferences) {
@@ -298,12 +301,13 @@ function persistSchedule(now: Date, override?: { id: string; prefs: ExamPreferen
       || !liveSubjects.has(plan.subjectId) || plan.examDate < startOfDay(now)).map(plan => plan.id);
     const cleanup = cancelStudyPlanWork(tx, inactiveIds, now.getTime(), false);
     if (cleanup.changed) changed = true;
+    // Free students keep their exams and sessions as they are; a schedule is only built when they ask for one.
+    const plan = tx.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).get();
+    if (!override && !entitlementsAt(plan?.value, now.getTime()).autoScheduling) {
+      return { sessions: [] as ReturnType<typeof calculate>['sessions'], shortfallBlocks: 0, shortfallByPlan: {} as Record<string, number> };
+    }
     const snapshot = calculate(now, override);
     const stamp = now.getTime();
-    // Exams beyond the tier's automatic-scheduling limit stay listed for manual tracking,
-    // but their generated pending work is withdrawn (completed history is kept).
-    const unscheduled = snapshot.allExams.filter(e => !snapshot.managedIds.has(e.id)).map(e => e.id);
-    if (cancelStudyPlanWork(tx, unscheduled, stamp, false).changed) changed = true;
     const putSetting = (key: string, value: unknown) => {
       const json = JSON.stringify(value);
       if (snapshot.stored.get(key) === json) return;
@@ -371,9 +375,14 @@ function persistSchedule(now: Date, override?: { id: string; prefs: ExamPreferen
 /** Idempotent: unchanged schedules keep their IDs and don't trigger another database write. */
 export async function regenerateSchedules(now = new Date()) { return persistSchedule(now); }
 
+/**
+ * Generates and saves the schedule. Premium is unlimited; a Free student uses one of their monthly
+ * generations, which the server counts per account (GenerationLimitError / GenerationUnavailableError).
+ */
 export async function saveStudySchedule(id: string, prefs: ExamPreferences) {
   validate(prefs);
   if (!await getExam(id)) throw new Error('This exam no longer exists.');
+  if (generationsAreLimited(await getEntitlements())) await reserveGeneration();
   return persistSchedule(new Date(), { id, prefs });
 }
 
@@ -408,23 +417,13 @@ export async function getEntitlements(now = Date.now()): Promise<Entitlements> {
 
 export type ExamAccess = {
   entitlements: Entitlements;
-  /** False when this exam is listed for manual tracking but beyond the Free automatic-scheduling limit. */
-  scheduled: boolean;
   priority: ExamPriority;
 };
 
 export async function getExamAccess(id: string, now = Date.now()): Promise<ExamAccess> {
   const entitlements = await getEntitlements(now);
-  const today = startOfDay(now);
-  const live = new Set(db.select().from(subjects).where(isNull(subjects.deletedAt)).all().map(s => s.id));
-  const active = db.select().from(studyPlans).all()
-    .filter(e => e.deletedAt === null && e.status === 'active' && e.examDate >= today && live.has(e.subjectId));
   const saved = await readPriority(id);
-  return {
-    entitlements,
-    scheduled: scheduledPlanIds(active, entitlements.maxScheduledPlans).has(id),
-    priority: entitlements.priorityControls ? saved : 'normal',
-  };
+  return { entitlements, priority: entitlements.priorityControls ? saved : 'normal' };
 }
 
 async function readPriority(id: string): Promise<ExamPriority> {

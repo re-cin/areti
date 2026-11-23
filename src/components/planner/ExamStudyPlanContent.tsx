@@ -162,11 +162,12 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
         </View>
         <Text variant="caption" style={styles.scopeHint}>{prefs.end < prefs.start
           ? 'Ends the next morning. Study days refer to the day you start; after-midnight sessions appear on the next date. Excluded dates and exam day stay free.'
-          : 'Your plan adjusts automatically within this range, including time for breaks.'}</Text>
+          : p.access.tier === 'premium' ? 'Your plan adjusts automatically within this range, including time for breaks.'
+            : 'Your schedule is built within this range, including time for breaks. Regenerate to refresh it.'}</Text>
         {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.shortfall} focus blocks won’t fit before the exam. Adjust your study range or daily goal.</Text>}
         {!!p.error && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.error}</Text>}
         <View style={styles.divider} />
-        {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error || !p.access.scheduled} onPress={actions.regenerate} /><View style={styles.divider} /></>}
+        {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error} onPress={actions.regenerate} /><View style={styles.divider} /></>}
 
         <View style={styles.between}><Text variant="smallStrong">Pomodoro</Text><Text variant="caption" color={colors.terracottaDark}>Target: {prefs.focusCount} blocks</Text></View>
         <SettingRow label="Focus count" value={String(prefs.focusCount)} onMinus={() => actions.adjust('focusCount', -1)} onPlus={() => actions.adjust('focusCount', 1)} />
@@ -185,7 +186,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
             <Text variant="caption" style={styles.scopeHint}>The focus goal is shared across exams each calendar day. Harder exams receive a larger share of available study time. Difficulty applies only to the current exam.</Text>
         </>}
       </NeoBox>
-      <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error || !p.access.scheduled} onPress={actions.save} /></View>
+      <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error} onPress={actions.save} /></View>
       <Pressable onPress={actions.deletePlan} disabled={p.saving || p.deleting} accessibilityRole="button" accessibilityLabel="Delete this study plan" style={styles.deletePlan}>
         <Icon name="trash" size={16} color={colors.dangerDark} /><Text variant="smallStrong" color={colors.dangerDark}>{p.deleting ? 'Deleting study plan…' : 'Delete study plan'}</Text>
       </Pressable>

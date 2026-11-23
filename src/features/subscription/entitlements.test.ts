@@ -1,9 +1,15 @@
-import { PRIORITY_MULTIPLIER, entitlementsFor, isExamPriority, parseSubscription, resolveTier, scheduledPlanIds } from './entitlements';
+import { FREE_MONTHLY_GENERATIONS, PRIORITY_MULTIPLIER, entitlementsFor, generationsAreLimited, isExamPriority, parseSubscription, resolveTier } from './entitlements';
 
 describe('entitlements', () => {
-  it('gives Free basic automatic planning and Premium adaptive planning', () => {
-    expect(entitlementsFor('free')).toMatchObject({ maxScheduledPlans: 1, priorityControls: false, autoMissedRecovery: false, detailedInsights: false });
-    expect(entitlementsFor('premium')).toMatchObject({ maxScheduledPlans: Infinity, priorityControls: true, autoMissedRecovery: true, detailedInsights: true });
+  it('gives Free a monthly generation allowance and Premium automatic, adaptive planning', () => {
+    expect(entitlementsFor('free')).toMatchObject({ autoScheduling: false, monthlyGenerations: 3, priorityControls: false, autoMissedRecovery: false, detailedInsights: false });
+    expect(entitlementsFor('premium')).toMatchObject({ autoScheduling: true, monthlyGenerations: Infinity, priorityControls: true, autoMissedRecovery: true, detailedInsights: true });
+    expect(FREE_MONTHLY_GENERATIONS).toBe(3);
+  });
+
+  it('only caps generations for Free', () => {
+    expect(generationsAreLimited(entitlementsFor('free'))).toBe(true);
+    expect(generationsAreLimited(entitlementsFor('premium'))).toBe(false);
   });
 
   it('only trusts a well-formed, unexpired premium record', () => {
@@ -22,14 +28,6 @@ describe('entitlements', () => {
     }
     expect(parseSubscription('{"plan":"premium"}')).toEqual({ plan: 'premium', expiresAt: null });
     expect(parseSubscription('{"plan":"premium","expiresAt":"soon"}')).toEqual({ plan: 'premium', expiresAt: null });
-  });
-
-  it('schedules the nearest exams first, with a stable tie-break', () => {
-    const plans = [{ id: 'c', examDate: 30 }, { id: 'b', examDate: 10 }, { id: 'a', examDate: 10 }];
-    expect([...scheduledPlanIds(plans, 1)]).toEqual(['a']);
-    expect([...scheduledPlanIds(plans, 2)].sort()).toEqual(['a', 'b']);
-    expect(scheduledPlanIds(plans, Infinity).size).toBe(3);
-    expect(scheduledPlanIds(plans, 0).size).toBe(0);
   });
 
   it('validates priorities and keeps Normal neutral', () => {

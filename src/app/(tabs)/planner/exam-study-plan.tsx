@@ -9,6 +9,8 @@ import {
 } from '@/features/planner/examsRepo';
 import { showComingSoon } from '@/features/account/accountAlerts';
 import { PremiumRequiredError, type ExamPriority } from '@/features/subscription/entitlements';
+import { GenerationLimitError } from '@/features/subscription/generationQuota';
+import { getGenerationQuota } from '@/features/subscription/generationQuotaRepo';
 import type { StudySession } from '@/features/planner/engine';
 import { updateSubjectUrgency } from '@/features/subjects/subjectsRepo';
 import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
@@ -54,7 +56,11 @@ export default function ExamStudyPlanScreen() {
   const [protectedDraft, setProtectedDraft] = useState<string[]>([]);
   const [protectOpen, setProtectOpen] = useState(false);
   // Free until the server confirms otherwise; `loaded` stops us previewing before we know the tier.
-  const [access, setAccess] = useState<StudyPlanAccess & { loaded: boolean }>({ tier: 'free', scheduled: true, priority: 'normal', insights: null, loaded: false });
+  const [access, setAccess] = useState<StudyPlanAccess & { loaded: boolean }>({ tier: 'free', generation: null, priority: 'normal', insights: null, loaded: false });
+  // This month's Free generations come from the server. Read without blocking the screen; unknown stays null.
+  const refreshQuota = useCallback(() => {
+    void getGenerationQuota().then(generation => setAccess(old => old.tier === 'premium' ? old : { ...old, generation }));
+  }, []);
   const today = useToday();
   const { todo } = useTasksForDate(selectedDate);
   const subject = byId.get(exam?.subjectId ?? '');
@@ -74,7 +80,9 @@ export default function ExamStudyPlanScreen() {
       const saved = firstLoad ? await getExamPreferences(id) : null;
       if (!live) return;
       setExam(row); setTitle(name); setLabels(names); setProtectedIds(protectedSubjects);
-      setAccess({ tier: planAccess.entitlements.tier, scheduled: planAccess.scheduled, priority: planAccess.priority, insights, loaded: true });
+      setAccess(old => ({ tier: planAccess.entitlements.tier, generation: planAccess.entitlements.tier === 'premium' ? null : old.generation,
+        priority: planAccess.priority, insights, loaded: true }));
+      if (planAccess.entitlements.tier !== 'premium') refreshQuota();
       if (firstLoad) {
         setPrefs({ ...DEFAULT_EXAM_PREFERENCES, ...saved, longBreakMin: Math.max(30, saved?.longBreakMin ?? 30) });
         setSelectedDate(startOfDay(Date.now()));
@@ -84,14 +92,13 @@ export default function ExamStudyPlanScreen() {
       setLoadError(''); setLoaded(true);
     })().catch(error => { if (live) setLoadError(String(error)); });
     return () => { live = false; };
-  }, [id, version]));
+  }, [id, version, refreshQuota]));
 
   useEffect(() => {
     if (!loaded || !id || !access.loaded) return;
     let live = true;
     const timeout = setTimeout(() => {
-      // An exam beyond the Free automatic-scheduling limit has no generated schedule to preview.
-      if (!access.scheduled) { setPreview([]); setShortfall(0); setPreviewError(''); setLoadingPreview(false); return; }
+      // Previewing never uses a generation; only saving does.
       setLoadingPreview(true);
       previewStudySchedule(id, prefs).then(result => {
         if (!live) return;
@@ -101,7 +108,7 @@ export default function ExamStudyPlanScreen() {
         .finally(() => { if (live) setLoadingPreview(false); });
     }, 180);
     return () => { live = false; clearTimeout(timeout); };
-  }, [id, loaded, prefs, version, access.loaded, access.scheduled]);
+  }, [id, loaded, prefs, version, access.loaded]);
 
   const cards = useMemo<StudyPlanCard[]>(() => {
     const generated = preview.filter(session => session.date === selectedDate).map((session, index) => {
@@ -124,13 +131,17 @@ export default function ExamStudyPlanScreen() {
     setSaving(true);
     try {
       await saveStudySchedule(exam.id, next);
-      setPrefs(next); setEditingDates(false); setPreviewError(''); setStatus('Study schedule saved. Automatic updates are on.');
+      setPrefs(next); setEditingDates(false); setPreviewError('');
+      setStatus(access.tier === 'premium' ? 'Study schedule saved. Automatic updates are on.'
+        : 'Study schedule saved. It stays as it is until you generate again.');
+      refreshQuota();
       const result = await previewStudySchedule(exam.id, next);
       setPreview(result.sessions); setShortfall(result.shortfallBlocks);
       if (leave) router.dismissTo('/planner');
     } catch (error) {
+      if (error instanceof GenerationLimitError) refreshQuota();
       if (error instanceof PremiumRequiredError) upgrade(error.message);
-      else Alert.alert('Could not save study plan', String(error));
+      else Alert.alert('Could not save study plan', error instanceof Error ? error.message : String(error));
     }
     finally { setSaving(false); }
   };

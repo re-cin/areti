@@ -4,7 +4,8 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
 import type { PlanInsights } from '@/features/planner/insights';
-import { EXAM_PRIORITIES, type ExamPriority, type PlanTier } from '@/features/subscription/entitlements';
+import { EXAM_PRIORITIES, FREE_MONTHLY_GENERATIONS, type ExamPriority, type PlanTier } from '@/features/subscription/entitlements';
+import { remainingGenerations, resetLabel, type GenerationQuota } from '@/features/subscription/generationQuota';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 import { Pressable, StyleSheet, View } from 'react-native';
 
@@ -13,8 +14,8 @@ const PRIORITY_LABEL: Record<ExamPriority, string> = { normal: 'Normal', high: '
 
 export type StudyPlanAccess = {
   tier: PlanTier;
-  /** False when this exam is beyond the Free plan's one automatically scheduled exam. */
-  scheduled: boolean;
+  /** This month's Free generations as reported by the server; null for Premium or when it can't be read. */
+  generation: GenerationQuota | null;
   priority: ExamPriority;
   insights: PlanInsights | null;
 };
@@ -28,7 +29,9 @@ export function PlanAccessCard({ access, busy, onPriority, onUpgrade, onReschedu
   onPriority: (priority: ExamPriority) => void; onUpgrade: () => void; onReschedule: () => void;
 }) {
   const premium = access.tier === 'premium';
-  const { insights } = access;
+  const { insights, generation } = access;
+  const remaining = generation ? remainingGenerations(generation) : FREE_MONTHLY_GENERATIONS;
+  const exhausted = !premium && !!generation && remaining === 0;
   const detail = insights?.detailed;
   return (
     <NeoBox radius={18} offset={1} shadowColor={colors.divider} backgroundColor={palette.surface} style={styles.card}>
@@ -47,27 +50,30 @@ export function PlanAccessCard({ access, busy, onPriority, onUpgrade, onReschedu
         </Text>
       </>}
 
-      {!access.scheduled && <View style={styles.notice}>
+      {!premium && <View style={styles.notice} accessibilityLiveRegion="polite">
         <Text variant="caption" style={styles.noticeText}>
-          The Free plan automatically schedules your nearest exam. This exam stays on your list for manual tracking.
-          Upgrade to Premium to schedule several exams together.
+          {generation
+            ? `${remaining} of ${generation.limit} schedule generations left this month (resets ${resetLabel(generation.resetsAt)}). Generate, Regenerate and Save each use one.`
+            : `Free plans can generate a schedule ${FREE_MONTHLY_GENERATIONS} times a month. Generate, Regenerate and Save each use one.`}
+          {' '}Exams and your own study sessions are always unlimited.
         </Text>
-        <Pressable onPress={onUpgrade} accessibilityRole="button" style={styles.upgrade}>
-          <Icon name="crown" size={13} color={colors.gold} strokeWidth={1} /><Text variant="captionStrong">See Premium</Text>
-        </Pressable>
+        {exhausted && <Pressable onPress={onUpgrade} accessibilityRole="button" style={styles.upgrade}>
+          <Icon name="crown" size={13} color={colors.gold} strokeWidth={1} /><Text variant="captionStrong">Upgrade for unlimited</Text>
+        </Pressable>}
       </View>}
 
-      {access.scheduled && !!insights?.missedSessions && !premium && <View style={styles.notice} accessibilityLiveRegion="polite">
+      {!!insights?.missedSessions && !premium && <View style={styles.notice} accessibilityLiveRegion="polite">
         <Text variant="caption" style={styles.noticeText}>
           {insights.missedSessions} missed {insights.missedSessions === 1 ? 'session' : 'sessions'}. Free plans don’t move missed work automatically.
-          Reschedule now, or upgrade for automatic recovery.
+          Move your own sessions by hand, use a generation to reschedule, or upgrade for automatic recovery.
         </Text>
-        <Pressable onPress={onReschedule} disabled={busy} accessibilityRole="button" style={styles.upgrade}>
-          <Icon name="sync" size={13} color={palette.text} /><Text variant="captionStrong">Reschedule missed sessions</Text>
+        <Pressable onPress={exhausted ? onUpgrade : onReschedule} disabled={busy} accessibilityRole="button" style={styles.upgrade}>
+          <Icon name={exhausted ? 'crown' : 'sync'} size={13} color={exhausted ? colors.gold : palette.text} strokeWidth={exhausted ? 1 : undefined} />
+          <Text variant="captionStrong">{exhausted ? 'Upgrade for automatic recovery' : 'Reschedule missed sessions'}</Text>
         </Pressable>
       </View>}
 
-      {access.scheduled && <>
+      <>
         <View style={styles.divider} />
         <View style={styles.between}>
           <View style={styles.row}><Text variant="small" style={styles.label}>Priority</Text>{!premium && <Icon name="crown" size={12} color={colors.gold} strokeWidth={1} />}</View>
@@ -82,7 +88,7 @@ export function PlanAccessCard({ access, busy, onPriority, onUpgrade, onReschedu
         <Text variant="caption" style={styles.hint}>
           Priority only changes how your available time is shared between exams. It never adds study hours.
         </Text>
-      </>}
+      </>
 
       {premium && detail && <>
         <View style={styles.divider} />

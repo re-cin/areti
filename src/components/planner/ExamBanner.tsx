@@ -8,8 +8,6 @@ import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { useRef, useState } from 'react';
 import { StudyPlansSheet } from './StudyPlansSheet';
-import { scheduledPlanIds } from '@/features/subscription/entitlements';
-import { useEntitlements } from '@/features/subscription/useEntitlements';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useToday } from '@/hooks/useToday';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
@@ -22,7 +20,6 @@ export function ExamBanner() {
   const labels = useDbQuery(getStudyPlanLabels, {} as Record<string, string>);
   const [plansOpen, setPlansOpen] = useState(false);
   const deletion = useStudyPlanDeletion();
-  const entitlements = useEntitlements();
   const afterDismiss = useRef<(() => void) | null>(null);
   const closeThen = (action: () => void) => {
     if (Platform.OS === 'ios') afterDismiss.current = action;
@@ -32,7 +29,6 @@ export function ExamBanner() {
   const today = useToday();
   const upcoming = exams.filter(exam => exam.examDate >= today && byId.has(exam.subjectId));
   const availablePlans = exams.filter(exam => byId.has(exam.subjectId));
-  const scheduled = scheduledPlanIds(upcoming, entitlements.maxScheduledPlans);
   const next = upcoming[0];
   const subject = next ? byId.get(next.subjectId) : null;
   const days = next ? Math.max(0, Math.round((next.examDate - today) / 86400000)) : 0;
@@ -52,8 +48,7 @@ export function ExamBanner() {
     </View>
     <StudyPlansSheet visible={plansOpen} plans={availablePlans.map(exam => ({ id: exam.id,
       title: labels[exam.id] ?? `${byId.get(exam.subjectId)?.name ?? 'Subject'} Exam`, subject: byId.get(exam.subjectId)!.name,
-      color: byId.get(exam.subjectId)!.color, examDate: exam.examDate,
-      autoScheduled: exam.examDate < today || scheduled.has(exam.id) }))}
+      color: byId.get(exam.subjectId)!.color, examDate: exam.examDate }))}
       onClose={() => setPlansOpen(false)}
       onDismiss={() => { const action = afterDismiss.current; afterDismiss.current = null; action?.(); }}
       onView={id => closeThen(() => router.push({ pathname: '/planner/exam-study-plan', params: { id } }))}
