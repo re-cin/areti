@@ -99,8 +99,6 @@ export default function RootLayout() {
           {/* Sign in fades its own content in (see auth.tsx), so no slide here. */}
           <Stack.Screen name="auth" options={{ animation: 'none' }} />
           <Stack.Screen name="forgot-password" />
-          {/* Fades in out of the welcome screen's ghost zoom. */}
-          <Stack.Screen name="onboarding/intro" options={{ animation: 'fade' }} />
         </Stack>
         <NoticeDialog />
       </>
