@@ -24,7 +24,7 @@ const PERMISSION_LABEL: Record<PermissionState, string> = {
 
 export default function PrivacyScreen() {
   const [refresh, setRefresh] = useState(0);
-  const permission = useDbQuery(getNotificationPermission, [refresh], 'undetermined' as PermissionState);
+  const permission = useDbQuery(getNotificationPermission, 'undetermined' as PermissionState, refresh);
 
   const onPermission = async () => {
     if (permission === 'granted' || permission === 'unsupported') return;

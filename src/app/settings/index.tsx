@@ -16,7 +16,7 @@ const EMPTY_PROFILE: Profile = { id: '', name: '', email: '', pictureUri: null, 
 const comingSoon = showComingSoon;
 
 export default function UserSettingsScreen() {
-  const profile = useDbQuery(getProfile, [], EMPTY_PROFILE);
+  const profile = useDbQuery(getProfile, EMPTY_PROFILE);
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   const rows: { icon: IconName; label: string; href?: Href; onPress?: () => void }[] = [

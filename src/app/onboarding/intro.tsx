@@ -98,20 +98,22 @@ export default function Intro() {
   // --- Finish animation: "Reti hops over to meet you" -----------------------------
   // The page shrinks away, Reti pops in at the center, waves, then hops up to exactly
   // where it sits on the sign in screen, which then fades in around it.
-  const v = useRef({
+  const [v] = useState(() => ({
     page: new Animated.Value(1), // 1 shown → 0 gone
     pop: new Animated.Value(0), // mascot scale-in 0 → 1
     hop: new Animated.Value(0), // 0 = screen center → 1 = sign-in spot
     squashX: new Animated.Value(1),
     squashY: new Animated.Value(1),
     wave: new Animated.Value(0), // degrees
-  }).current;
+  }));
   const finishing = useRef(false);
+  const [isFinishing, setIsFinishing] = useState(false);
 
   // Coming back to this screen: reset.
   useFocusEffect(
     useCallback(() => {
       finishing.current = false;
+      setIsFinishing(false);
       v.page.setValue(1);
       v.pop.setValue(0);
       v.hop.setValue(0);
@@ -128,6 +130,7 @@ export default function Intro() {
   const finish = async () => {
     if (finishing.current) return;
     finishing.current = true;
+    setIsFinishing(true);
     // Reti is now exactly where it sits on sign in; that screen fades in around it.
     const go = () => router.replace({ pathname: '/auth', params: { from: 'onboarding' } });
     if (await AccessibilityInfo.isReduceMotionEnabled()) return go();
@@ -186,7 +189,7 @@ export default function Intro() {
 
   return (
     <View style={styles.screen}>
-      <Animated.View style={[styles.page, pageStyle]} pointerEvents={finishing.current ? 'none' : 'auto'}>
+      <Animated.View style={[styles.page, pageStyle]} pointerEvents={isFinishing ? 'none' : 'auto'}>
       <FlatList
         ref={listRef}
         data={SLIDES}

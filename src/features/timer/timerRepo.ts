@@ -1,7 +1,7 @@
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId } from '@/db/id';
-import { focusSessions, plannedSessions, settings as settingsTable, subjects, tasks } from '@/db/schema';
+import { focusSessions, plannedSessions, settings as settingsTable, studyPlans, subjects, tasks } from '@/db/schema';
 import { startOfDay } from '@/lib/dateHelpers';
 import { awardXp } from '@/features/pet/petRepo';
 import { xpForFocus } from '@/features/pet/xp';
@@ -11,6 +11,12 @@ import { DEFAULT_POMODORO, loadPomodoroSettings, type PomodoroSettings } from '.
 
 /** Sessions added by hand from the Pomodoro screen (not created by the planner engine). */
 export const MANUAL_PLAN_ID = 'manual';
+
+export async function isPlannedSessionActive(id: string): Promise<boolean> {
+  const rows = await db.select({ id: plannedSessions.id }).from(plannedSessions)
+    .where(and(eq(plannedSessions.id, id), isNull(plannedSessions.deletedAt))).limit(1);
+  return rows.length > 0;
+}
 
 export type UpcomingSession = {
   id: string;
@@ -54,12 +60,17 @@ export async function listUpcomingToday(now = new Date()): Promise<UpcomingSessi
     })
     .from(plannedSessions)
     .innerJoin(subjects, eq(subjects.id, plannedSessions.subjectId))
-    .leftJoin(tasks, sql`${plannedSessions.planId} = 'task:' || ${tasks.id}`)
+    .leftJoin(tasks, or(eq(plannedSessions.id, tasks.id), sql`${plannedSessions.planId} = 'task:' || ${tasks.id}`))
+    .leftJoin(studyPlans, eq(plannedSessions.planId, studyPlans.id))
     .where(
       and(
         eq(plannedSessions.date, today),
         isNull(plannedSessions.deletedAt),
         eq(plannedSessions.excluded, false),
+        isNull(subjects.deletedAt),
+        or(eq(plannedSessions.planId, MANUAL_PLAN_ID),
+          and(sql`${plannedSessions.planId} LIKE 'task:%'`, sql`${tasks.id} IS NOT NULL`, isNull(tasks.deletedAt), eq(tasks.done, false)),
+          and(sql`${studyPlans.id} IS NOT NULL`, isNull(studyPlans.deletedAt), eq(studyPlans.status, 'active'), gt(studyPlans.examDate, today))),
         sql`${plannedSessions.completedBlocks} < ${plannedSessions.blocks}`,
       ),
     )
@@ -137,6 +148,10 @@ export async function recordFocus(input: {
       .update(plannedSessions)
       .set({ completedBlocks: sql`${plannedSessions.completedBlocks} + 1`, updatedAt: Date.now() })
       .where(eq(plannedSessions.id, input.plannedSessionId));
+    const [session] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, input.plannedSessionId));
+    if (session && session.completedBlocks >= session.blocks) {
+      await db.update(tasks).set({ done: true, updatedAt: Date.now() }).where(eq(tasks.id, session.id));
+    }
   }
   await awardXp(xpForFocus(input.durationSec, input.completed));
   bumpData();
@@ -172,6 +187,17 @@ export async function getTaskSummary(taskId: string): Promise<TaskSummary | null
 export async function scheduleTaskPomodoro(taskId: string, chosen: PomodoroSettings): Promise<{ date: number } | null> {
   const [task] = await db.select().from(tasks).where(and(eq(tasks.id, taskId), isNull(tasks.deletedAt)));
   if (!task) return null;
+  // Generated study tasks already have a Pomodoro. Never create a second task-linked copy.
+  if (task.source === 'generated') {
+    const [session] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.id, task.id), isNull(plannedSessions.deletedAt)));
+    if (!session || task.done || !task.planId) return null;
+    const [plan] = await db.select().from(studyPlans).where(and(eq(studyPlans.id, task.planId), isNull(studyPlans.deletedAt), eq(studyPlans.status, 'active')));
+    const frozen = await getSessionSettings(session.id);
+    if (frozen && (['focusCount', 'focusMin', 'breakMin', 'longBreakMin'] as const).some(key => frozen[key] !== chosen[key])) {
+      throw new Error('Change this session’s Pomodoro settings in its Exam Study Plan so its study time stays consistent.');
+    }
+    return plan ? { date: task.date } : null;
+  }
   const blocks = Math.max(1, Math.round((task.endMinute - task.startMinute) / Math.max(1, chosen.focusMin)));
   const now = Date.now();
   const values = { subjectId: task.subjectId, date: task.date, startMinute: task.startMinute, blocks, updatedAt: now };

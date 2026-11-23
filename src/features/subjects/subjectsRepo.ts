@@ -1,7 +1,9 @@
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId } from '@/db/id';
-import { plannedSessions, subjects } from '@/db/schema';
+import { plannedSessions, studyPlans, subjects, tasks } from '@/db/schema';
+import { cancelStudyPlanWork } from '@/features/planner/studyPlanLifecycle';
+import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
 export type SubjectRow = { id: string; name: string; color: string };
@@ -33,13 +35,25 @@ export async function addSubject(name: string, color: string): Promise<void> {
   bumpData();
 }
 
+export async function updateSubjectUrgency(id: string, urgency: number): Promise<void> {
+  if (!Number.isInteger(urgency) || urgency < 1 || urgency > 5) throw new Error('Choose an urgency from 1 to 5.');
+  await db.update(subjects).set({ urgency, updatedAt: Date.now() })
+    .where(and(eq(subjects.id, id), isNull(subjects.deletedAt)));
+  bumpData();
+}
+
 /** Soft delete (sync-ready). Also removes the subject's upcoming planned sessions. */
 export async function deleteSubject(id: string): Promise<void> {
   const now = Date.now();
-  await db.update(subjects).set({ deletedAt: now, updatedAt: now }).where(eq(subjects.id, id));
-  await db
-    .update(plannedSessions)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(eq(plannedSessions.subjectId, id), isNull(plannedSessions.deletedAt)));
+  db.transaction(tx => {
+    const plans = tx.select().from(studyPlans).where(eq(studyPlans.subjectId, id)).all();
+    tx.update(subjects).set({ deletedAt: now, updatedAt: now }).where(eq(subjects.id, id)).run();
+    cancelStudyPlanWork(tx, plans.map(plan => plan.id), now);
+    tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(plannedSessions.subjectId, id), isNull(plannedSessions.deletedAt))).run();
+    tx.update(tasks).set({ deletedAt: now, updatedAt: now })
+      .where(and(eq(tasks.subjectId, id), eq(tasks.done, false), isNull(tasks.deletedAt))).run();
+  });
+  await regenerateSchedules().catch(error => console.warn('[planner] Subject deleted; remaining schedules will refresh later', error));
   bumpData();
 }

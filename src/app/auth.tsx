@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -55,7 +55,7 @@ export default function Auth() {
   // animation, Reti is already standing in this exact spot, so it stays solid.
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromOnboarding = from === 'onboarding';
-  const fade = useRef(new Animated.Value(0)).current;
+  const [fade] = useState(() => new Animated.Value(0));
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (reduce) return fade.setValue(1);

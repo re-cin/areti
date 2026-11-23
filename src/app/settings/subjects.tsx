@@ -10,10 +10,8 @@ import { useDbQuery } from '@/lib/useDbQuery';
 import { addSubject, deleteSubject, listSubjects, type SubjectRow } from '@/features/subjects/subjectsRepo';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 
-// Minimal subjects manager so the timer and statistics have something to show.
-// Difficulty / urgency editing belongs to the planner work (docs/planner-rules.md).
 export default function SubjectsScreen() {
-  const subjects = useDbQuery(listSubjects, [], [] as SubjectRow[]);
+  const subjects = useDbQuery(listSubjects, [] as SubjectRow[]);
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(colors.subjectPalette[0]);
 

@@ -3,6 +3,7 @@ import { Text } from '@/components/ui/Text';
 import { db } from '@/db/client';
 import { AudioController } from '@/features/audio/AudioController';
 import { useTimerDriver } from '@/features/timer/useTimerDriver';
+import { useAutomaticSchedule } from '@/features/planner/useAutomaticSchedule';
 import { colors } from '@/theme';
 import { Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold } from '@expo-google-fonts/fredoka';
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
@@ -23,6 +24,7 @@ export default function RootLayout() {
 
   // Restores a running Pomodoro and keeps it ticking on every screen.
   useTimerDriver(dbReady);
+  useAutomaticSchedule(dbReady);
 
   const ready = Boolean((fontsLoaded || fontError) && (dbReady || dbError));
 

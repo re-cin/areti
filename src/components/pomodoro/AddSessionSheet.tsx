@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, View } from 'react-native';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
@@ -22,16 +22,14 @@ function nextQuarter(): number {
 
 /** Bottom sheet to plan a session for today by hand. */
 export function AddSessionSheet({ visible, onClose, subjects }: Props) {
-  const [subjectId, setSubjectId] = useState<string | null>(null);
-  const [startMinute, setStartMinute] = useState(nextQuarter());
-  const [blocks, setBlocks] = useState(2);
+  return <AddSessionForm key={String(visible)} visible={visible} onClose={onClose} subjects={subjects} />;
+}
 
-  useEffect(() => {
-    if (visible) {
-      setStartMinute(nextQuarter());
-      setSubjectId((cur) => cur ?? subjects[0]?.id ?? null);
-    }
-  }, [visible, subjects]);
+function AddSessionForm({ visible, onClose, subjects }: Props) {
+  const [selectedSubjectId, setSubjectId] = useState<string | null>(null);
+  const subjectId = subjects.some(subject => subject.id === selectedSubjectId) ? selectedSubjectId : subjects[0]?.id ?? null;
+  const [startMinute, setStartMinute] = useState(nextQuarter);
+  const [blocks, setBlocks] = useState(2);
 
   const save = async () => {
     if (!subjectId) return;

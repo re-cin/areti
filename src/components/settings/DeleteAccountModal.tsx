@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
@@ -16,10 +16,11 @@ type Props = {
 
 /** Final check before deleting the account: the user must type DELETE. */
 export function DeleteAccountModal({ visible, deleting, onCancel, onConfirm }: Props) {
+  return <DeleteAccountForm key={String(visible)} visible={visible} deleting={deleting} onCancel={onCancel} onConfirm={onConfirm} />;
+}
+
+function DeleteAccountForm({ visible, deleting, onCancel, onConfirm }: Props) {
   const [text, setText] = useState('');
-  useEffect(() => {
-    if (visible) setText('');
-  }, [visible]);
 
   const ready = text.trim() === CONFIRM_WORD && !deleting;
 
