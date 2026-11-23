@@ -1,11 +1,13 @@
 import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
 import { Dropdown } from '@/components/ui/Dropdown';
 import { NeoButton } from '@/components/ui/NeoButton';
+import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { createExam, examName, getExam, updateExam } from '@/features/planner/examsRepo';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
+import { useToday } from '@/hooks/useToday';
 import { addDays, startOfDay } from '@/lib/dates';
 import { colors, spacing } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -15,11 +17,13 @@ import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function SetExamScreen() {
+  const today = useToday();
   const { id: editingId } = useLocalSearchParams<{ id?: string }>();
   const { subjects } = useSubjects();
   const { openPicker, pickerElement } = useDateTimePicker();
   const [name, setName] = useState('');
   const [subjectId, setSubjectId] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState('3');
   const [date, setDate] = useState(() => addDays(startOfDay(Date.now()), 1));
   const [newSubjectOpen, setNewSubjectOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,18 +36,19 @@ export default function SetExamScreen() {
       if (!exam) throw new Error('This exam no longer exists.');
       const title = await examName(editingId, 'Subject');
       if (!live) return;
-      setName(title); setSubjectId(exam.subjectId); setDate(exam.examDate); setLoading(false);
+      setName(title); setSubjectId(exam.subjectId); setDifficulty(String(exam.difficulty)); setDate(exam.examDate); setLoading(false);
     })().catch(error => { if (live) Alert.alert('Could not load exam', String(error)); });
     return () => { live = false; };
   }, [editingId]);
-  const valid = name.trim().length > 0 && subjectId !== null && date > startOfDay(Date.now());
+  const valid = name.trim().length > 0 && subjectId !== null && date > today;
 
   const save = async (generate: boolean) => {
     if (!valid || loading || saving || !subjectId) return;
     setSaving(true);
     try {
-      const id = editingId ?? await createExam({ name, subjectId, date });
-      if (editingId) await updateExam(editingId, { name, subjectId, date });
+      const input = { name, subjectId, date, difficulty: Number(difficulty) };
+      const id = editingId ?? await createExam(input);
+      if (editingId) await updateExam(editingId, input);
       if (generate) router.replace({ pathname: '/planner/exam-study-plan', params: { id } });
       else router.dismissTo('/planner');
     } catch (error) {
@@ -77,6 +82,10 @@ export default function SetExamScreen() {
           </View>
           <Dropdown value={subjectId} options={subjects.map(s => ({ key: s.id, label: s.name, color: s.color }))}
             onChange={setSubjectId} placeholder="Select a subject" uppercase />
+          <Text variant="smallStrong" style={styles.dateLabel}>Exam difficulty</Text>
+          <Segmented options={[{ key: '1', label: 'Low' }, { key: '3', label: 'Medium' }, { key: '5', label: 'High' }]}
+            value={difficulty} onChange={setDifficulty} />
+          <Text variant="caption" color={colors.muted}>Applies only to this exam. Harder exams receive a larger share of available study time.</Text>
           <Text variant="smallStrong" style={styles.dateLabel}>Date</Text>
           <Pressable onPress={() => openPicker('date', new Date(date), d => setDate(startOfDay(d)))}
             style={styles.dateField} accessibilityRole="button" accessibilityLabel="Choose exam date">
@@ -85,7 +94,7 @@ export default function SetExamScreen() {
             </Text>
             <Ionicons name="calendar-outline" size={20} color={colors.ink} />
           </Pressable>
-          {date <= startOfDay(Date.now()) && <Text variant="caption" color={colors.dangerDark}>Choose a future date.</Text>}
+          {date <= today && <Text variant="caption" color={colors.dangerDark}>Choose a future date.</Text>}
         </ScrollView>
         <View style={styles.actions}>
           <NeoButton label={editingId ? 'Save Exam' : 'Set Exam'} backgroundColor={colors.surface} disabled={!valid || saving || loading}

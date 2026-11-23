@@ -6,18 +6,14 @@ import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
-import { Segmented } from '@/components/ui/Segmented';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { addSubject, deleteSubject, listSubjects, updateSubjectDifficulty, type SubjectRow } from '@/features/subjects/subjectsRepo';
+import { addSubject, deleteSubject, listSubjects, type SubjectRow } from '@/features/subjects/subjectsRepo';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 
-const difficultyOptions = [{ key: '1', label: 'Low' }, { key: '3', label: 'Medium' }, { key: '5', label: 'High' }];
-
 export default function SubjectsScreen() {
-  const subjects = useDbQuery(listSubjects, [], [] as SubjectRow[]);
+  const subjects = useDbQuery(listSubjects, [] as SubjectRow[]);
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(colors.subjectPalette[0]);
-  const [difficulty, setDifficulty] = useState('3');
 
   const add = async () => {
     const trimmed = name.trim();
@@ -26,9 +22,8 @@ export default function SubjectsScreen() {
       Alert.alert('Already added', `You already have ${trimmed}.`);
       return;
     }
-    await addSubject(trimmed, color, Number(difficulty));
+    await addSubject(trimmed, color);
     setName('');
-    setDifficulty('3');
     setColor(colors.subjectPalette[(subjects.length + 1) % colors.subjectPalette.length]);
   };
 
@@ -82,9 +77,6 @@ export default function SubjectsScreen() {
           ))}
         </View>
         {name.trim() !== '' && <Pill label={name.trim()} color={color} />}
-        <Text variant="smallStrong">Difficulty</Text>
-        <Segmented options={difficultyOptions} value={difficulty} onChange={setDifficulty} />
-        <Text variant="caption" color={colors.muted}>Harder subjects receive a larger share of available study time.</Text>
         <NeoButton label="Add subject" backgroundColor={colors.teal} onPress={add} disabled={!name.trim()} />
       </NeoBox>
 
@@ -107,10 +99,6 @@ export default function SubjectsScreen() {
               }}>
               <View style={{ flex: 1 }}>
                 <Pill label={s.name} color={s.color} />
-                <View style={{ marginTop: spacing.sm, marginRight: spacing.sm }}>
-                  <Segmented options={difficultyOptions} value={String(s.difficulty <= 2 ? 1 : s.difficulty >= 4 ? 5 : 3)}
-                    onChange={value => { void updateSubjectDifficulty(s.id, Number(value)).catch(error => Alert.alert('Could not update difficulty', String(error))); }} />
-                </View>
               </View>
               <IconButton icon="trash" size={34} backgroundColor={colors.dangerSoft} accessibilityLabel={`Delete ${s.name}`} onPress={() => remove(s)} />
             </View>

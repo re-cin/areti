@@ -23,12 +23,12 @@ export default function Welcome() {
   const [headerHeight, setHeaderHeight] = useState(0);
 
   // Exit animation ("ghost portal"), see leave() below.
-  const v = useRef({
+  const [v] = useState(() => ({
     ghostScale: new Animated.Value(1),
     ghostSpin: new Animated.Value(0), // degrees
     title: new Animated.Value(1), // "Welcome to areti": 1 shown → 0 gone
     rest: new Animated.Value(1), // intro text + button + tagline: 1 shown → 0 gone
-  }).current;
+  }));
   const leaving = useRef(false);
 
   // Coming back (e.g. Back from the onboarding pages): put everything back in place.

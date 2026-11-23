@@ -36,14 +36,14 @@ export function SplashOverlay({ ready, fontsLoaded, onFinish }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
 
-  const v = useRef({
+  const [v] = useState(() => ({
     scaleX: new Animated.Value(1),
     scaleY: new Animated.Value(1),
     rotate: new Animated.Value(0), // degrees
     lift: new Animated.Value(0), // translateY of the icon
     text: new Animated.Value(0), // 0 hidden → 1 shown (wordmark + tagline)
     screen: new Animated.Value(1), // whole overlay opacity
-  }).current;
+  }));
 
   const [reduceMotion, setReduceMotion] = useState(false);
   const [minTimePassed, setMinTimePassed] = useState(false);

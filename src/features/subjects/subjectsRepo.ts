@@ -6,11 +6,11 @@ import { cancelStudyPlanWork } from '@/features/planner/studyPlanLifecycle';
 import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
-export type SubjectRow = { id: string; name: string; color: string; difficulty: number };
+export type SubjectRow = { id: string; name: string; color: string };
 
 export async function listSubjects(): Promise<SubjectRow[]> {
   const rows = await db
-    .select({ id: subjects.id, name: subjects.name, color: subjects.color, difficulty: subjects.difficulty })
+    .select({ id: subjects.id, name: subjects.name, color: subjects.color })
     .from(subjects)
     .where(isNull(subjects.deletedAt))
     .orderBy(asc(subjects.sortOrder), asc(subjects.name));
@@ -19,33 +19,19 @@ export async function listSubjects(): Promise<SubjectRow[]> {
 
 /** Includes deleted subjects, so old focus sessions still show their name and color. */
 export async function subjectLookup(): Promise<Map<string, SubjectRow>> {
-  const rows = await db.select({ id: subjects.id, name: subjects.name, color: subjects.color, difficulty: subjects.difficulty }).from(subjects);
+  const rows = await db.select({ id: subjects.id, name: subjects.name, color: subjects.color }).from(subjects);
   return new Map(rows.map((r) => [r.id, r]));
 }
 
-export async function addSubject(name: string, color: string, difficulty = 3): Promise<void> {
-  validateDifficulty(difficulty);
+export async function addSubject(name: string, color: string): Promise<void> {
   const existing = await listSubjects();
   await db.insert(subjects).values({
     id: newId(),
     name: name.trim(),
     color,
-    difficulty,
     sortOrder: existing.length,
     updatedAt: Date.now(),
   });
-  bumpData();
-}
-
-function validateDifficulty(difficulty: number) {
-  if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5) throw new Error('Choose a difficulty from 1 to 5.');
-}
-
-/** The automatic planner observes this subject change and rebalances unfinished study. */
-export async function updateSubjectDifficulty(id: string, difficulty: number): Promise<void> {
-  validateDifficulty(difficulty);
-  await db.update(subjects).set({ difficulty, updatedAt: Date.now() })
-    .where(and(eq(subjects.id, id), isNull(subjects.deletedAt)));
   bumpData();
 }
 

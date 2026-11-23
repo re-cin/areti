@@ -144,7 +144,7 @@ describe('student scheduling', () => {
 
   it('generates ordinary study without an exam and keeps locked blocks intact', () => {
     const locked = { date: '2026-11-23', subjectId: 'math', blocks: 1, locked: true };
-    const result = generatePlan({ today, subjects: [{ id: 'math', name: 'Math', difficulty: 3, urgency: 3 }],
+    const result = generatePlan({ today, subjects: [{ id: 'math', name: 'Math', urgency: 3 }],
       window: { startMinute: 19 * 60, endMinute: 21 * 60 }, studyDays: [1, 2, 3, 4, 5], dailyGoalMin: 50,
       excludedDates: [], existing: [locked] });
     expect(result.sessions).toContainEqual(locked);

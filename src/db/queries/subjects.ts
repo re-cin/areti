@@ -9,7 +9,6 @@ export const subjectsQuery = () =>
 export async function addSubject(input: {
   name: string;
   color: string;
-  difficulty: number;
 }) {
   const id = newId();
   const now = Date.now();
@@ -18,7 +17,6 @@ export async function addSubject(input: {
     id,
     name: input.name,
     color: input.color,
-    difficulty: input.difficulty,
     sortOrder: existing.length,
     updatedAt: now,
   });

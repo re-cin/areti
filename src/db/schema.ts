@@ -14,7 +14,6 @@ export const subjects = sqliteTable('subjects', {
   ...base,
   name: text('name').notNull(),
   color: text('color').notNull(),
-  difficulty: integer('difficulty').notNull().default(3), // scale TBD, see docs/planner-rules.md
   urgency: integer('urgency').notNull().default(3), // scale TBD
   sortOrder: integer('sort_order').notNull().default(0),
 });
@@ -23,6 +22,7 @@ export const studyPlans = sqliteTable('study_plans', {
   ...base,
   subjectId: text('subject_id').notNull(),
   examDate: integer('exam_date').notNull(), // epoch ms (start of day)
+  difficulty: integer('difficulty').notNull().default(3), // Low 1, Medium 3, High 5; per exam
   status: text('status').notNull().default('active'), // active | done | archived
 });
 

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, TextInput, View } from 'react-native';
 import { Image } from 'expo-image';
 import { DeleteAccountModal } from '@/components/settings/DeleteAccountModal';
@@ -22,7 +22,7 @@ import { borders, colors, fonts, radii, spacing } from '@/theme';
 const EMPTY_PROFILE: Profile = { id: '', name: '', email: '', pictureUri: null, plan: 'free', joinedAt: Date.now() };
 
 export default function AccountSettingsScreen() {
-  const profile = useDbQuery(getProfile, [], EMPTY_PROFILE);
+  const profile = useDbQuery(getProfile, EMPTY_PROFILE);
   const [editingName, setEditingName] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [name, setName] = useState('');
@@ -31,10 +31,12 @@ export default function AccountSettingsScreen() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
+  const [previousProfile, setPreviousProfile] = useState(profile);
+  if (previousProfile.name !== profile.name || previousProfile.email !== profile.email) {
+    setPreviousProfile(profile);
     setName(profile.name);
     setEmail(profile.email);
-  }, [profile.name, profile.email]);
+  }
 
   const saveName = async () => {
     setEditingName(false);

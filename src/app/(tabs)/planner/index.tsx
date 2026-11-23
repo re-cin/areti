@@ -55,9 +55,13 @@ export default function PlannerScreen() {
 
   const { date: dateParam, n } = useLocalSearchParams<{ date?: string; n?: string }>();
 
-  useEffect(() => {
-    if (dateParam) setSelectedDate(startOfDay(new Date(Number(dateParam))));
-  }, [dateParam, n]);
+  const routeSelection = `${dateParam ?? ''}:${n ?? ''}`;
+  const [previousRouteSelection, setPreviousRouteSelection] = useState<string | null>(null);
+  if (previousRouteSelection !== routeSelection) {
+    setPreviousRouteSelection(routeSelection);
+    const next = dateParam ? startOfDay(Number(dateParam)) : NaN;
+    if (Number.isFinite(next)) setSelectedDate(next);
+  }
 
   const weekStart = startOfWeek(selectedDate); // TODO: follow the "first day of week" setting
   const days = weekDays(weekStart);

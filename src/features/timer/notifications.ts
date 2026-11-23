@@ -1,18 +1,18 @@
-import * as Notifications from 'expo-notifications';
+import { loadNotifications } from '@/lib/notificationPermission';
 import { Platform } from 'react-native';
 import type { PhaseEnd } from './session';
 
 // Local notifications for the end of each timer phase. They fire even when the app is
 // closed, because they are scheduled up front with the exact end time.
-// Works in Expo Go (local notifications only); behaviour is closer to the shipped app in a dev build.
+// Missing native modules are handled before loading the package, so unsupported
+// Expo Go builds can still open the app and run the timer without notifications.
 
 const CHANNEL_ID = 'timer';
 const supported = Platform.OS === 'ios' || Platform.OS === 'android';
 let configured = false;
 
-async function configure() {
+async function configure(Notifications: NonNullable<Awaited<ReturnType<typeof loadNotifications>>>) {
   if (!supported || configured) return;
-  configured = true;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,
@@ -27,12 +27,15 @@ async function configure() {
       importance: Notifications.AndroidImportance.HIGH,
     });
   }
+  configured = true;
 }
 
 export type PermissionState = 'granted' | 'denied' | 'undetermined' | 'unsupported';
 
 export async function getNotificationPermission(): Promise<PermissionState> {
   if (!supported) return 'unsupported';
+  const Notifications = await loadNotifications();
+  if (!Notifications) return 'unsupported';
   try {
     const { status } = await Notifications.getPermissionsAsync();
     return status as PermissionState;
@@ -43,8 +46,10 @@ export async function getNotificationPermission(): Promise<PermissionState> {
 
 export async function requestNotificationPermission(): Promise<PermissionState> {
   if (!supported) return 'unsupported';
+  const Notifications = await loadNotifications();
+  if (!Notifications) return 'unsupported';
   try {
-    await configure();
+    await configure(Notifications);
     const { status } = await Notifications.requestPermissionsAsync();
     return status as PermissionState;
   } catch {
@@ -64,8 +69,10 @@ function message(end: PhaseEnd): { title: string; body: string } {
 /** Replaces any scheduled timer notifications with one per upcoming phase end. */
 export async function scheduleTimerNotifications(timeline: PhaseEnd[]): Promise<void> {
   if (!supported) return;
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   try {
-    await configure();
+    await configure(Notifications);
     await Notifications.cancelAllScheduledNotificationsAsync();
     const { status } = await Notifications.getPermissionsAsync();
     if (status !== 'granted') return;
@@ -84,6 +91,8 @@ export async function scheduleTimerNotifications(timeline: PhaseEnd[]): Promise<
 
 export async function cancelTimerNotifications(): Promise<void> {
   if (!supported) return;
+  const Notifications = await loadNotifications();
+  if (!Notifications) return;
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
   } catch (e) {

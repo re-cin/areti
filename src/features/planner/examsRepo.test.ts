@@ -1,12 +1,23 @@
 // Exercise the real Drizzle repository and migrations against SQLite in memory.
 // Native transport, IDs, and unrelated network/notification services are replaced.
+import { eq, isNull } from 'drizzle-orm';
+import { db } from '@/db/client';
+import { focusSessions, ghostState, plannedSessions, settings, studyPlans, subjects, tasks } from '@/db/schema';
+import { addDays, startOfDay } from '@/lib/dates';
+import { deleteTask, setTaskDone } from '@/db/queries/tasks';
+import { addSubject, deleteSubject, listSubjects } from '@/features/subjects/subjectsRepo';
+import { listUpcomingToday, recordFocus, scheduleTaskPomodoro } from '@/features/timer/timerRepo';
+import { useTimer } from '@/features/timer/timerStore';
+import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
+import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamPreferences, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
+
 jest.mock('@/db/client', () => {
-  const { DatabaseSync } = require('node:sqlite');
-  const { readFileSync } = require('node:fs');
-  const { join } = require('node:path');
-  const { drizzle } = require('drizzle-orm/expo-sqlite');
+  const { DatabaseSync } = jest.requireActual('node:sqlite');
+  const { readFileSync } = jest.requireActual('node:fs');
+  const { join } = jest.requireActual('node:path');
+  const { drizzle } = jest.requireActual('drizzle-orm/expo-sqlite');
   const sqlite = new DatabaseSync(':memory:');
-  for (const name of ['0000_safe_hitman.sql', '0001_icy_diamondback.sql', '0002_accounts.sql', '0003_drop_local_accounts.sql']) {
+  for (const name of ['0000_safe_hitman.sql', '0001_icy_diamondback.sql', '0002_accounts.sql', '0003_drop_local_accounts.sql', '0004_exam_difficulty.sql']) {
     sqlite.exec(readFileSync(join(process.cwd(), 'drizzle', name), 'utf8'));
   }
   const execute = (sql: string, params: unknown[], raw: boolean) => {
@@ -24,20 +35,9 @@ jest.mock('@/db/client', () => {
     executeForRawResultSync: (params: unknown[]) => execute(sql, params, true),
   }) }) };
 });
-jest.mock('@/db/id', () => ({ newId: () => require('node:crypto').randomUUID() }));
+jest.mock('@/db/id', () => ({ newId: () => jest.requireActual('node:crypto').randomUUID() }));
 jest.mock('@/lib/supabase', () => ({ supabaseConfigured: false, supabase: {} }));
 jest.mock('@/features/timer/notifications', () => ({ cancelTimerNotifications: jest.fn(), scheduleTimerNotifications: jest.fn() }));
-
-import { eq, isNull } from 'drizzle-orm';
-import { db } from '@/db/client';
-import { focusSessions, ghostState, plannedSessions, settings, studyPlans, subjects, tasks } from '@/db/schema';
-import { addDays, startOfDay } from '@/lib/dates';
-import { deleteTask, setTaskDone } from '@/db/queries/tasks';
-import { deleteSubject, updateSubjectDifficulty } from '@/features/subjects/subjectsRepo';
-import { listUpcomingToday, recordFocus, scheduleTaskPomodoro } from '@/features/timer/timerRepo';
-import { useTimer } from '@/features/timer/timerStore';
-import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
-import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamPreferences, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam } from './examsRepo';
 
 const now = new Date(2026, 10, 23, 8);
 const day = startOfDay(now);
@@ -243,13 +243,13 @@ it('keeps a session studied early from duplicating its remaining blocks', async 
   expect(activeSessions().reduce((sum, s) => sum + s.blocks, 0)).toBe(8);
 });
 
-it('rebalances unfinished exams when subject difficulty changes, without changing the target', async () => {
+it('rebalances unfinished exams when exam difficulty changes, without changing the target', async () => {
   db.insert(subjects).values({ id: 'science', name: 'Science', color: '#ffffff', updatedAt: now.getTime() }).run();
   const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3) });
   const science = await createExam({ name: 'Science final', subjectId: 'science', date: addDays(day, 3) });
   const before = (await getExamPreferences(science))?.totalBlocks;
-  await updateSubjectDifficulty('math', 1);
-  await updateSubjectDifficulty('science', 5);
+  await updateExamDifficulty(math, 1);
+  await updateExamDifficulty(science, 5);
   await regenerateSchedules();
   const blocks = (id: string) => activeSessions().filter(s => s.planId === id).reduce((sum, s) => sum + s.blocks, 0);
   expect(blocks(science)).toBeGreaterThan(blocks(math));
@@ -258,7 +258,42 @@ it('rebalances unfinished exams when subject difficulty changes, without changin
   const stable = activeSessions();
   await regenerateSchedules();
   expect(activeSessions()).toEqual(stable);
-  await expect(updateSubjectDifficulty('math', 0)).rejects.toThrow();
+  await expect(updateExamDifficulty(math, 0)).rejects.toThrow();
+});
+
+it('keeps difficulty independent for two exams of the same subject, including All Exams saves', async () => {
+  const low = await createExam({ name: 'Math quiz', subjectId: 'math', date: addDays(day, 3), difficulty: 1 });
+  const high = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3), difficulty: 5 });
+  const blocks = (id: string) => activeSessions().filter(s => s.planId === id).reduce((sum, s) => sum + s.blocks, 0);
+  expect(blocks(high)).toBeGreaterThan(blocks(low));
+  await updateExamDifficulty(low, 3);
+  expect((await getExam(high))?.difficulty).toBe(5);
+  expect((await getExam(low))?.difficulty).toBe(3);
+  await saveStudySchedule(low, { ...DEFAULT_EXAM_PREFERENCES, scope: 'all', start: 18 * 60 });
+  expect((await getExam(high))?.difficulty).toBe(5);
+  expect((await getExam(low))?.difficulty).toBe(3);
+  await updateExam(low, { name: 'Math quiz renamed', subjectId: 'math', date: addDays(day, 4) });
+  expect((await getExam(low))?.difficulty).toBe(3);
+  await updateExam(low, { name: 'Math quiz renamed', subjectId: 'math', date: addDays(day, 4), difficulty: 1 });
+  expect((await getExam(low))?.difficulty).toBe(1);
+  expect((await getExam(high))?.difficulty).toBe(5);
+});
+
+it('creates plain subjects and defaults new exams to Medium', async () => {
+  await addSubject('Physics', '#123456');
+  const subject = (await listSubjects()).find(s => s.name === 'Physics')!;
+  expect(subject).not.toHaveProperty('difficulty');
+  const id = await createExam({ name: 'Physics exam', subjectId: subject.id, date: addDays(day, 3) });
+  expect((await getExam(id))?.difficulty).toBe(3);
+});
+
+it('rejects invalid or deleted exam difficulty updates without changing another plan', async () => {
+  await expect(createExam({ name: 'Invalid', subjectId: 'math', date: addDays(day, 3), difficulty: 0 })).rejects.toThrow();
+  const id = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 3), difficulty: 5 });
+  await expect(updateExam(id, { name: 'Invalid edit', subjectId: 'math', date: addDays(day, 3), difficulty: 6 })).rejects.toThrow();
+  expect((await getExam(id))?.difficulty).toBe(5);
+  await deleteStudyPlan(id);
+  await expect(updateExamDifficulty(id, 1)).rejects.toThrow('no longer exists');
 });
 
 it('keeps protected subject sessions in place when the plan is regenerated and allows unprotecting', async () => {

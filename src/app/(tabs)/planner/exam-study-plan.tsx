@@ -4,14 +4,15 @@ import { Text } from '@/components/ui/Text';
 import {
   DEFAULT_EXAM_PREFERENCES, examName, getExam, getExamPreferences, getProtectedSubjectIds,
   getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule,
-  updateExam, type ExamPreferences,
+  updateExam, updateExamDifficulty, type ExamPreferences,
 } from '@/features/planner/examsRepo';
 import type { StudySession } from '@/features/planner/engine';
-import { updateSubjectDifficulty, updateSubjectUrgency } from '@/features/subjects/subjectsRepo';
+import { updateSubjectUrgency } from '@/features/subjects/subjectsRepo';
 import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useTasksForDate } from '@/hooks/useTasksForDate';
+import { useToday } from '@/hooks/useToday';
 import { addMonths, startOfDay } from '@/lib/dates';
 import { useDataVersion } from '@/stores/dataVersion';
 import { colors, spacing } from '@/theme';
@@ -49,12 +50,14 @@ export default function ExamStudyPlanScreen() {
   const [protectedIds, setProtectedIds] = useState<string[]>([]);
   const [protectedDraft, setProtectedDraft] = useState<string[]>([]);
   const [protectOpen, setProtectOpen] = useState(false);
-  const today = startOfDay(Date.now());
+  const today = useToday();
   const { todo } = useTasksForDate(selectedDate);
   const subject = byId.get(exam?.subjectId ?? '');
 
   // Reload the exam when returning from Edit, without overwriting unsaved form preferences.
   useFocusEffect(useCallback(() => {
+    // Database version changes deliberately refresh the saved exam and its labels.
+    void version;
     if (!id) { setLoadError('No exam was selected.'); return; }
     let live = true;
     (async () => {
@@ -79,8 +82,8 @@ export default function ExamStudyPlanScreen() {
   useEffect(() => {
     if (!loaded || !id) return;
     let live = true;
-    setLoadingPreview(true);
     const timeout = setTimeout(() => {
+      setLoadingPreview(true);
       previewStudySchedule(id, prefs).then(result => {
         if (!live) return;
         setPreview(result.sessions); setShortfall(result.shortfallBlocks); setPreviewError('');
@@ -140,8 +143,12 @@ export default function ExamStudyPlanScreen() {
   };
   const changeDifficulty = (value: number) => {
     if (!exam || saving) return;
-    void updateSubjectDifficulty(exam.subjectId, value).then(() => setStatus('Difficulty updated. Your study schedule adjusts automatically.'))
-      .catch(error => Alert.alert('Could not update difficulty', String(error)));
+    setSaving(true);
+    void updateExamDifficulty(exam.id, value).then(() => {
+      setExam(old => old ? { ...old, difficulty: value } : old);
+      setStatus('Exam difficulty updated. Your study schedule adjusts automatically.');
+    }).catch(error => Alert.alert('Could not update difficulty', String(error)))
+      .finally(() => setSaving(false));
   };
   const defaultUrgency = () => {
     if (!exam || saving) return;
@@ -163,7 +170,7 @@ export default function ExamStudyPlanScreen() {
 
   return <SafeAreaView style={styles.root} edges={['top']}>
     <ExamStudyPlanContent title={title} subjectName={subject?.name ?? 'Subject'} subjectColor={subject?.color ?? colors.exam}
-      difficulty={subject?.difficulty ?? 3} urgency={subject?.urgency === 1 ? 'default' : 'exam'} examDate={exam.examDate}
+      difficulty={exam.difficulty} urgency={subject?.urgency === 1 ? 'default' : 'exam'} examDate={exam.examDate}
       today={today} selectedDate={selectedDate} prefs={prefs} excluded={editingDates ? excludedDraft : prefs.excluded}
       editingDates={editingDates} extraOpen={extraOpen} sessions={cards} shortfall={shortfall} error={previewError} status={status}
       saving={saving || deletion.busy} deleting={deletion.busy} loadingPreview={loadingPreview} protectedCount={protectedIds.length}

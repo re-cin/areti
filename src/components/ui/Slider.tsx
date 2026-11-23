@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, View } from 'react-native';
 import { colors } from '@/theme';
 
@@ -20,9 +20,11 @@ export function Slider({ value, onChange, accessibilityLabel, onDragStart, onDra
   const startX = useRef(0);
   const widthRef = useRef(0);
   const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
   const dragRef = useRef({ onDragStart, onDragEnd });
-  dragRef.current = { onDragStart, onDragEnd };
+  useLayoutEffect(() => {
+    onChangeRef.current = onChange;
+    dragRef.current = { onDragStart, onDragEnd };
+  }, [onChange, onDragStart, onDragEnd]);
 
   const toValue = (x: number) => {
     const usable = Math.max(1, widthRef.current - THUMB);
@@ -31,6 +33,8 @@ export function Slider({ value, onChange, accessibilityLabel, onDragStart, onDra
 
   const responder = useMemo(
     () =>
+      // PanResponder registers callbacks for later native gestures; it does not run them during render.
+      // eslint-disable-next-line react-hooks/refs
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponderCapture: () => true,

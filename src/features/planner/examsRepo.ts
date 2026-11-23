@@ -18,13 +18,13 @@ export async function examName(id: string, subjectName: string) {
   return row.length ? readJson(row[0].value, `${subjectName} Exam`) : `${subjectName} Exam`;
 }
 
-export async function createExam(input: { name: string; subjectId: string; date: number }) {
+export async function createExam(input: { name: string; subjectId: string; date: number; difficulty?: number }) {
   const id = newId();
   const now = Date.now();
   validateExamInput(input, now);
   if (startOfDay(input.date) <= startOfDay(now)) throw new Error('Choose an exam date after today.');
   db.transaction((tx) => {
-    tx.insert(studyPlans).values({ id, subjectId: input.subjectId, examDate: startOfDay(input.date), updatedAt: now }).run();
+    tx.insert(studyPlans).values({ id, subjectId: input.subjectId, examDate: startOfDay(input.date), difficulty: input.difficulty ?? 3, updatedAt: now }).run();
     tx.insert(settings).values({ key: `exam-name:${id}`, value: JSON.stringify(input.name.trim()), updatedAt: now }).run();
   });
   await regenerateSchedules();
@@ -37,7 +37,7 @@ export async function getExam(id: string) {
   return rows[0] ?? null;
 }
 
-export async function updateExam(id: string, input: { name: string; subjectId: string; date: number }) {
+export async function updateExam(id: string, input: { name: string; subjectId: string; date: number; difficulty?: number }) {
   const now = Date.now();
   if (!await getExam(id)) throw new Error('This exam no longer exists.');
   if (startOfDay(input.date) <= startOfDay(now)) throw new Error('Choose an exam date after today.');
@@ -54,7 +54,7 @@ export async function updateExam(id: string, input: { name: string; subjectId: s
       }
       cancelStudyPlanWork(tx, [id], now, false);
     }
-    tx.update(studyPlans).set({ subjectId: input.subjectId, examDate: startOfDay(input.date), updatedAt: now })
+    tx.update(studyPlans).set({ subjectId: input.subjectId, examDate: startOfDay(input.date), difficulty: input.difficulty ?? current.difficulty, updatedAt: now })
       .where(eq(studyPlans.id, id)).run();
     const value = JSON.stringify(input.name.trim());
     tx.insert(settings).values({ key: `exam-name:${id}`, value, updatedAt: now })
@@ -64,10 +64,25 @@ export async function updateExam(id: string, input: { name: string; subjectId: s
   bumpData();
 }
 
-function validateExamInput(input: { name: string; subjectId: string; date: number }, now: number) {
+function validateExamInput(input: { name: string; subjectId: string; date: number; difficulty?: number }, now: number) {
+  if (input.difficulty !== undefined) validateDifficulty(input.difficulty);
   if (!input.name.trim()) throw new Error('Enter an exam name.');
   if (!Number.isFinite(input.date) || !Number.isFinite(startOfDay(input.date)) || startOfDay(input.date) <= startOfDay(now)) throw new Error('Choose an exam date after today.');
   if (!db.select().from(subjects).where(and(eq(subjects.id, input.subjectId), isNull(subjects.deletedAt))).get()) throw new Error('Choose an existing subject.');
+}
+
+function validateDifficulty(difficulty: number) {
+  if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5) throw new Error('Choose an exam difficulty from 1 to 5.');
+}
+
+/** Only this exam's priority changes, even when other exams have the same subject. */
+export async function updateExamDifficulty(id: string, difficulty: number): Promise<void> {
+  validateDifficulty(difficulty);
+  const changed = db.update(studyPlans).set({ difficulty, updatedAt: Date.now() })
+    .where(and(eq(studyPlans.id, id), isNull(studyPlans.deletedAt), eq(studyPlans.status, 'active'))).run();
+  if (!changed.changes) throw new Error('This exam no longer exists.');
+  await regenerateSchedules();
+  bumpData();
 }
 
 export async function deleteStudyPlan(id: string) {
@@ -193,7 +208,7 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
     }
     const subject = activeSubjects.find(s => s.id === exam.subjectId)!;
     plans.push({ ...p, id: exam.id, subjectId: exam.subjectId, examDate: exam.examDate,
-      difficulty: subject.difficulty, urgency: subject.urgency, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
+      difficulty: exam.difficulty, urgency: subject.urgency, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
   }
   const externalTasks = allTasks.filter(t => !(t.source === 'generated' && knownPlanIds.has(t.planId ?? '')));
   for (const task of externalTasks) busy.push({ date: task.date, startMinute: task.startMinute, endMinute: task.endMinute });

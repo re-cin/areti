@@ -176,7 +176,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
             const selected = !prefs.studyDays || prefs.studyDays.includes(day);
             return <Pressable key={i} onPress={() => actions.toggleWeekday(day)} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} accessibilityLabel={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]} style={[styles.studyDay, selected && styles.toggleSelected]}><Text variant="caption">{label}</Text></Pressable>;
           })}</View>
-            <Text variant="caption" style={styles.scopeHint}>The focus goal is shared across exams each calendar day. Harder subjects receive a larger share of available study time.</Text>
+            <Text variant="caption" style={styles.scopeHint}>The focus goal is shared across exams each calendar day. Harder exams receive a larger share of available study time. Difficulty applies only to the current exam.</Text>
         </>}
       </NeoBox>
       <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error} onPress={actions.save} /></View>

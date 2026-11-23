@@ -29,6 +29,13 @@
       "when": 1795332795411,
       "tag": "0003_drop_local_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795404347990,
+      "tag": "0004_exam_difficulty",
+      "breakpoints": true
     }
   ]
 }

@@ -9,8 +9,9 @@ import { NeoBox } from '@/components/ui/NeoBox';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Text } from '@/components/ui/Text';
-import { formatHM, formatLongDuration, isSameDay, MONTHS, startOfDay, startOfMonth } from '@/lib/dateHelpers';
+import { formatHM, formatLongDuration, isSameDay, MONTHS, startOfMonth } from '@/lib/dateHelpers';
 import { useDbQuery } from '@/lib/useDbQuery';
+import { useToday } from '@/hooks/useToday';
 import { getGhost } from '@/features/pet/petRepo';
 import { daySummary, minutesByDay, periodSummary, streaks, subjectTotals, type Period, type StatSession } from '@/features/stats/stats';
 import { loadStatSessions } from '@/features/stats/statsRepo';
@@ -26,22 +27,23 @@ const PERIODS: { value: Period; label: string }[] = [
 export default function StatisticsScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const today = startOfDay(new Date());
+  const todayStamp = useToday();
+  const today = useMemo(() => new Date(todayStamp), [todayStamp]);
   const [selected, setSelected] = useState<Date>(today);
   const [month, setMonth] = useState<Date>(startOfMonth(today));
   const [period, setPeriod] = useState<Period>('month');
 
-  const sessions = useDbQuery(loadStatSessions, [], [] as StatSession[]);
-  const subjects = useDbQuery(subjectLookup, [], new Map<string, SubjectRow>());
-  const ghost = useDbQuery(getGhost, [], { id: '', level: 1, xp: 0, xpToNext: 200 });
+  const sessions = useDbQuery(loadStatSessions, [] as StatSession[]);
+  const subjects = useDbQuery(subjectLookup, new Map<string, SubjectRow>());
+  const ghost = useDbQuery(getGhost, { id: '', level: 1, xp: 0, xpToNext: 200 });
 
   const byDay = useMemo(() => minutesByDay(sessions), [sessions]);
-  const streak = useMemo(() => streaks(new Set(byDay.keys()), today), [byDay, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const streak = useMemo(() => streaks(new Set(byDay.keys()), today), [byDay, today]);
   const day = useMemo(() => daySummary(sessions, selected), [sessions, selected]);
 
   // Month stats follow the month shown in the calendar; week stats follow the selected day.
   const anchor = period === 'month' ? month : selected;
-  const summary = useMemo(() => periodSummary(sessions, period, anchor, today), [sessions, period, anchor, today.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const summary = useMemo(() => periodSummary(sessions, period, anchor, today), [sessions, period, anchor, today]);
   const subjectItems: SubjectTime[] = useMemo(
     () =>
       subjectTotals(sessions, summary.range).map(({ subjectId, minutes }) => {

@@ -9,7 +9,7 @@ import { useDbQuery } from '@/lib/useDbQuery';
 import { useRef, useState } from 'react';
 import { StudyPlansSheet } from './StudyPlansSheet';
 import { useSubjects } from '@/hooks/useSubjects';
-import { startOfDay } from '@/lib/dates';
+import { useToday } from '@/hooks/useToday';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { router } from 'expo-router';
 
@@ -17,7 +17,7 @@ import { router } from 'expo-router';
 export function ExamBanner() {
   const { data: exams } = useLiveQuery(examsQuery());
   const { byId } = useSubjects();
-  const labels = useDbQuery(getStudyPlanLabels, [], {} as Record<string, string>);
+  const labels = useDbQuery(getStudyPlanLabels, {} as Record<string, string>);
   const [plansOpen, setPlansOpen] = useState(false);
   const deletion = useStudyPlanDeletion();
   const afterDismiss = useRef<(() => void) | null>(null);
@@ -26,7 +26,7 @@ export function ExamBanner() {
     setPlansOpen(false);
     if (Platform.OS !== 'ios') action();
   };
-  const today = startOfDay(Date.now());
+  const today = useToday();
   const upcoming = exams.filter(exam => exam.examDate >= today && byId.has(exam.subjectId));
   const availablePlans = exams.filter(exam => byId.has(exam.subjectId));
   const next = upcoming[0];

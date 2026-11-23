@@ -89,7 +89,7 @@ export default function ForgotPassword() {
 
         {step === 'email' ? (
           <View>
-            <Text style={styles.intro}>Enter your account's email and we'll send you a code to reset your password.</Text>
+            <Text style={styles.intro}>Enter your account&apos;s email and we&apos;ll send you a code to reset your password.</Text>
             <Text style={styles.label}>Email address</Text>
             <TextField
               value={email}
@@ -118,7 +118,7 @@ export default function ForgotPassword() {
           <View>
             <Text style={styles.intro}>
               We sent a code to <Text style={styles.strong}>{email.trim()}</Text>. Enter it below with your new password.
-              Check your spam folder if you don't see it.
+              Check your spam folder if you don&apos;t see it.
             </Text>
 
             <Text style={styles.label}>Code</Text>

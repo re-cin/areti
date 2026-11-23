@@ -4,7 +4,7 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 `generatePlan(input) -> { sessions, shortfallBlocks }`. No UI, database or Expo imports.
 
 ## Agreed rules
-1. A subject must exist before a plan can be made. Each subject has a **difficulty** and an **urgency**.
+1. A subject must exist before a plan can be made. Each exam has its own **difficulty**; the subject supplies its name, color and existing urgency value.
 2. With no exam, subjects use default values. With an exam, the exam date adjusts how often sessions are scheduled and how they are split.
 3. Exams share free time and one daily focus goal. First protect subjects on their last available study day. Then use earlier free windows and allocate focus minutes by difficulty-weighted fair sharing; earlier deadlines, then urgency + difficulty, break ties.
 4. Pending session times can move when plans compete. Preserve each exam's original total focus-block target: unfinished blocks remain outstanding, with a visible shortfall if they cannot fit before the exam.
@@ -15,10 +15,10 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 9. **Break rule:** at most **2 hours of focus before a long break of at least 30 minutes** (`rules.ts`, `splitIntoRuns`).
 
 ## Workload and availability
-- Difficulty and urgency use the existing subject values (default 3, scale 1–5).
+- Difficulty belongs to the exam/study plan (default Medium = 3, scale 1-5). Two exams for the same subject can have different difficulty. Urgency still uses the existing subject value.
 - Low/Medium/High difficulty (stored 1/3/5) has study-time weights 1/2/3. With comparable deadlines, pending workloads and block lengths, six available blocks split approximately 1/2/3. The share also accounts for remaining focus minutes per eligible day, so nearer deadlines and fewer study days matter.
 - Fairness carries across generated days, so a one-block daily goal can still give easier subjects time. Difficulty changes redistribute unfinished study and preserve existing total targets, completed work and fixed sessions. A completed hard target releases its share to other subjects.
-- Set or change difficulty in Settings > Subjects; New Subject also saves the same difficulty scale. Subject edits trigger automatic regeneration while the app is active.
+- Set difficulty in Set/Edit Exam or Exam Study Plan. Changing it rebalances pending study automatically and preserves every other exam's difficulty, including exams for the same subject. All Exams preference saves do not copy difficulty between exams. Subjects have no difficulty field or control.
 - A new exam targets `focusCount × eligible study days` focus blocks. Defaults: four 25-minute blocks, 5-minute short breaks, at least 30-minute long breaks, 19:00–21:00, all weekdays.
 - Study-day and excluded-date preferences are honored. No generated study takes place on or after the exam date, or earlier than the current time.
 - The daily focus goal is shared across exams. Manual tasks and fixed sessions consume capacity. Breaks consume clock time but not focus minutes.
@@ -31,7 +31,8 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 - New exams receive a schedule immediately. Existing exams are scheduled on the next app launch/foreground refresh.
 - Refresh after task, subject, exam or session changes, and once per minute while the app is active. On foreground, catch up the timer before moving missed work. A closed app catches up when reopened; no background execution service is required.
 - Missed unfinished blocks move to the next eligible free slots. Partially completed missed sessions retain completed blocks as history; only the unfinished blocks move.
-- Preferences and sessions are saved with matching generated Daily Tasks, frozen timer settings and per-exam shortfalls in one synchronous SQLite transaction. No schema migration is needed.
+- Preferences and sessions are saved with matching generated Daily Tasks, frozen timer settings and per-exam shortfalls in one synchronous SQLite transaction.
+- SQLite migration `0004_exam_difficulty` copies legacy subject difficulty to linked exams before removing the subject column, preserving existing choices and study history. Apply Supabase migration `20261123090000_exam_difficulty.sql` before syncing the updated app; it makes the matching cloud schema change.
 - Repeated refreshes preserve unchanged session IDs and timestamps. Preview uses the same engine without writing. Generate/Regenerate and Save persist the schedule; All Exams applies preferences to upcoming exams while all plans continue to share capacity.
 
 ## Study-plan lifecycle

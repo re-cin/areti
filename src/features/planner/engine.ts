@@ -41,7 +41,7 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
   const remaining = new Map(plans.map(p => [p.id, Math.max(0, Math.floor(p.remainingBlocks))]));
   const sessions: StudySession[] = [];
   const deadline = Math.max(today, ...plans.map(p => startOfDay(p.examDate)));
-  // Weighted fair allocation in MINUTES: harder subjects receive more of limited capacity.
+  // Weighted fair allocation in MINUTES: harder exams receive more of limited capacity.
   // Remaining work per eligible day also accounts for deadlines and unavailable dates.
   // Carry service across days so a small daily goal doesn't always choose the same subject.
   const servedMinutes = new Map<string, number>();
@@ -139,7 +139,7 @@ export function generatePlan(input: PlannerInput): PlannerResult {
   const result = generateSchedule({ now: input.today, dailyGoalMin: input.dailyGoalMin,
     busy: fixed.map(s => ({ date: parseDate(s.date), startMinute: input.window.startMinute,
       endMinute: input.window.startMinute + sessionMinutes(s.blocks, { focusMin: FOCUS_BLOCK_MIN, focusCount: 4, breakMin: 5, longBreakMin: 30 }), focusMinutes: s.blocks * FOCUS_BLOCK_MIN })),
-    plans: selected.map(s => ({ ...s, id: s.id, subjectId: s.id, examDate: deadline, start: input.window.startMinute, end: input.window.endMinute,
+    plans: selected.map(s => ({ ...s, id: s.id, subjectId: s.id, examDate: deadline, difficulty: input.exam?.difficulty ?? 3, start: input.window.startMinute, end: input.window.endMinute,
       remainingBlocks: Math.max(0, Math.ceil(days * Math.floor(input.dailyGoalMin / FOCUS_BLOCK_MIN) / Math.max(1, selected.length)) - fixed.filter(b => b.subjectId === s.id).reduce((sum, b) => sum + b.blocks, 0)),
       focusMin: FOCUS_BLOCK_MIN, focusCount: 4, breakMin: 5, longBreakMin: 30,
       studyDays: input.studyDays, excluded: input.excludedDates.map(parseDate) })) });
