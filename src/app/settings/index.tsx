@@ -23,8 +23,8 @@ export default function UserSettingsScreen() {
     { icon: 'book', label: 'Subjects', href: '/settings/subjects' },
     { icon: 'sliders', label: 'Preferences', onPress: () => comingSoon('Preferences') }, // page not built yet
     { icon: 'shield', label: 'Data & Privacy', href: '/settings/privacy' },
-    { icon: 'help', label: 'Help & Support', onPress: () => comingSoon('Help & Support') },
-    { icon: 'info', label: 'Terms & Policies', onPress: () => comingSoon('Terms & Policies') },
+    { icon: 'help', label: 'Help & Support', href: '/settings/help' },
+    { icon: 'info', label: 'Terms & Policies', href: '/settings/terms' },
   ];
 
   return (

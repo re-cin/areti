@@ -5,11 +5,21 @@ import { plannedSessions, studyPlans, subjects, tasks } from '@/db/schema';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { bumpData } from '@/stores/dataVersion';
 
-export type SubjectRow = { id: string; name: string; color: string };
+export type SubjectRow = {
+  id: string;
+  name: string;
+  color: string;
+  difficulty: number;
+};
 
 export async function listSubjects(): Promise<SubjectRow[]> {
   const rows = await db
-    .select({ id: subjects.id, name: subjects.name, color: subjects.color })
+    .select({
+      id: subjects.id,
+      name: subjects.name,
+      color: subjects.color,
+      difficulty: subjects.difficulty,
+    })
     .from(subjects)
     .where(isNull(subjects.deletedAt))
     .orderBy(asc(subjects.sortOrder), asc(subjects.name));
@@ -41,6 +51,19 @@ export async function renameSubject(id: string, name: string): Promise<void> {
 
 export async function setSubjectColor(id: string, color: string): Promise<void> {
   await db.update(subjects).set({ color, updatedAt: Date.now() }).where(eq(subjects.id, id));
+  bumpData();
+}
+
+export async function reorderSubjects(orderedIds: string[]): Promise<void> {
+  const now = Date.now();
+
+  for (const [index, id] of orderedIds.entries()) {
+    await db
+      .update(subjects)
+      .set({ sortOrder: index, updatedAt: now })
+      .where(eq(subjects.id, id));
+  }
+
   bumpData();
 }
 
