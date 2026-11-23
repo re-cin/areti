@@ -19,6 +19,7 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
 import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
+import { showNotice } from '@/stores/notice';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
 
@@ -88,6 +89,11 @@ export default function Auth() {
       else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
       router.replace('/planner');
+      // Welcome pop-up once the Planner is on screen.
+      const welcome = isSignUp
+        ? { title: 'Welcome to areti!', message: 'Your account is ready. Add your subjects and Reti will help you stay on track.' }
+        : { title: 'Welcome back!', message: 'Your study plans and progress are syncing to this phone.' };
+      setTimeout(() => showNotice({ ...welcome, buttonLabel: "Let's go" }), 450);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
