@@ -57,13 +57,26 @@ export default function Auth() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromOnboarding = from === 'onboarding';
   const [fade] = useState(() => new Animated.Value(0));
+  // Reti floats gently up and down (same as the Welcome page). Starts at rest, so the
+  // hand-off from the onboarding animation stays seamless.
+  const [float] = useState(() => new Animated.Value(0));
   useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (reduce) return fade.setValue(1);
       Animated.timing(fade, { toValue: 1, duration: 380, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(float, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(float, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      );
+      loop.start();
     });
-  }, [fade]);
+    return () => loop?.stop();
+  }, [fade, float]);
   const fadeStyle = { opacity: fade };
+  const floatStyle = { transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] };
   const riseStyle = {
     opacity: fade,
     transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
@@ -131,7 +144,7 @@ export default function Auth() {
           )}
           <Animated.Image
             source={MASCOT}
-            style={[styles.mascot, fromOnboarding ? null : fadeStyle]}
+            style={[styles.mascot, fromOnboarding ? null : fadeStyle, floatStyle]}
             accessibilityLabel="Reti the ghost"
           />
           <Animated.View style={[styles.wordmark, fadeStyle]}>
