@@ -7,7 +7,6 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { AuthError, resendSignUpCode, verifySignUpCode } from '@/lib/auth';
-import { showWelcome } from '@/lib/welcome';
 import { colors, fonts, spacing } from '@/theme';
 
 /** Seconds before "Resend code" can be used again (Supabase also limits how often it emails). */
@@ -45,8 +44,7 @@ export default function VerifyEmail() {
     try {
       await verifySignUpCode(email, digits);
       if (router.canDismiss()) router.dismissAll();
-      router.replace('/planner'); // confirmed and signed in
-      showWelcome('new-account');
+      router.replace('/welcome'); // confirmed and signed in: welcome page, then the Planner
     } catch (e) {
       setError(errorMessage(e));
       setBusy(false);

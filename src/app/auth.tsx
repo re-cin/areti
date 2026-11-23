@@ -88,8 +88,12 @@ export default function Auth() {
       if (isSignUp) await signUp(email, password);
       else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
-      router.replace('/planner');
-      showWelcome(isSignUp ? 'new-account' : 'signed-in');
+      if (isSignUp) {
+        router.replace('/welcome'); // new account: welcome page, then the Planner
+      } else {
+        router.replace('/planner');
+        showWelcome();
+      }
     } catch (e) {
       if (e instanceof AuthError && e.code === 'confirm-email') {
         // Sign up: Supabase just emailed the code. Sign in before confirming: send a fresh one.

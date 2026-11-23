@@ -102,6 +102,7 @@ export default function RootLayout() {
           <Stack.Screen name="auth" options={{ animation: 'none' }} />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="verify-email" />
+          <Stack.Screen name="welcome" options={{ gestureEnabled: false, animation: 'fade' }} />
         </Stack>
         <NoticeDialog />
       </>
