@@ -1,6 +1,6 @@
 // expo-notifications is loaded lazily: importing it directly crashes Expo Go on Android
 // ("Cannot find native module 'ExpoTopicSubscriptionModule'"). See src/lib/notificationPermission.ts.
-import { loadNotifications } from '@/lib/notificationPermission';
+import { loadNotifications, notificationsAvailable } from '@/lib/notificationPermission';
 import { Platform } from 'react-native';
 import type { PhaseEnd } from './session';
 import { playChime } from '@/features/audio/playChime';
@@ -72,7 +72,8 @@ export async function scheduleSessionReminders(reminders: SessionReminder[]): Pr
     console.warn('[notifications] reminders', e);
   }
 }
-const supported = (Platform.OS === 'ios' || Platform.OS === 'android') && loadNotifications() !== null;
+// Checked without loading expo-notifications; the package loads on first use.
+const supported = (Platform.OS === 'ios' || Platform.OS === 'android') && notificationsAvailable;
 let configured = false;
 
 async function configure() {

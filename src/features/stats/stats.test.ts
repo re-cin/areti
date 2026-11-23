@@ -34,7 +34,7 @@ describe('intensityLevel', () => {
 describe('daySummary', () => {
   it('adds up minutes, sessions and xp for one day', () => {
     const sessions = [s(at(2026, 9, 10), 25), s(at(2026, 9, 10, 15), 10, 'b', false), s(at(2026, 9, 11), 25)];
-    expect(daySummary(sessions, new Date(2026, 8, 10))).toEqual({ minutes: 35, sessions: 2, xp: 10 + 2 });
+    expect(daySummary(sessions, new Date(2026, 8, 10))).toEqual({ minutes: 35, sessions: 2, xp: 25 }); // 25-min block credits 25; the 10-min one is under 15, so 0
   });
 });
 

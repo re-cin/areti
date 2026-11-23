@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
@@ -17,11 +17,13 @@ type Props = {
 };
 
 /** Small centered card for changing the display name. */
-export function EditNameModal({ visible, initialName, onCancel, onSave, title = 'Edit name', placeholder = 'Your name' }: Props) {
+export function EditNameModal(props: Props) {
+  // A fresh key each time it opens resets the field to initialName.
+  return <EditNameForm key={`${props.visible}:${props.initialName}`} {...props} />;
+}
+
+function EditNameForm({ visible, initialName, onCancel, onSave, title = 'Edit name', placeholder = 'Your name' }: Props) {
   const [name, setName] = useState(initialName);
-  useEffect(() => {
-    if (visible) setName(initialName);
-  }, [visible, initialName]);
 
   const trimmed = name.trim();
   const save = () => trimmed && onSave(trimmed);

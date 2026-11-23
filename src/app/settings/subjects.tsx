@@ -18,7 +18,7 @@ import { borders, colors, fonts, spacing } from '@/theme';
 
 /** Settings > Subjects (Figma "Subjects"): one card per subject with color, rename and delete. */
 export default function SubjectsScreen() {
-  const subjects = useDbQuery(listSubjects, [], [] as SubjectRow[]);
+  const subjects = useDbQuery(listSubjects, [] as SubjectRow[]);
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<SubjectRow | null>(null);
   const [coloring, setColoring] = useState<SubjectRow | null>(null);

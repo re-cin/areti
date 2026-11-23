@@ -51,6 +51,8 @@ type TimerStore = Snapshot & {
   tick: () => Promise<void>;
   /** Forget the current run without saving anything (used after deleting all data). */
   reset: () => void;
+  /** Continue the current run as an unplanned session after its study plan is deleted. */
+  detachPlannedSession: (expectedId: string) => Promise<void>;
 };
 
 const IDLE: Snapshot = {
@@ -214,6 +216,12 @@ export const useTimer = create<TimerStore>((set, get) => {
       } finally {
         ticking = false;
       }
+    },
+
+    detachPlannedSession: async (expectedId) => {
+      if (get().plannedSessionId !== expectedId) return;
+      set({ plannedSessionId: null });
+      await setSetting(SETTING_KEYS.timerState, snapshotOf(get()));
     },
 
     reset: () => {

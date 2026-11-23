@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { setPomodoroVisible, showNotice } from '@/stores/notice';
 import { Animated, PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -45,11 +45,13 @@ export default function PomodoroScreen() {
   const collapsedTop = Math.max(expandedTop, screenH > 0 ? Math.min(fullH, screenH - 140) : fullH);
   const measured = screenH > 0 && fullH > 0;
 
-  const sheetY = useRef(new Animated.Value(10_000)).current; // sheet's top edge, in px from the screen top
+  const [sheetY] = useState(() => new Animated.Value(10_000)); // sheet's top edge, in px from the screen top
   const pos = useRef({ expandedTop, collapsedTop, expanded: false, dragStart: 0 });
-  pos.current.expandedTop = expandedTop;
-  pos.current.collapsedTop = collapsedTop;
-  pos.current.expanded = expanded;
+  useLayoutEffect(() => {
+    pos.current.expandedTop = expandedTop;
+    pos.current.collapsedTop = collapsedTop;
+    pos.current.expanded = expanded;
+  }, [expandedTop, collapsedTop, expanded]);
   const listRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const listY = useRef(0);
 
@@ -66,7 +68,7 @@ export default function PomodoroScreen() {
     }).start();
   };
   const snapRef = useRef(snap);
-  snapRef.current = snap;
+  useLayoutEffect(() => { snapRef.current = snap; });
 
   // Leaving the tab resets the page to its default state (sheet closed, list at the top),
   // so it looks fresh when you come back.
@@ -91,6 +93,8 @@ export default function PomodoroScreen() {
 
   const drag = useMemo(
     () =>
+      // PanResponder registers callbacks for later native gestures; it does not run them during render.
+      // eslint-disable-next-line react-hooks/refs
       PanResponder.create({
         // Claim vertical drags: any drag while closed; while open, only a downward drag with the list at its top.
         onMoveShouldSetPanResponderCapture: (_e, g) => {
@@ -146,9 +150,9 @@ export default function PomodoroScreen() {
   // ---- Data ----
   const timer = useTimer();
   const remaining = useTimer(selectRemainingMs);
-  const settings = useDbQuery(loadPomodoroSettings, [], DEFAULT_POMODORO);
-  const ghost = useDbQuery(getGhost, [], { id: '', level: 1, xp: 0, xpToNext: 200 });
-  const upcoming = useDbQuery(() => listUpcomingToday(), [], [] as UpcomingSession[]);
+  const settings = useDbQuery(loadPomodoroSettings, DEFAULT_POMODORO);
+  const ghost = useDbQuery(getGhost, { id: '', level: 1, xp: 0, xpToNext: 200 });
+  const upcoming = useDbQuery(listUpcomingToday, [] as UpcomingSession[]);
 
   const idle = timer.status === 'idle';
   // Idle shows a full focus block (e.g. 25:00) so the countdown starts from there, not from 00:00.

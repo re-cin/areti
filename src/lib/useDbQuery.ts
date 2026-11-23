@@ -1,22 +1,22 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useDataVersion } from '@/stores/dataVersion';
 
 /**
  * Runs an async database read when the screen gains focus, and again whenever
  * data changes (see bumpData) or a dependency changes.
  */
-export function useDbQuery<T>(query: () => Promise<T>, deps: readonly unknown[], initial: T): T {
+export function useDbQuery<T>(query: () => Promise<T>, initial: T, refreshToken = 0): T {
   const version = useDataVersion((s) => s.version);
   const [data, setData] = useState<T>(initial);
-  const queryRef = useRef(query);
-  queryRef.current = query;
 
   useFocusEffect(
     useCallback(() => {
+      // These signals intentionally rerun stable database queries after writes or a manual refresh.
+      void version;
+      void refreshToken;
       let alive = true;
-      queryRef
-        .current()
+      query()
         .then((result) => {
           if (alive) setData(result);
         })
@@ -24,8 +24,7 @@ export function useDbQuery<T>(query: () => Promise<T>, deps: readonly unknown[],
       return () => {
         alive = false;
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [version, ...deps]),
+    }, [query, version, refreshToken]),
   );
 
   return data;

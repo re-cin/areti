@@ -7,7 +7,7 @@ import type { AudioSource } from 'expo-audio';
 //
 // The current files are simple placeholders generated for the beta.
 
-/* eslint-disable @typescript-eslint/no-require-imports */
+
 export const BACKGROUND_SOUND_FILES: Record<string, AudioSource | null> = {
   Off: null,
   'Rain & Cozy Cafe': require('../../../assets/sounds/background/rain-cozy-cafe.m4a'),
@@ -24,7 +24,7 @@ export const NOTIFICATION_SOUND_FILES: Record<string, AudioSource | null> = {
   'Desk Bell': require('../../../assets/sounds/notification/desk-bell.m4a'),
   'Digital Beep': require('../../../assets/sounds/notification/digital-beep.m4a'),
 };
-/* eslint-enable @typescript-eslint/no-require-imports */
+
 
 export const BACKGROUND_SOUNDS = Object.keys(BACKGROUND_SOUND_FILES);
 export const NOTIFICATION_SOUNDS = Object.keys(NOTIFICATION_SOUND_FILES);

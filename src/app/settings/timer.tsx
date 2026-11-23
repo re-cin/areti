@@ -51,13 +51,14 @@ export default function TimerSettingsScreen() {
       return () => setSettingsOpen(false);
     }, [setSettingsOpen]),
   );
-  const [task, setTask] = useState<TaskSummary | null>(null);
+  const [taskResult, setTaskResult] = useState<{ id: string; row: TaskSummary | null } | null>(null);
+  const task = taskResult?.id === taskId ? taskResult?.row ?? null : null;
   useEffect(() => {
-    if (!taskId) {
-      setTask(null);
-      return;
-    }
-    getTaskSummary(taskId).then(setTask).catch(() => setTask(null));
+    if (!taskId) return;
+    let live = true;
+    getTaskSummary(taskId).then(row => { if (live) setTaskResult({ id: taskId, row }); })
+      .catch(() => { if (live) setTaskResult({ id: taskId, row: null }); });
+    return () => { live = false; };
   }, [taskId]);
   const insets = useSafeAreaInsets();
   // Locked while a volume slider is being dragged, so the page does not scroll with your finger.

@@ -1,8 +1,8 @@
-export type Subject = { id: string; name: string; difficulty: number; urgency: number };
+export type Subject = { id: string; name: string; urgency: number };
 
 export type PlannerInput = {
   today: Date;
-  exam?: { subjectId: string; date: Date };
+  exam?: { subjectId: string; date: Date; difficulty?: number };
   subjects: Subject[];
   window: { startMinute: number; endMinute: number }; // minutes from midnight
   studyDays: number[]; // 0 = Sunday ... 6 = Saturday

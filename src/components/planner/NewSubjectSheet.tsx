@@ -1,15 +1,12 @@
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
-import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { addSubject } from '@/db/queries/subjects';
-import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
-import { startOfDay } from '@/lib/dates';
 import { borders, colors, spacing } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Animated,
   BackHandler,
@@ -22,12 +19,6 @@ import {
 } from 'react-native';
 
 const SUBJECT_COLORS = colors.subjectPalette;
-
-type Difficulty = 'low' | 'medium' | 'high';
-type Urgency = 'default' | 'exam';
-
-// TODO: the schema says the difficulty scale is TBD (docs/planner-rules.md). Adjust these numbers to match.
-const DIFFICULTY_VALUE: Record<Difficulty, number> = { low: 1, medium: 3, high: 5 };
 
 type Props = {
   visible: boolean;
@@ -42,33 +33,31 @@ type Props = {
  */
 export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
   const { subjects } = useSubjects();
-  const { openPicker, pickerElement } = useDateTimePicker();
 
-  const progress = useRef(new Animated.Value(0)).current;
+  const [progress] = useState(() => new Animated.Value(0));
   const [mounted, setMounted] = useState(visible);
   const [sheetH, setSheetH] = useState(520);
 
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(SUBJECT_COLORS[0]);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [urgency, setUrgency] = useState<Urgency>('default');
-  const [examDate, setExamDate] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const [wasVisible, setWasVisible] = useState(false);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      const unused = SUBJECT_COLORS.find(c => !subjects.some(s => s.color.toLowerCase() === c.toLowerCase()));
+      setName('');
+      setColor(unused ?? SUBJECT_COLORS[0]);
+      setPaletteOpen(false);
+      setMounted(true);
+    }
+  }
 
   // Slide in/out, and reset the form every time it opens.
   useEffect(() => {
     if (visible) {
-      const unused = SUBJECT_COLORS.find(
-        (c) => !subjects.some((s) => s.color.toLowerCase() === c.toLowerCase()),
-      );
-      setName('');
-      setColor(unused ?? SUBJECT_COLORS[0]);
-      setPaletteOpen(false);
-      setDifficulty('medium');
-      setUrgency('default');
-      setExamDate(null);
-      setMounted(true);
       Animated.timing(progress, { toValue: 1, duration: 260, useNativeDriver: true }).start();
     } else {
       Animated.timing(progress, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
@@ -89,24 +78,12 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  const close = () => {
+  function close() {
     Keyboard.dismiss();
     onClose();
-  };
+  }
 
   const valid = name.trim().length > 0;
-
-  const onUrgencyChange = (key: Urgency) => {
-    if (key === 'default') {
-      setUrgency('default');
-      setExamDate(null);
-      return;
-    }
-    openPicker('date', new Date(examDate ?? Date.now()), (d) => {
-      setExamDate(startOfDay(d));
-      setUrgency('exam');
-    });
-  };
 
   const submit = async () => {
     if (!valid || saving) return;
@@ -115,8 +92,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
       const id = await addSubject({
         name: name.trim(),
         color,
-        difficulty: DIFFICULTY_VALUE[difficulty],
-        examDate: urgency === 'exam' ? examDate : null,
       });
       onCreated(id);
       close();
@@ -126,10 +101,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
   };
 
   if (!mounted) return null;
-
-  const examLabel = examDate
-    ? new Date(examDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : 'Set Exam Date';
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -193,27 +164,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
             </View>
           )}
 
-          <Text variant="smallStrong" style={styles.label}>Difficulty</Text>
-          <Segmented
-            value={difficulty}
-            onChange={setDifficulty}
-            options={[
-              { key: 'low', label: 'Low' },
-              { key: 'medium', label: 'Medium' },
-              { key: 'high', label: 'High' },
-            ]}
-          />
-
-          <Text variant="smallStrong" style={styles.label}>Urgency</Text>
-          <Segmented
-            value={urgency}
-            onChange={onUrgencyChange}
-            options={[
-              { key: 'default', label: 'Default' },
-              { key: 'exam', label: examLabel, icon: 'calendar-outline', flex: 1.3 },
-            ]}
-          />
-
           <View style={{ marginTop: spacing.lg }}>
             <NeoButton
               label="Add Subject"
@@ -226,7 +176,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
         </Animated.View>
       </KeyboardAvoidingView>
 
-      {pickerElement}
     </View>
   );
 }

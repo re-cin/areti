@@ -25,8 +25,9 @@ type Props = {
 };
 
 /** The signed-in user's profile picture link (null = default icon). Re-reads on focus and after edits/sync. */
+async function getProfilePicture() { return (await getProfile()).pictureUri; }
 function useProfilePicture(): string | null {
-  return useDbQuery(async () => (await getProfile()).pictureUri, [], null);
+  return useDbQuery(getProfilePicture, null);
 }
 
 /** "Avatar  Title ........ gear" with the thick rule underneath, as in the Figma screens. */
@@ -34,6 +35,10 @@ export function ScreenHeader(props: Props) {
   if (props.leading !== undefined || props.trailing !== undefined || props.onAvatarPress !== undefined) {
     return <LeadingHeader {...props} />;
   }
+  return <DefaultHeader {...props} />;
+}
+
+function DefaultHeader(props: Props) {
   const { title, back, gearHref } = props;
   const pictureUri = useProfilePicture();
   return (

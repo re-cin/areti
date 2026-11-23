@@ -72,7 +72,7 @@ export default function AddTaskScreen() {
 
   const { width } = useWindowDimensions();
   const x = useSharedValue(0);
-  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
+  const slideStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.get() }] }));
 
   const goBack = () => {
     navigation.setOptions({ animation: 'none' }); // we already animated it out ourselves
@@ -83,9 +83,9 @@ export default function AddTaskScreen() {
   };
 
   const onBackPress = () => {
-    x.value = withTiming(width, { duration: 220 }, (finished) => {
+    x.set(withTiming(width, { duration: 220 }, (finished) => {
       if (finished) runOnJS(goBack)();
-    });
+    }));
   };
   
   const { date: dateParam, from } = useLocalSearchParams<{ date?: string; from?: string }>();

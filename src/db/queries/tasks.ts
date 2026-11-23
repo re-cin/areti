@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../client';
 import { newId } from '../id';
 import { plannedSessions, tasks } from '../schema';
@@ -26,23 +26,34 @@ export async function addTask(input: {
 }) {
   const id = newId();
   await db.insert(tasks).values({ id, updatedAt: Date.now(), ...input });
+  bumpData();
   void refreshSessionReminders(); // 5-minute and start reminders with its Notification Sound
   return id;
 }
 
 export async function setTaskDone(id: string, done: boolean) {
-  await db.update(tasks).set({ done, updatedAt: Date.now() }).where(eq(tasks.id, id));
+  const now = Date.now();
+  db.transaction(tx => {
+    const task = tx.select().from(tasks).where(eq(tasks.id, id)).get();
+    tx.update(tasks).set({ done, updatedAt: now }).where(eq(tasks.id, id)).run();
+    if (task?.source === 'generated') {
+      const session = tx.select().from(plannedSessions).where(eq(plannedSessions.id, id)).get();
+      if (session) tx.update(plannedSessions).set({ completedBlocks: done ? session.blocks : 0, updatedAt: now })
+        .where(eq(plannedSessions.id, id)).run();
+    }
+  });
+  bumpData();
   void refreshSessionReminders(); // a ticked task doesn't remind
 }
 
 export async function deleteTask(id: string) {
   const now = Date.now();
-  await db.update(tasks).set({ deletedAt: now, updatedAt: now }).where(eq(tasks.id, id)); // soft delete
-  // Its Pomodoro session (if scheduled) goes too, so it leaves Upcoming Sessions on every phone.
-  await db
-    .update(plannedSessions)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(eq(plannedSessions.planId, `task:${id}`), isNull(plannedSessions.deletedAt)));
+  // Soft delete. Its Pomodoro session (if scheduled) goes too, so it leaves Upcoming Sessions on every phone.
+  db.transaction(tx => {
+    tx.update(tasks).set({ deletedAt: now, updatedAt: now }).where(eq(tasks.id, id)).run();
+    tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now })
+      .where(and(or(eq(plannedSessions.id, id), eq(plannedSessions.planId, `task:${id}`)), isNull(plannedSessions.deletedAt))).run();
+  });
   bumpData();
   void refreshSessionReminders();
 }

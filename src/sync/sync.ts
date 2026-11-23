@@ -1,6 +1,6 @@
 import { getTableColumns, getTableName, gt, sql } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
-import Storage from 'expo-sqlite/kv-store';
+import { deviceStorage as Storage } from '@/lib/storage';
 import { addDatabaseChangeListener } from 'expo-sqlite';
 import { AppState } from 'react-native';
 import { db } from '@/db/client';

@@ -20,7 +20,7 @@ import { plannerColors as extra } from './plannerColors';
 /** Speech-bubble card: current streak, minutes studied today and tasks remaining. */
 export function StreakCard({ remaining }: { remaining: number }) {
   // Re-reads when the Planner is shown and after any data change (a finished focus block, a sync).
-  const { streak, minutes } = useDbQuery(loadToday, [], { streak: 0, minutes: 0 });
+  const { streak, minutes } = useDbQuery(loadToday, { streak: 0, minutes: 0 });
   return (
     <View style={styles.streakWrap}>
       <View style={styles.streakCard}>

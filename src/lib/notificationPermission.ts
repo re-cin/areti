@@ -22,6 +22,8 @@ const missingNativeModule =
 export function loadNotifications(): NotificationsModule | null {
   if (missingNativeModule) return null;
   try {
+    // A guarded lazy require prevents native package initialization during route loading.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require('expo-notifications') as NotificationsModule;
   } catch {
     return null;
@@ -33,7 +35,7 @@ export const notificationsAvailable = !missingNativeModule;
 
 /** Whether the user already allowed notifications. False if unknown or unavailable. */
 export async function hasNotificationPermission(): Promise<boolean> {
-  const Notifications = loadNotifications();
+  const Notifications = await loadNotifications();
   if (!Notifications) return false;
   try {
     return (await Notifications.getPermissionsAsync()).granted;
@@ -44,7 +46,7 @@ export async function hasNotificationPermission(): Promise<boolean> {
 
 /** Shows the system prompt. Resolves true if the user allowed notifications. */
 export async function requestNotificationPermission(): Promise<boolean> {
-  const Notifications = loadNotifications();
+  const Notifications = await loadNotifications();
   if (!Notifications) {
     console.warn('Notifications are not available in Expo Go on Android. Use a development build to test this.');
     return false;
