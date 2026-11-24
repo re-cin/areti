@@ -250,7 +250,11 @@ export function UserDetail() {
                 <div>
                   {sub.plan === 'premium' && sub.current_period_end
                     ? <>{sub.billing_period && `${BILLING_LABEL[sub.billing_period]} · `}{daysLeft !== null && daysLeft < 0 ? 'Ended' : 'Due'} <b style={{ color: dueColor }}>{formatDate(sub.current_period_end)}</b>{daysLeft !== null && daysLeft >= 0 && ` · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`}</>
-                    : sub.plan === 'premium' ? 'No end date set' : 'Free plan, no due date'}
+                    : sub.plan === 'premium'
+                      ? 'No end date set'
+                      : sub.status === 'expired' && sub.current_period_end
+                        ? <>Free plan · Premium ended <b>{formatDate(sub.current_period_end)}</b></>
+                        : 'Free plan, no due date'}
                 </div>
               </div>
               <button className="btn btn-sm btn-peach" onClick={() => setEditing(true)}>
