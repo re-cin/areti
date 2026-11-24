@@ -1,4 +1,4 @@
-import { and, isNull, ne } from 'drizzle-orm';
+import { isNull, like, ne } from 'drizzle-orm';
 import Constants from 'expo-constants';
 import { db } from '../client';
 import {
@@ -47,19 +47,26 @@ export async function exportAllData(): Promise<string> {
 }
 
 /**
- * Erases the study logs (Pomodoro / focus session history) and nothing else:
- * subjects, schedules, tasks, the ghost's XP and the account stay.
- * Uses a soft delete (deletedAt), like every other delete in the app, so it can sync later.
- * Returns how many sessions were cleared.
+ * "Clear study history": erases every exam (study plan), task, scheduled Pomodoro session and logged
+ * focus session, and the exam ticks in Daily Tasks. Statistics, the streak and Reti's level/XP are
+ * worked out from the focus log, so they start again too. Subjects and settings stay.
+ * Exams go too: otherwise automatic scheduling would rebuild their sessions and tasks right away.
+ * Soft delete (deletedAt + a new updatedAt), like every other delete, so the next sync erases them
+ * on the account and on every other phone as well.
+ * Returns how many focus sessions were cleared.
  */
 export async function clearStudyHistory(): Promise<number> {
   const now = Date.now();
-  const cleared = await db
-    .update(focusSessions)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(isNull(focusSessions.deletedAt)))
-    .returning({ id: focusSessions.id });
-  return cleared.length;
+  const cleared = db.transaction((tx) => {
+    const logs = tx.update(focusSessions).set({ deletedAt: now, updatedAt: now })
+      .where(isNull(focusSessions.deletedAt)).returning({ id: focusSessions.id }).all();
+    tx.update(tasks).set({ deletedAt: now, updatedAt: now }).where(isNull(tasks.deletedAt)).run();
+    tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now }).where(isNull(plannedSessions.deletedAt)).run();
+    tx.update(studyPlans).set({ deletedAt: now, updatedAt: now }).where(isNull(studyPlans.deletedAt)).run();
+    tx.update(settings).set({ value: 'false', updatedAt: now }).where(like(settings.key, 'exam-done:%')).run();
+    return logs.length;
+  });
+  return cleared;
 }
 
 function safeParse(value: string) {

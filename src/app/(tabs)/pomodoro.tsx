@@ -1,7 +1,9 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { setPomodoroVisible, showNotice } from '@/stores/notice';
-import { Animated, PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Animated, PanResponder, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Pill } from '@/components/ui/Pill';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UpcomingSessions } from '@/components/pomodoro/UpcomingSessions';
 import { BlockDots } from '@/components/ui/BlockDots';
@@ -37,6 +39,8 @@ export default function PomodoroScreen() {
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
   const [confirmingStop, setConfirmingStop] = useState(false);
+  // Upcoming session tapped in the list: its details show on the timer, and play starts it.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // ---- Bottom sheet: follows the finger, snaps open (compact timer on top) or closed (full timer). ----
   const [screenH, setScreenH] = useState(0);
@@ -79,6 +83,7 @@ export default function PomodoroScreen() {
         listRef.current?.scrollTo({ y: 0, animated: false });
         pos.current.expanded = false;
         setExpanded(false);
+        setSelectedId(null);
         sheetY.setValue(pos.current.collapsedTop);
       },
       [sheetY],
@@ -156,11 +161,15 @@ export default function PomodoroScreen() {
   const upcoming = useDbQuery(listUpcomingToday, [] as UpcomingSession[]);
 
   const idle = timer.status === 'idle';
+  // Only while idle: a tapped session that is still in the list (not removed or finished meanwhile).
+  const selected = idle ? upcoming.find((s) => s.id === selectedId) ?? null : null;
   // Idle shows a full focus block (e.g. 25:00) so the countdown starts from there, not from 00:00.
-  const displayMs = idle ? blockMin(settings, 0) * 60_000 : remaining;
+  // With a session picked, it shows that session's own block length and blocks.
+  const displayMs = idle ? blockMin(selected?.settings ?? settings, 0) * 60_000 : remaining;
   const run = timer.run;
-  const totalDots = run ? run.totalBlocks : settings.focusCount;
-  const filledDots = run ? run.completedBlocks + (run.phase === 'focus' ? 1 : 0) : 0;
+  const totalDots = run ? run.totalBlocks : selected ? selected.blocks : settings.focusCount;
+  // Black = finished blocks only; the block in progress (and every later one) stays white.
+  const filledDots = run ? run.completedBlocks : selected ? selected.completedBlocks : 0;
 
   const start = async (opts?: StartOptions) => {
     if ((await getNotificationPermission()) === 'undetermined') await requestNotificationPermission();
@@ -173,6 +182,7 @@ export default function PomodoroScreen() {
         showNotice({ title: 'A session is running', message: 'Stop the current session before starting another one.' });
       return;
     }
+    setSelectedId(null);
     void start({
       subjectId: s.subjectId,
       subjectName: s.subjectName,
@@ -181,6 +191,16 @@ export default function PomodoroScreen() {
       blocks: s.blocks - s.completedBlocks,
       settings: s.settings, // the settings this session was scheduled with
     });
+  };
+
+  // Tapping a session no longer starts it: it shows its details on the timer (tap again to clear).
+  const selectSession = (s: UpcomingSession) => {
+    if (!idle) {
+      if (s.id !== timer.plannedSessionId)
+        showNotice({ title: 'A session is running', message: 'Stop the current session before starting another one.' });
+      return;
+    }
+    setSelectedId((prev) => (prev === s.id ? null : s.id));
     snap(false);
   };
 
@@ -228,15 +248,27 @@ export default function PomodoroScreen() {
         }}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, opacity: fullOpacity, paddingTop: insets.top, paddingHorizontal: spacing.lg }}>
         <View style={{ paddingBottom: spacing.xs }}>
-          <ScreenHeader title="Pomodoro" gearHref="/settings/account" />
+          <ScreenHeader title="Pomodoro" gearHref="/settings" />
         </View>
 
         <View style={{ alignItems: 'center', marginTop: spacing.md, gap: 6 }}>
-          <Text style={{ fontFamily: fonts.semiBold, fontSize: 14 }}>LVL {ghost.level}</Text>
+          <Text style={{ fontFamily: fonts.semiBold, fontSize: 14 }}>{ghost.label}</Text>
           <BlockDots total={totalDots} filled={filledDots} />
-          <Text variant="caption" style={{ fontFamily: fonts.semiBold, fontSize: 11 }}>
-            {ghost.label}
-          </Text>
+          {selected && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4, maxWidth: '100%' }}>
+              <Pill label={selected.subjectName} color={selected.subjectColor} />
+              <Text style={{ fontFamily: fonts.semiBold, fontSize: 13, flexShrink: 1 }} numberOfLines={1}>
+                {[
+                  selected.taskTitle,
+                  `${selected.blocks - selected.completedBlocks} of ${selected.blocks} ${selected.blocks === 1 ? 'block' : 'blocks'} left`,
+                  `${selected.settings.focusMin} min focus`,
+                ].filter(Boolean).join(' · ')}
+              </Text>
+              <Pressable onPress={() => setSelectedId(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Clear selected session">
+                <Ionicons name="close-circle" size={18} color={colors.ink} />
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {/* Timer dial */}
@@ -304,7 +336,8 @@ export default function PomodoroScreen() {
           }}>
           {idle ? (
             <>
-              <IconButton icon="play" size={64} radius={16} backgroundColor={colors.teal} accessibilityLabel="Start focus" onPress={() => void start()} />
+              <IconButton icon="play" size={64} radius={16} backgroundColor={colors.teal} accessibilityLabel={selected ? `Start ${selected.subjectName} session` : 'Start focus'}
+                onPress={() => (selected ? startSession(selected) : void start())} />
               <IconButton icon="settings" size={48} accessibilityLabel="Timer settings" onPress={() => router.push('/settings/timer')} />
             </>
           ) : (
@@ -372,11 +405,12 @@ export default function PomodoroScreen() {
             sessions={upcoming}
             focusMin={timer.cfg?.focusMin ?? settings.focusMin}
             activeSessionId={timer.plannedSessionId}
+            selectedSessionId={selected?.id ?? null}
             expanded={expanded}
             onToggleExpanded={() => snap(!expanded)}
             // + opens Add Task in Pomodoro mode: only "Schedule Pomodoro" can be used there.
             onAdd={() => router.push({ pathname: '/planner/add-task', params: { from: 'pomodoro' } })}
-            onStart={startSession}
+            onSelect={selectSession}
           />
         </ScrollView>
       </Animated.View>

@@ -1,7 +1,7 @@
 import { View } from 'react-native';
 import { borders, colors } from '@/theme';
 
-/** One rounded square per focus block. Filled = done or in progress. */
+/** One rounded square per focus block. Black = finished, white = not finished yet. */
 export function BlockDots({ total, filled, size = 22 }: { total: number; filled: number; size?: number }) {
   return (
     <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'center' }} accessibilityLabel={`Block ${filled} of ${total}`}>
@@ -25,7 +25,7 @@ export function BlockDots({ total, filled, size = 22 }: { total: number; filled:
               borderRadius: 7,
               borderWidth: borders.thin,
               borderColor: colors.ink,
-              backgroundColor: i < filled ? colors.ink : colors.surface,
+              backgroundColor: i < filled ? colors.ink : colors.white,
             }}
           />
         </View>

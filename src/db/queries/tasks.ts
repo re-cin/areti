@@ -31,6 +31,27 @@ export async function addTask(input: {
   return id;
 }
 
+/** One task by id (null when missing or deleted). Used by Edit Task. */
+export async function getTask(id: string): Promise<Task | null> {
+  const rows = await db.select().from(tasks).where(and(eq(tasks.id, id), isNull(tasks.deletedAt))).limit(1);
+  return rows[0] ?? null;
+}
+
+/** Saves an edited plain task (Edit Task screen). */
+export async function updateTask(id: string, input: {
+  title: string;
+  subjectId: string;
+  date: number;
+  startMinute: number;
+  endMinute: number;
+  notificationSound?: string;
+}) {
+  await db.update(tasks).set({ ...input, updatedAt: Date.now() }).where(eq(tasks.id, id));
+  bumpData();
+  void refreshSessionReminders(); // the reminders follow the new time and sound
+  return id;
+}
+
 export async function setTaskDone(id: string, done: boolean) {
   const now = Date.now();
   db.transaction(tx => {

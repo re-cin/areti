@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Text } from '@/components/ui/Text';
 import { colors, radii } from '@/theme';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
-import { dotColor, plannerColors as extra } from './plannerColors';
+import { plannerColors as extra } from './plannerColors';
 import { examsQuery, getStudyPlanLabels } from '@/features/planner/examsRepo';
 import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
 import { useDbQuery } from '@/lib/useDbQuery';
@@ -35,7 +35,6 @@ export function ExamBanner() {
   return (
     <><View style={styles.banner}>
       <View style={styles.bannerLeft}>
-        <View style={[styles.bannerDot, { backgroundColor: dotColor }]} />
         <Text variant="captionStrong" numberOfLines={1} style={{ flexShrink: 1 }}>
           {next ? `${subject?.name ?? 'Subject'} exam${upcoming.length > 1 ? ` and ${upcoming.length - 1} more` : ''} in ` : 'No upcoming exams'}
           {next && <Text variant="captionStrong" color={extra.orange}>{days} {days === 1 ? 'day' : 'days'}</Text>}
@@ -60,8 +59,7 @@ export function ExamBanner() {
 
 const styles = StyleSheet.create({
   banner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 },
-  bannerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, paddingRight: 8 },
-  bannerDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1, borderColor: colors.ink },
+  bannerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 8 },
   viewBtn: {
     flexDirection: 'row',
     alignItems: 'center',

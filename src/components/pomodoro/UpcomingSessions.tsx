@@ -1,5 +1,6 @@
 
 import { Alert, Pressable, View } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
@@ -13,13 +14,16 @@ type Props = {
   sessions: UpcomingSession[];
   focusMin: number;
   activeSessionId: string | null;
+  /** The session whose details are shown on the timer (tapped, not started yet). */
+  selectedSessionId?: string | null;
   expanded: boolean;
   onToggleExpanded: () => void;
   onAdd: () => void;
-  onStart: (s: UpcomingSession) => void;
+  /** Tap: shows the session's details on the timer. It starts with the play button. */
+  onSelect: (s: UpcomingSession) => void;
 };
 
-export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded, onToggleExpanded, onAdd, onStart }: Props) {
+export function UpcomingSessions({ sessions, focusMin, activeSessionId, selectedSessionId, expanded, onToggleExpanded, onAdd, onSelect }: Props) {
   const timeFormat = usePreferences(s => s.preferences.timeFormat);
 
   const confirmDelete = (s: UpcomingSession) =>
@@ -39,7 +43,6 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
           <Text variant="heading" style={{ fontSize: 19 }}>
             Upcoming Sessions
           </Text>
-          <Icon name={expanded ? 'chevronDown' : 'chevronUp'} size={18} strokeWidth={2.5} color={colors.muted} />
         </Pressable>
         <Pressable onPress={onAdd} hitSlop={10} accessibilityRole="button" accessibilityLabel="Add a session">
           <Icon name={expanded ? 'plus' : 'plusCircle'} size={24} />
@@ -57,13 +60,15 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
           // Total session length = focus blocks + short and long breaks (session structure rules).
           const minutes = sessionLengthMin(s.settings, s.blocks);
           const active = s.id === activeSessionId;
+          const picked = !active && s.id === selectedSessionId;
           return (
             <Pressable
               key={s.id}
-              onPress={() => onStart(s)}
+              onPress={() => onSelect(s)}
               onLongPress={() => confirmDelete(s)}
               accessibilityRole="button"
-              accessibilityHint="Starts this session. Long press to remove it."
+              accessibilityHint="Shows this session on the timer. Long press to remove it."
+              accessibilityState={{ selected: picked }}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -79,10 +84,11 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
                     {s.taskTitle}
                   </Text>
                 ) : null}
-                <Text variant="caption" color={colors.muted} style={{ fontFamily: fonts.semiBold, paddingLeft: 4 }}>
+                <Text variant="caption" color={active ? colors.orange : colors.muted} style={{ fontFamily: fonts.semiBold, paddingLeft: 4 }}>
                   {active ? 'IN PROGRESS' : s.startMinute != null ? formatClock(s.startMinute, timeFormat) : 'Any time'}
                 </Text>
               </View>
+              {picked && <Ionicons name="checkmark-circle" size={20} color={colors.ink} style={{ marginRight: spacing.sm }} />}
               <View style={{ alignItems: 'flex-end' }}>
                 <Text variant="caption" color={colors.muted} style={{ fontSize: 14 }}>
                   {left} {left === 1 ? 'block' : 'blocks'}

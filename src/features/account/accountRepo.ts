@@ -1,4 +1,7 @@
 import { getEntitlements } from '@/features/planner/examsRepo';
+import { clearStudyHistory as clearStudyHistoryRows } from '@/db/queries/privacy';
+import { refreshSessionReminders } from '@/features/timer/reminders';
+import { getGhost } from '@/features/pet/petRepo';
 import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects } from '@/db/schema';
@@ -106,9 +109,16 @@ export async function exportAllData(): Promise<string> {
   return JSON.stringify(data, null, 2);
 }
 
-/** "Clear study history": soft-deletes focus logs only. Subjects, plans, XP and settings stay. */
-export async function clearStudyHistory(): Promise<void> {
-  const now = Date.now();
-  await db.update(focusSessions).set({ deletedAt: now, updatedAt: now }).where(isNull(focusSessions.deletedAt));
+/**
+ * "Clear study history": erases all tasks, scheduled Pomodoro sessions and logged focus time
+ * (see db/queries/privacy), so statistics, the streak and Reti's level and XP start again.
+ * Exams go too (see db/queries/privacy). Subjects and settings stay.
+ * Returns how many focus sessions were erased.
+ */
+export async function clearStudyHistory(): Promise<number> {
+  const count = await clearStudyHistoryRows();
   bumpData();
+  void refreshSessionReminders(); // nothing left to remind about
+  void getGhost().catch(() => {}); // saves the reset level/XP on the ghost row (and its cloud copy)
+  return count;
 }

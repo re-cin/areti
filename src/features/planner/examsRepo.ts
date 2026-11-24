@@ -416,6 +416,31 @@ export async function saveStudySchedule(id: string, prefs: ExamPreferences) {
   return persistSchedule(new Date(), { id, prefs });
 }
 
+/**
+ * What the exam cards in Daily Tasks need: which exams were ticked off, and which have a generated
+ * study plan (editing those opens the study planner instead of Edit Exam).
+ * Ticks are stored as settings (`exam-done:<id>`), so they sync and never touch the schedule.
+ */
+export async function getExamCardState(): Promise<{ done: string[]; generated: string[] }> {
+  const rows = await db.select().from(settings);
+  const done = rows.filter(r => r.key.startsWith('exam-done:') && readJson<boolean>(r.value, false) === true)
+    .map(r => r.key.slice('exam-done:'.length));
+  const sessions = await db.select({ planId: plannedSessions.planId }).from(plannedSessions).where(isNull(plannedSessions.deletedAt));
+  const generated = new Set(sessions.map(s => s.planId));
+  for (const r of rows) if (r.key.startsWith('exam-prefs:')) generated.add(r.key.slice('exam-prefs:'.length));
+  return { done, generated: [...generated] };
+}
+
+/** Ticks an exam card off (or back on) in Daily Tasks. */
+export async function setExamDone(id: string, done: boolean) {
+  const key = `exam-done:${id}`;
+  const value = JSON.stringify(done);
+  const now = Date.now();
+  await db.insert(settings).values({ key, value, updatedAt: now })
+    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now } });
+  bumpData();
+}
+
 export async function getStudyPlanLabels(): Promise<Record<string, string>> {
   const rows = await db.select().from(settings);
   return Object.fromEntries(rows.filter(row => row.key.startsWith('exam-name:'))

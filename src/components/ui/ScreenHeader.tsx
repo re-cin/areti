@@ -9,7 +9,8 @@ import { Icon } from './Icon';
 import { Text } from './Text';
 
 // Two ways to use this header (both versions of the app use it):
-//  1. Pomodoro / Statistics / Settings:  <ScreenHeader title="..." back? gearHref?="/settings/..." />
+//  1. Pomodoro / Statistics / Settings:  <ScreenHeader title="..." back? gearHref?="/settings" />
+// On every screen the profile picture opens Account Settings and the gear opens Settings.
 //  2. Ryan's screens (Planner):           <ScreenHeader title="..." leading="back|avatar|none" onAvatarPress trailing={...} />
 type Props = {
   title: string;
@@ -49,7 +50,7 @@ function DefaultHeader(props: Props) {
             <Icon name="chevronLeft" size={24} strokeWidth={2.5} />
           </Pressable>
         ) : (
-          <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Profile and settings">
+          <Pressable onPress={() => router.push('/settings/account')} accessibilityRole="button" accessibilityLabel="Account settings">
             <Avatar size={36} backgroundColor={colors.surface} uri={pictureUri} />
           </Pressable>
         )}
@@ -94,10 +95,10 @@ function LeadingHeader({ title, leading = 'none', onAvatarPress, trailing }: Pro
   );
 }
 
-/** Small gear button for the right side of a header. Opens Account Settings unless given another action. */
+/** Small gear button for the right side of a header. Opens Settings unless given another action. */
 export function HeaderGear({ onPress }: { onPress?: () => void }) {
   return (
-    <Pressable onPress={onPress ?? (() => router.push('/settings/account'))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Settings">
+    <Pressable onPress={onPress ?? (() => router.push('/settings'))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Settings">
       <Icon name="settings" size={22} />
     </Pressable>
   );

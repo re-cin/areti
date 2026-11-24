@@ -72,7 +72,7 @@ export default function RetiScreen() {
             <ScreenHeader
               title={pet.name}
               leading="avatar"
-              onAvatarPress={() => router.push('/settings')}
+              onAvatarPress={() => router.push('/settings/account')}
               trailing={<HeaderGear onPress={() => router.push('/settings')} />}
             />
           </View>

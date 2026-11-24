@@ -5,7 +5,7 @@ import { spacing } from '@/theme';
 
 /**
  * Top of the Planner. Same header as the Pomodoro screen (ScreenHeader + spacing),
- * so both tabs line up: avatar opens Settings, gear on the right.
+ * so both tabs line up: avatar opens Account Settings, gear opens Settings.
  */
 export function PlannerHeader() {
   return (
@@ -13,9 +13,9 @@ export function PlannerHeader() {
       <ScreenHeader
         title="Planner"
         leading="avatar"
-        onAvatarPress={() => router.push('/settings')}
-        // Gear opens Account Settings (same as Pomodoro and Statistics).
-        trailing={<HeaderGear onPress={() => router.push('/settings/account')} />}
+        onAvatarPress={() => router.push('/settings/account')}
+        // Gear opens Settings (same as Pomodoro and Statistics).
+        trailing={<HeaderGear onPress={() => router.push('/settings')} />}
       />
     </View>
   );

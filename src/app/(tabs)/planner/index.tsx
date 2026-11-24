@@ -8,9 +8,11 @@ import { TaskCard } from '@/components/planner/TaskCard';
 import { WeekBar } from '@/components/planner/WeekBar';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
-import { setTaskDone } from '@/db/queries/tasks';
-import { toCardTask } from '@/features/planner/cardTask';
-import { examsQuery } from '@/features/planner/examsRepo';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { deleteTask, setTaskDone, type Task as DbTask } from '@/db/queries/tasks';
+import { examCardTask, toCardTask, type CardTask } from '@/features/planner/cardTask';
+import { deleteStudyPlan, examsQuery, getExamCardState, getStudyPlanLabels, setExamDone } from '@/features/planner/examsRepo';
+import { useTimer } from '@/features/timer/timerStore';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useTaskDays } from '@/hooks/useTaskDays';
 import { useTasksByDay } from '@/hooks/useTasksByDay';
@@ -31,7 +33,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -51,11 +53,20 @@ const CARD_CHROME = 11; // outline (1.5 x 2) + teal padding (4 x 2) around the c
 const BUTTONS_H = 100; // the Add Task / Set Exam bar drawn over the bottom of the screen
 const EXPAND_MS = 380;
 const loadExams = async () => examsQuery();
+const loadLabels = async () => getStudyPlanLabels();
+const loadExamState = async () => getExamCardState();
+
+type Exam = Awaited<ReturnType<typeof loadExams>>[number];
+/** One card in Daily Tasks / Finished: a task row, or an exam on its exam day. */
+type Item = { key: string; card: CardTask } & ({ task: DbTask; exam?: undefined } | { exam: Exam; task?: undefined });
 
 
 export default function PlannerScreen() {
   const today = startOfDay(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
+  // The month shown in the month view. Moving months changes only this, so the highlighted day stays
+  // the day you picked (today by default) instead of the same date in every month.
+  const [visibleMonth, setVisibleMonth] = useState(today);
 
   const firstDay = usePreferences(s => s.preferences.firstDay);
   const weekStartsOn = firstDay === 'Sunday' ? 0 : 1;
@@ -67,14 +78,19 @@ export default function PlannerScreen() {
   if (previousRouteSelection !== routeSelection) {
     setPreviousRouteSelection(routeSelection);
     const next = dateParam ? startOfDay(Number(dateParam)) : NaN;
-    if (Number.isFinite(next)) setSelectedDate(next);
+    if (Number.isFinite(next)) {
+      setSelectedDate(next);
+      setVisibleMonth(next);
+    }
   }
 
   const weekStart = startOfWeek(selectedDate, weekStartsOn);
   const days = weekDays(weekStart);
 
   const { byId } = useSubjects();
-  const exams = useDbQuery(loadExams, [] as Awaited<ReturnType<typeof loadExams>>);
+  const exams = useDbQuery(loadExams, [] as Exam[]);
+  const labels = useDbQuery(loadLabels, {} as Record<string, string>);
+  const examState = useDbQuery(loadExamState, { done: [] as string[], generated: [] as string[] });
   const examsByDay = new Map<number, { id: string; subject: string; color: string }[]>();
   for (const exam of exams) {
     const subject = byId.get(exam.subjectId);
@@ -84,12 +100,95 @@ export default function PlannerScreen() {
     examsByDay.set(exam.examDate, onDay);
   }
   const { todo, finished } = useTasksForDate(selectedDate);
-  const { todo: todayTodo } = useTasksForDate(today);
+
+  // Exams sit at the top of the selected day's list, as orange cards.
+  const doneExams = new Set(examState.done);
+  const examItems: Item[] = exams
+    .filter(exam => exam.examDate === selectedDate && byId.has(exam.subjectId))
+    .map(exam => ({
+      key: `exam:${exam.id}`,
+      exam,
+      card: examCardTask(exam, labels[exam.id] ?? `${byId.get(exam.subjectId)!.name} Exam`, doneExams.has(exam.id), byId),
+    }));
+  const taskItem = (task: DbTask): Item => ({ key: `task:${task.id}`, task, card: toCardTask(task, byId) });
+  const todoItems = [...examItems.filter(i => !i.card.done), ...todo.map(taskItem)];
+  const finishedItems = [...examItems.filter(i => i.card.done), ...finished.map(taskItem)];
+
+  // Edit mode: tap cards to select them for deleting; the pencil opens the right editor.
+  const [editing, setEditing] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const stopEditing = () => {
+    setEditing(false);
+    setSelected(new Set());
+  };
+  const allItems = [...todoItems, ...finishedItems];
+  const selectedItems = allItems.filter(i => selected.has(i.key));
+
+  const onCardPress = (item: Item) => {
+    if (editing) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(item.key)) next.delete(item.key);
+        else next.add(item.key);
+        return next;
+      });
+      return;
+    }
+    if (item.exam) void setExamDone(item.exam.id, !item.card.done);
+    else if (!item.card.hasPomodoro) void setTaskDone(item.task.id, !item.card.done);
+  };
+
+  const onCardEdit = (item: Item) => {
+    stopEditing();
+    if (item.exam) {
+      // An exam with a generated study plan opens the study planner; a plain exam opens Edit Exam.
+      if (examState.generated.includes(item.exam.id)) {
+        router.push({ pathname: '/planner/exam-study-plan', params: { id: item.exam.id } });
+      } else {
+        router.push({ pathname: '/planner/set-exam', params: { id: item.exam.id } });
+      }
+      return;
+    }
+    const task = item.task;
+    if (task.source === 'generated' && task.planId) {
+      router.push({ pathname: '/planner/exam-study-plan', params: { id: task.planId } });
+    } else if (task.hasPomodoro) {
+      router.navigate('/pomodoro');
+    } else {
+      router.push({ pathname: '/planner/add-task', params: { id: task.id } });
+    }
+  };
+
+  const deleteSelected = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      for (const item of selectedItems) {
+        if (item.exam) {
+          const result = await deleteStudyPlan(item.exam.id);
+          if (result.detachedSessionId) await useTimer.getState().detachPlannedSession(result.detachedSessionId)
+            .catch(error => console.warn('[planner] Exam deleted; timer persistence will retry', error));
+        } else {
+          await deleteTask(item.task.id);
+        }
+      }
+      setConfirmDelete(false);
+      stopEditing();
+    } catch (error) {
+      setConfirmDelete(false);
+      Alert.alert('Could not delete', String(error));
+    } finally {
+      setDeleting(false);
+    }
+  };
+  const deletingExams = selectedItems.some(i => i.exam);
   const markedDays = useTaskDays(days[0], days[6]);
 
   // Month view (opened from the calendar icon)
   const [expanded, setExpanded] = useState(false);
-  const weeks = monthWeeks(selectedDate, weekStartsOn);
+  const weeks = monthWeeks(visibleMonth, weekStartsOn);
   const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const progress = useSharedValue(0); // 0 = week strip, 1 = full month
@@ -101,6 +200,8 @@ export default function PlannerScreen() {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         setExpanded(false);
         progress.set(0);
+        setEditing(false);
+        setSelected(new Set());
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [],
@@ -112,7 +213,10 @@ export default function PlannerScreen() {
   }, [expanded, progress]);
 
   const toggleCalendar = () => {
-    if (!expanded) scrollRef.current?.scrollTo({ y: 0, animated: true });
+    if (!expanded) {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      setVisibleMonth(selectedDate);
+    }
     setExpanded(!expanded);
   };
 
@@ -141,6 +245,13 @@ export default function PlannerScreen() {
   const spacerStyle = useAnimatedStyle(() => ({ height: progress.get() * BUTTONS_H }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.get() }));
 
+  const selectDay = (day: number) => {
+    setSelectedDate(day);
+    setVisibleMonth(day);
+    setSelected(new Set());
+  };
+  const goToToday = () => selectDay(startOfDay(new Date()));
+
   return (
     <SafeAreaView edges={['top']} style={styles.root}>
       <ScrollView
@@ -162,10 +273,11 @@ export default function PlannerScreen() {
 
           <View onLayout={(e) => setWeekBarH(e.nativeEvent.layout.height)}>
             <WeekBar
-              title={expanded ? monthLabel(selectedDate) : weekLabel(weekStart)}
+              title={expanded ? monthLabel(visibleMonth) : weekLabel(weekStart)}
               expanded={expanded}
-              onPrev={() => setSelectedDate(expanded ? addMonths(selectedDate, -1) : addDays(selectedDate, -7))}
-              onNext={() => setSelectedDate(expanded ? addMonths(selectedDate, 1) : addDays(selectedDate, 7))}
+              onPrev={() => (expanded ? setVisibleMonth(addMonths(visibleMonth, -1)) : selectDay(addDays(selectedDate, -7)))}
+              onNext={() => (expanded ? setVisibleMonth(addMonths(visibleMonth, 1)) : selectDay(addDays(selectedDate, 7)))}
+              onToday={goToToday}
               onToggleCalendar={toggleCalendar}
             />
           </View>
@@ -173,7 +285,7 @@ export default function PlannerScreen() {
           <View style={styles.dayStrip}>
             <Animated.View style={[styles.dayStripInner, trackStyle]}>
               <Animated.View style={weekRowStyle} pointerEvents={expanded ? 'none' : 'auto'}>
-                <DayRow days={days} selectedDate={selectedDate} markedDays={markedDays} examDays={new Set(examsByDay.keys())} onSelect={setSelectedDate} />
+                <DayRow days={days} selectedDate={selectedDate} markedDays={markedDays} examDays={new Set(examsByDay.keys())} onSelect={selectDay} />
               </Animated.View>
               <Animated.View
                 style={[styles.monthLayer, { height: monthInnerH }, monthStyle]}
@@ -181,11 +293,12 @@ export default function PlannerScreen() {
                 <MonthGrid
                   weeks={weeks}
                   selectedDate={selectedDate}
+                  month={visibleMonth}
                   tasksByDay={tasksByDay}
                   examsByDay={examsByDay}
                   subjectsById={byId}
                   onSelect={(day) => {
-                    setSelectedDate(day);
+                    selectDay(day);
                     setExpanded(false);
                   }}
                 />
@@ -198,7 +311,7 @@ export default function PlannerScreen() {
         {/* 2: slides up underneath the pinned block */}
         <View style={styles.pad}>
           <ExamBanner />
-          <StreakCard remaining={todayTodo.length} />
+          <StreakCard remaining={todoItems.length} />
           <PlannerMascot />
         </View>
 
@@ -208,26 +321,49 @@ export default function PlannerScreen() {
           <View pointerEvents="none" style={styles.sheetOverscroll} />
           <View style={styles.sectionRow}>
             <Text variant="smallStrong" color={extra.muted}>Daily Tasks</Text>
-            <Pressable style={styles.editBtn} hitSlop={10}>
-              <Ionicons name="pencil" size={13} color={extra.muted} />
-              <Text variant="smallStrong" color={extra.muted}>Edit</Text>
-            </Pressable>
+            {editing ? (
+              <View style={styles.editActions}>
+                <Pressable
+                  style={[styles.editBtn, !selected.size && styles.editBtnOff]}
+                  hitSlop={10}
+                  disabled={!selected.size}
+                  onPress={() => setConfirmDelete(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete selected">
+                  <Ionicons name="trash-outline" size={13} color={colors.dangerDark} />
+                  <Text variant="smallStrong" color={colors.dangerDark}>
+                    Delete{selected.size ? ` (${selected.size})` : ''}
+                  </Text>
+                </Pressable>
+                <Pressable style={styles.editBtn} hitSlop={10} onPress={stopEditing} accessibilityRole="button">
+                  <Ionicons name="close" size={14} color={extra.muted} />
+                  <Text variant="smallStrong" color={extra.muted}>Cancel edit</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable style={styles.editBtn} hitSlop={10} onPress={() => setEditing(true)} accessibilityRole="button">
+                <Ionicons name="pencil" size={13} color={extra.muted} />
+                <Text variant="smallStrong" color={extra.muted}>Edit</Text>
+              </Pressable>
+            )}
           </View>
 
           <View style={styles.taskList}>
-            {todo.map((t) => (
-              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, true)} />
+            {todoItems.map((item) => (
+              <TaskCard key={item.key} task={item.card} editing={editing} selected={selected.has(item.key)}
+                onPress={() => onCardPress(item)} onEdit={() => onCardEdit(item)} />
             ))}
           </View>
 
           <View style={[styles.sectionRow, { marginTop: spacing.md }]}>
             <Text variant="smallStrong" color={extra.muted}>Finished</Text>
-            <Text variant="caption" color={extra.muted}>{finished.length} done</Text>
+            <Text variant="caption" color={extra.muted}>{finishedItems.length} done</Text>
           </View>
 
           <View style={styles.taskList}>
-            {finished.map((t) => (
-              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, false)} />
+            {finishedItems.map((item) => (
+              <TaskCard key={item.key} task={item.card} editing={editing} selected={selected.has(item.key)}
+                onPress={() => onCardPress(item)} onEdit={() => onCardEdit(item)} />
             ))}
           </View>
         </View>
@@ -260,6 +396,19 @@ export default function PlannerScreen() {
           />
         </LinearGradient>
       </View>
+
+      <ConfirmDialog
+        visible={confirmDelete}
+        title={`Delete ${selectedItems.length} ${selectedItems.length === 1 ? 'item' : 'items'}?`}
+        icon="trash"
+        destructive
+        message={deletingExams
+          ? 'Selected exams also lose their unfinished study sessions. Completed tasks, recorded focus time and earned XP are kept.'
+          : 'The selected tasks will be removed from your planner.'}
+        confirmLabel={deleting ? 'Deleting…' : 'Delete'}
+        onConfirm={() => void deleteSelected()}
+        onCancel={() => { if (!deleting) setConfirmDelete(false); }}
+      />
     </SafeAreaView>
   );
 }
@@ -317,6 +466,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  editBtnOff: { opacity: 0.4 },
+  editActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
 
   taskList: { gap: spacing.md },
 

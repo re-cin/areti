@@ -2,7 +2,7 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router
 import { useCallback, useEffect, useState } from 'react';
 import { useAudioFocus } from '@/stores/audioFocus';
 import { showNotice } from '@/stores/notice';
-import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
+import { Alert, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dropdown } from '@/components/ui/Dropdown';
 import { NeoBox } from '@/components/ui/NeoBox';
@@ -13,6 +13,7 @@ import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
 import {
   DEFAULT_POMODORO,
+  DEFAULT_TIMING,
   loadPomodoroSettings,
   POMODORO_LIMITS,
   savePomodoroSettings,
@@ -203,6 +204,20 @@ export default function TimerSettingsScreen() {
             {interval('breakMin', 'Break time', minutes)}
           </View>
           {interval('longBreakMin', 'Long break time', minutes)}
+          {/* Back to 4 × 25 min, 5 min breaks, 15 min long break (saved with Save Settings). */}
+          <Pressable
+            onPress={() => {
+              preview.stop();
+              setForm((f) => ({ ...f, ...DEFAULT_TIMING }));
+            }}
+            hitSlop={8}
+            style={{ alignSelf: 'flex-end', marginTop: spacing.sm }}
+            accessibilityRole="button"
+            accessibilityLabel="Reset timing to defaults">
+            <Text variant="caption" color={colors.tealText} style={{ fontFamily: fonts.semiBold }}>
+              Reset to defaults (4 × 25 min, 5 / 15 min breaks)
+            </Text>
+          </Pressable>
           {running && (
             <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.xs }}>
               A session is running. Your changes (times and sounds) apply from the next session.

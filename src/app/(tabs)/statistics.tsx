@@ -2,7 +2,8 @@ import { useCallback, useMemo, useRef, useState, type ComponentRef } from 'react
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GhostAvatar } from '@/components/GhostAvatar';
+import { PetGhost } from '@/components/pet/PetGhost';
+import { usePetView } from '@/hooks/usePetView';
 import { CalendarHeatmap } from '@/components/stats/CalendarHeatmap';
 import { FocusBarChart } from '@/components/stats/FocusBarChart';
 import { SubjectBreakdown, type SubjectTime } from '@/components/stats/SubjectBreakdown';
@@ -52,6 +53,11 @@ export default function StatisticsScreen() {
   const sessions = useDbQuery(loadStatSessions, [] as StatSession[]);
   const subjects = useDbQuery(subjectLookup, new Map<string, SubjectRow>());
   const ghost = useDbQuery(getGhost, DEFAULT_GHOST);
+  // Reti as the Pet tab shows him right now (his current mood, or an added expression for it).
+  // A new random pick among added expressions each time this tab is opened, like the Pet tab.
+  const [rollSeed, setRollSeed] = useState(() => Date.now());
+  useFocusEffect(useCallback(() => setRollSeed(Date.now()), []));
+  const pet = usePetView(rollSeed);
 
   const byDay = useMemo(() => minutesByDay(sessions), [sessions]);
   // Streak = days with a finished focus block (same as the Planner and Reti's streak bonus).
@@ -84,7 +90,7 @@ export default function StatisticsScreen() {
     <View style={{ flex: 1, backgroundColor: colors.page }}>
       {/* Sticky header: stays put while the page scrolls */}
       <View style={{ backgroundColor: colors.teal, paddingTop: insets.top, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs, zIndex: 2 }}>
-        <ScreenHeader title="Statistics" gearHref="/settings/account" />
+        <ScreenHeader title="Statistics" gearHref="/settings" />
       </View>
 
       <ScrollView ref={scrollRef} contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: spacing.xxl }} showsVerticalScrollIndicator={false}>
@@ -106,11 +112,19 @@ export default function StatisticsScreen() {
         <View style={{ paddingHorizontal: spacing.lg, gap: spacing.lg }}>
           {/* Reti + speech bubble */}
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md }}>
-            <View style={{ alignItems: 'center', width: 96 }}>
-              <Text style={{ fontFamily: fonts.semiBold, fontSize: 13 }}>LVL {ghost.level}</Text>
-              <GhostAvatar size={88} />
+            <View style={{ alignItems: 'center', width: 96, gap: 4 }}>
+              <View style={{ backgroundColor: colors.ink, borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 3 }}>
+                <Text color={colors.white} style={{ fontFamily: fonts.semiBold, fontSize: 13 }}>LVL {ghost.level}</Text>
+              </View>
+              <PetGhost expression={pet.expression.id} overlay={pet.overlay} customUrl={pet.custom?.url} width={72} />
             </View>
             <View style={{ flex: 1, gap: 4 }}>
+              {/* XP on top, the speech bubble under it */}
+              <View style={{ alignSelf: 'flex-end', backgroundColor: colors.ink, borderRadius: radii.pill, paddingHorizontal: 10, paddingVertical: 2 }}>
+                <Text color={colors.white} style={{ fontFamily: fonts.semiBold, fontSize: 11 }}>
+                  {ghost.label}
+                </Text>
+              </View>
               <View
                 style={{
                   backgroundColor: colors.surface,
@@ -160,9 +174,6 @@ export default function StatisticsScreen() {
                   </Text>
                 )}
               </View>
-              <Text style={{ alignSelf: 'flex-end', fontFamily: fonts.semiBold, fontSize: 11 }}>
-                {ghost.label}
-              </Text>
             </View>
           </View>
 

@@ -3,18 +3,20 @@ import { Text } from '@/components/ui/Text';
 import { colors, spacing } from '@/theme';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-/** Week (or month) title with previous / next arrows and the calendar toggle. */
+/** Week (or month) title with previous / next arrows, a "back to today" target and the calendar toggle. */
 export function WeekBar({
   title,
   expanded,
   onPrev,
   onNext,
+  onToday,
   onToggleCalendar,
 }: {
   title: string;
   expanded: boolean;
   onPrev: () => void;
   onNext: () => void;
+  onToday: () => void;
   onToggleCalendar: () => void;
 }) {
   return (
@@ -29,11 +31,11 @@ export function WeekBar({
         </Pressable>
       </View>
       <View style={styles.weekIcons}>
-        <Pressable onPress={onToggleCalendar} hitSlop={10} accessibilityLabel={expanded ? 'Show week' : 'Show month'}>
-          <Ionicons name={expanded ? 'calendar' : 'calendar-outline'} size={17} color={colors.ink} />
+        <Pressable onPress={onToday} hitSlop={10} accessibilityRole="button" accessibilityLabel="Go to today">
+          <Ionicons name="locate-outline" size={18} color={colors.ink} />
         </Pressable>
-        <Pressable hitSlop={10}>
-          <Ionicons name="grid-outline" size={17} color={colors.ink} />
+        <Pressable onPress={onToggleCalendar} hitSlop={10} accessibilityRole="button" accessibilityLabel={expanded ? 'Show week' : 'Show month'}>
+          <Ionicons name={expanded ? 'calendar' : 'calendar-outline'} size={17} color={colors.ink} />
         </Pressable>
       </View>
     </View>
@@ -49,5 +51,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
   weekNav: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, justifyContent: 'flex-start', paddingLeft: 5 },
-  weekIcons: { flexDirection: 'row', gap: spacing.lg },
+  weekIcons: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
 });

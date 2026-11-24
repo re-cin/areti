@@ -1,7 +1,8 @@
 import { StreakIcon } from '@/components/ui/StreakIcon';
 import { Text } from '@/components/ui/Text';
 import { colors, spacing } from '@/theme';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { router } from 'expo-router';
 import { daySummary, streakDays, streaks } from '@/features/stats/stats';
 import { loadStatSessions } from '@/features/stats/statsRepo';
 import { useDbQuery } from '@/lib/useDbQuery';
@@ -16,12 +17,16 @@ async function loadToday() {
 const fmtMinutes = (m: number) => (m < 60 ? `${m} ${m === 1 ? 'min' : 'mins'}` : `${Math.floor(m / 60)} hr ${m % 60 ? `${m % 60} min` : ''}`.trim());
 import { plannerColors as extra } from './plannerColors';
 
-/** Speech-bubble card: current streak, minutes studied today and tasks remaining. */
+/**
+ * Speech-bubble card: current streak and minutes studied today (the same numbers as Statistics),
+ * and how many of the selected day's Daily Tasks are still open. Tapping it opens Statistics.
+ */
 export function StreakCard({ remaining }: { remaining: number }) {
   // Re-reads when the Planner is shown and after any data change (a finished focus block, a sync).
   const { streak, minutes } = useDbQuery(loadToday, { streak: 0, minutes: 0 });
   return (
-    <View style={styles.streakWrap}>
+    <Pressable style={styles.streakWrap} onPress={() => router.navigate('/statistics')}
+      accessibilityRole="button" accessibilityLabel={`Current streak ${streak} days. Open Statistics`}>
       <View style={styles.streakCard}>
         <StreakIcon size={22} />
         <View style={{ width: 88 }}>
@@ -37,7 +42,7 @@ export function StreakCard({ remaining }: { remaining: number }) {
         </View>
       </View>
       <View style={styles.bubbleTail} />
-    </View>
+    </Pressable>
   );
 }
 

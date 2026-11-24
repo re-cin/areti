@@ -84,12 +84,25 @@ export default function PrivacyScreen() {
     showNotice({
       title: 'Clear study history?',
       message:
-        'This erases all your tasks, scheduled Pomodoro sessions and logged focus time, so your statistics, streak and Reti’s level and XP start again, on every phone. Your subjects and settings stay.',
+        'This erases all your exams, tasks, scheduled Pomodoro sessions and logged focus time, so your statistics, streak and Reti’s level and XP start again, on every phone. Your subjects and settings stay.',
       cancelLabel: 'Cancel',
       buttonLabel: 'Clear history',
       onPress: () => {
         useTimer.getState().reset(); // a running session would belong to the cleared history
-        void clearStudyHistory();
+        clearStudyHistory()
+          .then((count) => {
+            void syncNow(); // erase it on the account (and other phones) now, not in a minute
+            // Wait for the confirm popup to finish closing before opening the next one (iOS).
+            setTimeout(() => showNotice({
+              title: 'Study history cleared',
+              message: count === 0
+                ? 'Your exams, tasks and scheduled sessions were erased. There was no focus time logged.'
+                : `Your exams, tasks, scheduled sessions and ${count} logged focus ${count === 1 ? 'session were' : 'sessions were'} erased. Statistics, your streak and Reti start again.`,
+            }), 400);
+          })
+          .catch((e) => {
+            setTimeout(() => showNotice({ title: "Couldn't clear history", message: e instanceof Error ? e.message : String(e) }), 400);
+          });
       },
     });
 

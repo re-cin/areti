@@ -11,7 +11,9 @@ export const plannerColors = {
   muted: '#2D2D2D',
   finishedBg: '#EFE9E1',
   finishedShadow: '#6B6560',
+  /** Exam cards in Daily Tasks. */
+  examCard: '#F2A65A',
 };
 
 /** Dot under days that have tasks, and in the exam banner. */
-export const dotColor = colors.pill.physics;
+export const dotColor = colors.ink;

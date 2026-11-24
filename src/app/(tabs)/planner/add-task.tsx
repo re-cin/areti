@@ -2,7 +2,7 @@ import { Dropdown } from '@/components/ui/Dropdown';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
-import { addTask } from '@/db/queries/tasks';
+import { addTask, getTask, updateTask } from '@/db/queries/tasks';
 import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
 import { TimePill } from '@/components/planner/TimePill';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
@@ -105,7 +105,9 @@ export default function AddTaskScreen() {
     }));
   };
   
-  const { date: dateParam, from } = useLocalSearchParams<{ date?: string; from?: string }>();
+  const { date: dateParam, from, id: editId } = useLocalSearchParams<{ date?: string; from?: string; id?: string }>();
+  // Opened with ?id= from the Planner's Edit mode: the same form, filled in, saving over the task.
+  const editing = Boolean(editId);
   // Opened from the Pomodoro page's +: "Add Task" is disabled, only "Schedule Pomodoro" works,
   // and "<" goes back to the Pomodoro page.
   const fromPomodoro = from === 'pomodoro';
@@ -133,6 +135,31 @@ export default function AddTaskScreen() {
     playChime(v, soundVolume);
   };
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(editing);
+  useEffect(() => {
+    if (!editId) return;
+    let alive = true;
+    getTask(editId)
+      .then((task) => {
+        if (!alive) return;
+        if (!task) {
+          showNotice({ title: 'Task not found', message: 'This task was deleted.' });
+          router.back();
+          return;
+        }
+        setName(task.title);
+        setSubjectId(task.subjectId);
+        setDate(task.date);
+        setStartMin(task.startMinute);
+        setEndMin(task.endMinute);
+        setSound(task.notificationSound);
+        setLoading(false);
+      })
+      .catch((e) => console.warn('[add-task] could not load the task', e));
+    return () => {
+      alive = false;
+    };
+  }, [editId]);
   const [newSubjectOpen, setNewSubjectOpen] = useState(false);
 
   // The bottom buttons are hidden while the keyboard is open, so they never ride up on top of it.
@@ -151,7 +178,7 @@ export default function AddTaskScreen() {
   }, []);
 
   const duration = endMin - startMin;
-  const valid = name.trim().length > 0 && subjectId !== null && duration > 0;
+  const valid = !loading && name.trim().length > 0 && subjectId !== null && duration > 0;
 
   const subjectOptions = subjects.map((s) => ({ key: s.id, label: s.name, color: s.color }));
 
@@ -211,16 +238,17 @@ export default function AddTaskScreen() {
     if (!valid || saving) return null;
     setSaving(true);
     try {
-      return await addTask({
+      const input = {
         title: name.trim(),
         subjectId: subjectId!,
         date, // local midnight, epoch ms
         startMinute: startMin,
         endMinute: endMin,
         notificationSound: sound,
-      });
+      };
+      return editId ? await updateTask(editId, input) : await addTask(input);
     } catch (e) {
-      console.error('addTask failed', e);
+      console.error(editId ? 'updateTask failed' : 'addTask failed', e);
       Alert.alert('Could not save the task', String(e));
       return null;
     } finally {
@@ -271,9 +299,9 @@ export default function AddTaskScreen() {
       <View style={styles.header}>
         <Pressable onPress={onBackPress} hitSlop={10} style={styles.headerLeft}>
           <Ionicons name="chevron-back" size={24} color={colors.ink} />
-          <Text variant="title" style={{ fontSize: 24 }}>Add Task</Text>
+          <Text variant="title" style={{ fontSize: 24 }}>{editing ? 'Edit Task' : 'Add Task'}</Text>
         </Pressable>
-        <Pressable hitSlop={10}>
+        <Pressable hitSlop={10} onPress={() => router.push('/settings')} accessibilityRole="button" accessibilityLabel="Settings">
           <Ionicons name="settings-outline" size={22} color={colors.ink} />
         </Pressable>
       </View>
@@ -336,9 +364,9 @@ export default function AddTaskScreen() {
       {!keyboardOpen && (
         <View style={styles.actions}>
           <NeoButton
-            label="Add Task"
+            label={editing ? 'Save Task' : 'Add Task'}
             backgroundColor={colors.surface}
-            icon={<Ionicons name="add-circle-outline" size={20} color={colors.ink} />}
+            icon={<Ionicons name={editing ? 'checkmark-circle-outline' : 'add-circle-outline'} size={20} color={colors.ink} />}
             disabled={fromPomodoro || !valid || saving}
             onPress={onAddTask}
           />

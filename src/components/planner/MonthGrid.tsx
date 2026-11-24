@@ -9,6 +9,8 @@ const MAX_CHIPS = 2;
 type Props = {
   weeks: number[][];
   selectedDate: number;
+  /** Any day in the month being shown; days outside it are greyed. */
+  month: number;
   tasksByDay: Map<number, TaskChip[]>;
   examsByDay: Map<number, { id: string; subject: string; color: string }[]>;
   subjectsById: Map<string, { color: string }>;
@@ -16,7 +18,7 @@ type Props = {
 };
 
 /** Full month view of the planner calendar: one row per week, up to two task chips per day. */
-export function MonthGrid({ weeks, selectedDate, tasksByDay, examsByDay, subjectsById, onSelect }: Props) {
+export function MonthGrid({ weeks, selectedDate, month, tasksByDay, examsByDay, subjectsById, onSelect }: Props) {
   return (
     <View style={styles.root}>
       <View style={styles.headRow}>
@@ -31,7 +33,7 @@ export function MonthGrid({ weeks, selectedDate, tasksByDay, examsByDay, subject
         <View key={week[0]} style={styles.weekRow}>
           {week.map((day) => {
             const active = sameDay(day, selectedDate);
-            const inMonth = sameMonth(day, selectedDate);
+            const inMonth = sameMonth(day, month);
             const chips = tasksByDay.get(day) ?? [];
             const exams = examsByDay.get(day) ?? [];
             const taskSlots = Math.max(0, MAX_CHIPS - exams.length);

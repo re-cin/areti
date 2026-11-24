@@ -38,8 +38,31 @@ export const POMODORO_LIMITS = {
 // Sound names come from the file registry (src/features/audio/sounds.ts).
 export { BACKGROUND_SOUNDS, NOTIFICATION_SOUNDS } from '@/features/audio/sounds';
 
+/** The default timing: 4 blocks of 25 min, 5 min short breaks, a 15 min long break. */
+export const DEFAULT_TIMING = {
+  focusCount: DEFAULT_POMODORO.focusCount,
+  focusMin: DEFAULT_POMODORO.focusMin,
+  breakMin: DEFAULT_POMODORO.breakMin,
+  longBreakMin: DEFAULT_POMODORO.longBreakMin,
+} as const;
+
+/**
+ * Set once (per account, it syncs) after the saved timing was put back to the defaults.
+ * Earlier test builds saved other timings (e.g. 120 min focus) that then stuck as everyone's "default".
+ */
+const TIMING_RESET_KEY = 'pomodoro.timingReset.v1';
+
 export async function loadPomodoroSettings(): Promise<PomodoroSettings> {
-  const saved = await getSetting<Partial<PomodoroSettings>>(SETTING_KEYS.pomodoro, {});
+  let saved = await getSetting<Partial<PomodoroSettings>>(SETTING_KEYS.pomodoro, {});
+  if (!(await getSetting<boolean>(TIMING_RESET_KEY, false))) {
+    // One time: the timing goes back to the defaults; sounds and volumes are kept.
+    if (Object.keys(saved).length > 0) {
+      saved = { ...saved, ...DEFAULT_TIMING };
+      await setSetting(SETTING_KEYS.pomodoro, saved);
+    }
+    await setSetting(TIMING_RESET_KEY, true);
+    bumpData();
+  }
   const s = { ...DEFAULT_POMODORO, ...saved };
   const min = POMODORO_LIMITS.focusMin[0];
   // "White Noise" was renamed "Velvet Espresso".
