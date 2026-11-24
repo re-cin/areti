@@ -11,8 +11,9 @@ import { PaymentSheet } from '@/components/settings/PaymentSheet';
 import { payWithPayPal } from '@/features/subscription/paypalCheckout';
 import { fetchPlanPrices, money, periodText, totalFor, type PlanPrice, type PlanType } from '@/features/subscription/planPrices';
 import { showComingSoon } from '@/features/account/accountAlerts';
-import { loadPremium, NOT_PREMIUM, premiumDateText, premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
-import { timeLeftText, useNow } from '@/features/subscription/timeLeft';
+import { usePremium } from '@/features/subscription/usePremium';
+import { premiumDateText, premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { timeLeftText } from '@/features/subscription/timeLeft';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
@@ -71,7 +72,7 @@ export default function SubscriptionScreen() {
   const useStudent = studentDiscount && selected?.studentPrice != null;
   const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
-  const sub = useDbQuery(loadPremium, NOT_PREMIUM);
+  const sub = usePremium(); // live: admin edits, payments and the countdown
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -181,7 +182,7 @@ export default function SubscriptionScreen() {
           </NeoBox>
 
           {sub.isPremium ? (
-            <PremiumStatus sub={sub} />
+            <PremiumStatus sub={sub} now={sub.now} />
           ) : (
             <>
           {/* Plans */}
@@ -282,8 +283,7 @@ export default function SubscriptionScreen() {
 const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
-function PremiumStatus({ sub }: { sub: PremiumInfo }) {
-  const now = useNow(); // keeps the countdown current while the page is open
+function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
   const line = sub.expiresAt ? `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.` : 'Premium is active.';
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>

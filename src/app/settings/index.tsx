@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { loadPremium, NOT_PREMIUM } from '@/features/subscription/premiumInfo';
+import { usePremium } from '@/features/subscription/usePremium';
 import { PremiumCard } from '@/components/settings/PremiumCard';
 import { showComingSoon, showSignOutInfo } from '@/features/account/accountAlerts';
 import { getProfile, type Profile } from '@/features/account/accountRepo';
@@ -20,7 +20,7 @@ const comingSoon = showComingSoon;
 export default function UserSettingsScreen() {
   const profile = useDbQuery(getProfile, EMPTY_PROFILE);
   // Free / Premium (with its end date) from the Supabase subscriptions table, cached on the phone.
-  const premium = useDbQuery(loadPremium, NOT_PREMIUM);
+  const premium = usePremium(); // live: admin edits, payments and the countdown
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   const rows: { icon: IconName; label: string; href?: Href; onPress?: () => void }[] = [
@@ -58,7 +58,7 @@ export default function UserSettingsScreen() {
       {/* Upgrade banner */}
       {/* Premium: black card with Reti. Free: the Upgrade banner. */}
       {premium.isPremium ? (
-        <PremiumCard info={premium} />
+        <PremiumCard info={premium} now={premium.now} />
       ) : (
         <Pressable onPress={() => router.push('/settings/subscription')} accessibilityRole="button" accessibilityLabel="Upgrade to Premium">
           <NeoBox backgroundColor={colors.terracotta} style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md }}>

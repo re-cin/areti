@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
-import { timeLeftText, useNow } from '@/features/subscription/timeLeft';
+import { timeLeftText } from '@/features/subscription/timeLeft';
 import { colors, fonts, spacing } from '@/theme';
 
 const MASCOT = require('../../../assets/images/areti-mascot.png');
@@ -13,8 +13,7 @@ const MASCOT = require('../../../assets/images/areti-mascot.png');
  * a black card with Reti (wearing the crown) and when Premium runs until.
  * Tapping it opens the Subscription page, which shows the full status.
  */
-export function PremiumCard({ info }: { info: PremiumInfo }) {
-  const now = useNow(); // keeps the countdown current while User Settings is open
+export function PremiumCard({ info, now }: { info: PremiumInfo; now: number }) {
   const left = info.expiresAt ? timeLeftText(info.expiresAt, now) : 'Active';
   const until = info.expiresAt ? `Until ${premiumDateTimeText(info.expiresAt)}` : 'Thanks for supporting areti!';
   return (
