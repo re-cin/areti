@@ -688,11 +688,8 @@ export default function PreferencesScreen() {
             </View>
 
             <View style={{ marginVertical: 18 }}>
-              <Divider color="#E7DED4" />
-              <View style={{ height: 16 }} />
               <Divider />
             </View>
-
 
             <View
               style={{

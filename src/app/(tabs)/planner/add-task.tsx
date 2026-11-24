@@ -5,6 +5,7 @@ import { TextField } from '@/components/ui/TextField';
 import { addTask } from '@/db/queries/tasks';
 import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
 import { TimePill } from '@/components/planner/TimePill';
+import { TimeListModal, halfHourTimes } from '@/components/ui/TimeListModal';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
 import { startOfDay } from '@/lib/dates';
@@ -59,11 +60,6 @@ function defaultStart(day: number) {
   return Math.min(Math.ceil((earliest + 1) / 30) * 30, 23 * 60);
 }
 
-const minToDate = (min: number) => {
-  const d = new Date();
-  d.setHours(Math.floor(min / 60), min % 60, 0, 0);
-  return d;
-};
 
 export default function AddTaskScreen() {
   const insets = useSafeAreaInsets();
@@ -94,6 +90,8 @@ export default function AddTaskScreen() {
   const fromPomodoro = from === 'pomodoro';
   const { subjects } = useSubjects();
   const { openPicker, pickerElement } = useDateTimePicker();
+  // Start / end time use the same "Select Time" list as Preferences (not the phone's clock).
+  const [timeFor, setTimeFor] = useState<'start' | 'end' | null>(null);
 
   const [name, setName] = useState('');
   const [subjectId, setSubjectId] = useState<string | null>(null);
@@ -160,34 +158,31 @@ export default function AddTaskScreen() {
   const LAST_MIN = 23 * 60 + 59;
 
   // New start: the end moves with it, keeping the same length (like most calendars).
-  const pickStart = () =>
-    openPicker('time', minToDate(startMin), (d) => {
-      const m = d.getHours() * 60 + d.getMinutes();
-      const length = endMin > startMin ? endMin - startMin : 60;
-      // Today: a time that has already passed can't be chosen.
-      if (m < earliestStartMin(date)) {
-        setTimeout(() => showNotice({ title: 'That time has passed', message: 'Pick a start time later than now.' }), 450);
-        return;
-      }
-      if (m >= LAST_MIN) {
-        // Wait for the time picker sheet to close first (iOS shows one popup at a time).
-        setTimeout(() => showNotice({ title: 'Too late in the day', message: 'Pick a start time before 11:59 pm.', icon: 'clock' }), 450);
-        return;
-      }
-      setStartMin(m);
-      setEndMin(Math.min(m + length, LAST_MIN));
-    }, isToday(date) ? new Date() : undefined);
+  const applyStart = (m: number) => {
+    const length = endMin > startMin ? endMin - startMin : 60;
+    // Today: a time that has already passed can't be chosen (greyed out in the list too).
+    if (m < earliestStartMin(date)) {
+      setTimeout(() => showNotice({ title: 'That time has passed', message: 'Pick a start time later than now.' }), 450);
+      return;
+    }
+    if (m >= LAST_MIN) {
+      setTimeout(() => showNotice({ title: 'Too late in the day', message: 'Pick a start time before 11:59 pm.', icon: 'clock' }), 450);
+      return;
+    }
+    setStartMin(m);
+    setEndMin(Math.min(m + length, LAST_MIN));
+  };
+  const pickStart = () => setTimeFor('start');
 
   // New end: must be after the start, otherwise it is not applied.
-  const pickEnd = () =>
-    openPicker('time', minToDate(endMin), (d) => {
-      const m = d.getHours() * 60 + d.getMinutes();
-      if (m <= startMin) {
-        setTimeout(() => showNotice({ title: 'Check the end time', message: 'The end time has to be after the start time.', icon: 'clock' }), 450);
-        return;
-      }
-      setEndMin(m);
-    }, isToday(date) ? new Date() : undefined);
+  const applyEnd = (m: number) => {
+    if (m <= startMin) {
+      setTimeout(() => showNotice({ title: 'Check the end time', message: 'The end time has to be after the start time.', icon: 'clock' }), 450);
+      return;
+    }
+    setEndMin(m);
+  };
+  const pickEnd = () => setTimeFor('end');
 
   // Saves the task; returns its id, or null if it couldn't be saved.
   const save = async () => {
@@ -336,6 +331,16 @@ export default function AddTaskScreen() {
       )}
 
       {pickerElement}
+      <TimeListModal
+        visible={timeFor !== null}
+        title={timeFor === 'end' ? 'End time' : 'Start time'}
+        value={timeFor === 'end' ? endMin : startMin}
+        // Start: not in the past (today); end: after the start. 11:59 PM is offered as the last end time.
+        minMinute={timeFor === 'end' ? startMin + 1 : earliestStartMin(date)}
+        options={timeFor === 'end' ? halfHourTimes([LAST_MIN]) : halfHourTimes()}
+        onSelect={(m) => (timeFor === 'end' ? applyEnd(m) : applyStart(m))}
+        onClose={() => setTimeFor(null)}
+      />
 
       <ConfirmDialog
         visible={warnOpen}
@@ -412,4 +417,4 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     gap: spacing.md,
   },
-});
+});

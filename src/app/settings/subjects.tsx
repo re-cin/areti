@@ -225,27 +225,6 @@ export default function SubjectsScreen() {
                   }}
                 >
                   <Pill label={s.name} color={s.color} />
-
-                  <Text
-                    variant="caption"
-                    style={{
-                      fontFamily: fonts.medium,
-                      fontSize: 11,
-                    }}
-                    color={
-                      s.difficulty === 1
-                        ? colors.teal
-                        : s.difficulty === 5
-                          ? colors.dangerDark
-                          : colors.terracottaDark
-                    }
-                  >
-                    {s.difficulty === 1
-                      ? 'Low difficulty'
-                      : s.difficulty === 5
-                        ? 'High difficulty'
-                        : 'Medium difficulty'}
-                  </Text>
                 </View>
 
                 <RoundButton

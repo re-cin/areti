@@ -1,7 +1,6 @@
 
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
-import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
 import { SubjectColorModal } from '@/components/settings/SubjectColorModal';
@@ -21,16 +20,11 @@ import {
   View,
 } from 'react-native';
 
-/** Quick picks in the sheet; the full set of presets opens with the last button. */
-const SUBJECT_COLORS = colors.subjectPalette.slice(0, 8);
+/** Seven quick picks in the sheet; the "…" circle after them opens all the presets. */
+const SUBJECT_COLORS: readonly string[] = colors.subjectPalette.slice(0, 7);
 
-type Difficulty = 'low' | 'medium' | 'high';
-
-const DIFFICULTY_VALUE: Record<Difficulty, number> = {
-  low: 1,
-  medium: 3,
-  high: 5,
-};
+/** Difficulty isn't asked here any more; new subjects get the middle value (the column still exists). */
+const DEFAULT_DIFFICULTY = 3;
 
 type Props = {
   visible: boolean;
@@ -49,7 +43,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
   const [color, setColor] = useState<string>(SUBJECT_COLORS[0]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [customColorOpen, setCustomColorOpen] = useState(false);
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -63,7 +56,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
       setColor(unused ?? SUBJECT_COLORS[0]);
       setPaletteOpen(false);
       setCustomColorOpen(false);
-      setDifficulty('medium');
       setMounted(true);
 
       Animated.timing(progress, {
@@ -113,7 +105,7 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
       const id = await addSubject({
         name: name.trim(),
         color,
-        difficulty: DIFFICULTY_VALUE[difficulty],
+        difficulty: DEFAULT_DIFFICULTY,
         examDate: null,
       });
 
@@ -213,7 +205,11 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
 
           {paletteOpen && (
             <View style={styles.swatches}>
-              {SUBJECT_COLORS.map((c) => (
+              {/* A color picked from "…" that isn't a quick pick shows first, so the choice stays visible. */}
+              {(SUBJECT_COLORS.some((c) => c.toLowerCase() === color.toLowerCase())
+                ? SUBJECT_COLORS
+                : [color, ...SUBJECT_COLORS.slice(0, 6)]
+              ).map((c) => (
                 <Pressable
                   key={c}
                   onPress={() => {
@@ -253,19 +249,6 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
             </View>
           )}
 
-          <Text variant="smallStrong" style={styles.label}>
-            Difficulty
-          </Text>
-
-          <Segmented
-            value={difficulty}
-            onChange={setDifficulty}
-            options={[
-              { key: 'low', label: 'Low' },
-              { key: 'medium', label: 'Medium' },
-              { key: 'high', label: 'High' },
-            ]}
-          />
 
           <View style={{ marginTop: spacing.lg }}>
             <NeoButton
