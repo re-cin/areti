@@ -95,8 +95,10 @@ export function AudioController({ enabled }: { enabled: boolean }) {
     if (!player || phaseEndedAt == null || phaseEndedAt === lastChimed.current) return;
     lastChimed.current = phaseEndedAt;
     if (Date.now() - phaseEndedAt > CHIME_WINDOW_MS) return;
+    const source = notificationSource(s.notificationSound);
+    if (!source) return; // Silent
     try {
-      player.replace(notificationSource(s.notificationSound));
+      player.replace(source);
       player.play();
       applyVolume(player, s.notificationVolume);
     } catch (e) {

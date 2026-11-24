@@ -1,4 +1,5 @@
 import { Pressable, View } from 'react-native';
+import { StreakIcon } from '@/components/ui/StreakIcon';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
@@ -106,7 +107,7 @@ export function CalendarHeatmap({ month, selected, today, minutesByDay, streak, 
 
       <View style={{ height: 1, backgroundColor: colors.line, marginTop: spacing.xs }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Icon name="flame" size={22} color={colors.terracottaDark} fill={colors.terracotta} strokeWidth={1.2} />
+        <StreakIcon size={22} />
         <View style={{ flex: 1 }}>
           <Text style={{ fontFamily: fonts.semiBold, fontSize: 15 }} color={colors.terracottaDark}>
             {streak} Day Streak

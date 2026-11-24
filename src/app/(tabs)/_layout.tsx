@@ -28,6 +28,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        animation: 'fade', // tabs cross-fade instead of jumping (also when a reminder opens Pomodoro)
         tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.ink,
         tabBarStyle: {

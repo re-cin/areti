@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useState } from 'react';
 import {
   Animated,
+  Alert,
   BackHandler,
   Keyboard,
   KeyboardAvoidingView,
@@ -95,6 +96,8 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
       });
       onCreated(id);
       close();
+    } catch (error) {
+      Alert.alert('Could not add subject', error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }

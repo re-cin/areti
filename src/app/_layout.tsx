@@ -1,4 +1,5 @@
 import { SplashOverlay } from '@/components/brand/SplashOverlay';
+import { NoticeDialog } from '@/components/ui/NoticeDialog';
 import { Text } from '@/components/ui/Text';
 import { db } from '@/db/client';
 import { AudioController } from '@/features/audio/AudioController';
@@ -11,10 +12,16 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import migrations from '../../drizzle/migrations';
 import { startAutoSync } from '@/sync/sync';
+import { loadCachedRemoteSounds, refreshRemoteSounds } from '@/features/audio/remoteSounds';
+import { refreshSessionReminders } from '@/features/timer/reminders';
+import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notifications';
+import { isPomodoroVisible, showNotice } from '@/stores/notice';
+import { loadNotifications } from '@/lib/notificationPermission';
+import { router, usePathname } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -32,6 +39,49 @@ export default function RootLayout() {
   useEffect(() => {
     if (!dbReady) return;
     return startAutoSync();
+  }, [dbReady]);
+
+  // Music added by admins (admin site → Controls → Music): cached list first, then a fresh copy.
+  useEffect(() => {
+    if (!dbReady) return;
+    void loadCachedRemoteSounds().then(() => refreshRemoteSounds()).catch(() => {});
+  }, [dbReady]);
+
+  // Which page is showing, read by the reminder popup below.
+  const pathname = usePathname();
+  const pathRef = useRef(pathname);
+  useEffect(() => { pathRef.current = pathname; }, [pathname]);
+
+  // "Pomodoro in 5 minutes" reminders: schedule them, show areti's popup when one fires while the
+  // app is open, and open the Pomodoro tab when one is tapped from the phone's notifications.
+  useEffect(() => {
+    if (!dbReady) return;
+    setReminderPopup((title, message, openPomodoro) => {
+      if (!openPomodoro) {
+        showNotice({ title, message });
+        return;
+      }
+      // Start time. Already on the Pomodoro page: no popup (the chime still plays).
+      if (isPomodoroVisible() || pathRef.current.startsWith('/pomodoro')) return;
+      // Elsewhere: show "Time to focus" first; Okay then fades over to the Pomodoro page
+      // (closing any screen on top, e.g. Settings or Add Task).
+      showNotice({
+        title,
+        message,
+        onPress: () => {
+          if (router.canDismiss()) router.dismissAll();
+          router.navigate('/pomodoro');
+        },
+      });
+    });
+    setOnPermissionGranted(() => void refreshSessionReminders());
+    void refreshSessionReminders();
+    // Not available in Expo Go on Android (loadNotifications returns null there).
+    const tap = loadNotifications()?.addNotificationResponseReceivedListener((r) => {
+      const data = r.notification.request.content.data as { kind?: string } | undefined;
+      if (data?.kind === 'reminder') router.navigate('/pomodoro');
+    });
+    return () => tap?.remove();
   }, [dbReady]);
   // The splash overlay stays on top (and hides the native splash) until it has faded out.
   const [splashDone, setSplashDone] = useState(false);
@@ -58,9 +108,10 @@ export default function RootLayout() {
           {/* Sign in fades its own content in (see auth.tsx), so no slide here. */}
           <Stack.Screen name="auth" options={{ animation: 'none' }} />
           <Stack.Screen name="forgot-password" />
-          {/* Fades in out of the welcome screen's ghost zoom. */}
-          <Stack.Screen name="onboarding/intro" options={{ animation: 'fade' }} />
+          <Stack.Screen name="verify-email" />
+          <Stack.Screen name="welcome" options={{ gestureEnabled: false, animation: 'fade' }} />
         </Stack>
+        <NoticeDialog />
       </>
     );
   }

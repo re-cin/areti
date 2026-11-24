@@ -11,6 +11,15 @@ import { startOfDay } from '@/lib/dates';
 import { borders, colors, radii, spacing } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
+import { showNotice } from '@/stores/notice';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { getSetting, setSetting } from '@/features/settings/settingsRepo';
+
+/** Settings key: true once "Don't remind me again" was ticked on the Schedule Pomodoro warning. */
+const SCHEDULE_WARNING_OFF = 'hint.schedulePomodoroWarning.off';
+import { useNotificationSoundNames } from '@/features/audio/sounds';
+import { playChime } from '@/features/audio/playChime';
+import { loadPomodoroSettings } from '@/features/timer/pomodoroSettings';
 import { useEffect, useState } from 'react';
 import { Alert, Keyboard, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
@@ -21,8 +30,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// TODO: replace with the real sound list / settings once notifications are built.
-const SOUNDS = ['Silent', 'Default', 'Chime', 'Bell'];
+// Same list as Pomodoro settings (src/features/audio/sounds.ts), including Silent.
 
 const fmtDate = (ts: number) =>
   new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -34,6 +42,22 @@ function fmtDuration(min: number) {
   return `${hrs} ${hrs === 1 ? 'hr' : 'hrs'}`;
 }
 
+const isToday = (day: number) => day === startOfDay(Date.now());
+
+/** Earliest start (minutes from midnight) allowed on `day`: now for today, midnight otherwise. */
+function earliestStartMin(day: number) {
+  if (!isToday(day)) return 0;
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+/** 9:00 am, or on today once that has passed, the next half hour from now (at most 11:00 pm). */
+function defaultStart(day: number) {
+  const earliest = earliestStartMin(day);
+  if (earliest <= 9 * 60) return 9 * 60;
+  return Math.min(Math.ceil((earliest + 1) / 30) * 30, 23 * 60);
+}
+
 const minToDate = (min: number) => {
   const d = new Date();
   d.setHours(Math.floor(min / 60), min % 60, 0, 0);
@@ -41,6 +65,8 @@ const minToDate = (min: number) => {
 };
 
 export default function AddTaskScreen() {
+  const soundNames = useNotificationSoundNames();
+  const SOUND_OPTIONS = soundNames.map((s) => ({ key: s, label: s }));
   const insets = useSafeAreaInsets();
 
   const navigation = useNavigation();
@@ -51,7 +77,10 @@ export default function AddTaskScreen() {
 
   const goBack = () => {
     navigation.setOptions({ animation: 'none' }); // we already animated it out ourselves
-    requestAnimationFrame(() => router.back());
+    requestAnimationFrame(() => {
+      router.back();
+      if (fromPomodoro) router.navigate('/pomodoro');
+    });
   };
 
   const onBackPress = () => {
@@ -60,16 +89,33 @@ export default function AddTaskScreen() {
     }));
   };
   
-  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+  const { date: dateParam, from } = useLocalSearchParams<{ date?: string; from?: string }>();
+  // Opened from the Pomodoro page's +: "Add Task" is disabled, only "Schedule Pomodoro" works,
+  // and "<" goes back to the Pomodoro page.
+  const fromPomodoro = from === 'pomodoro';
   const { subjects } = useSubjects();
   const { openPicker, pickerElement } = useDateTimePicker();
 
   const [name, setName] = useState('');
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [date, setDate] = useState(() => startOfDay(dateParam ? new Date(Number(dateParam)) : new Date()));
-  const [startMin, setStartMin] = useState(9 * 60);
-  const [endMin, setEndMin] = useState(10 * 60);
+  // Default 9:00–10:00, or for today (once 9:00 has passed) the next half hour from now.
+  const [startMin, setStartMin] = useState(() => defaultStart(date));
+  const [endMin, setEndMin] = useState(() => Math.min(defaultStart(date) + 60, 23 * 60 + 59));
+  // Every new task starts on Silent (also after Cancel / back: Add Task opens fresh each time).
   const [sound, setSound] = useState('Silent');
+  // Notification volume from Pomodoro settings, used when previewing a sound.
+  const [soundVolume, setSoundVolume] = useState(80);
+  useEffect(() => {
+    loadPomodoroSettings()
+      .then((s) => setSoundVolume(s.notificationVolume)) // only the volume, for the preview
+      .catch(() => {});
+  }, []);
+  // Picking a sound plays it once, so you hear what it is (Silent plays nothing).
+  const chooseSound = (v: string) => {
+    setSound(v);
+    playChime(v, soundVolume);
+  };
   const [saving, setSaving] = useState(false);
   const [newSubjectOpen, setNewSubjectOpen] = useState(false);
 
@@ -92,19 +138,57 @@ export default function AddTaskScreen() {
   const valid = name.trim().length > 0 && subjectId !== null && duration > 0;
 
   const subjectOptions = subjects.map((s) => ({ key: s.id, label: s.name, color: s.color }));
-  const soundOptions = SOUNDS.map((s) => ({ key: s, label: s }));
 
-  const pickDate = () => openPicker('date', new Date(date), (d) => setDate(startOfDay(d)));
+  // No past days. Moving to today pushes a start time that has already passed to the next half hour.
+  const pickDate = () =>
+    openPicker(
+      'date',
+      new Date(date),
+      (d) => {
+        const day = startOfDay(d);
+        setDate(day);
+        const earliest = earliestStartMin(day);
+        if (startMin < earliest) {
+          const length = endMin > startMin ? endMin - startMin : 60;
+          const start = defaultStart(day);
+          setStartMin(start);
+          setEndMin(Math.min(start + length, 23 * 60 + 59));
+        }
+      },
+      new Date(startOfDay(Date.now())),
+    );
 
+  const LAST_MIN = 23 * 60 + 59;
+
+  // New start: the end moves with it, keeping the same length (like most calendars).
   const pickStart = () =>
     openPicker('time', minToDate(startMin), (d) => {
       const m = d.getHours() * 60 + d.getMinutes();
+      const length = endMin > startMin ? endMin - startMin : 60;
+      // Today: a time that has already passed can't be chosen.
+      if (m < earliestStartMin(date)) {
+        setTimeout(() => showNotice({ title: 'That time has passed', message: 'Pick a start time later than now.' }), 450);
+        return;
+      }
+      if (m >= LAST_MIN) {
+        // Wait for the time picker sheet to close first (iOS shows one popup at a time).
+        setTimeout(() => showNotice({ title: 'Too late in the day', message: 'Pick a start time before 11:59 pm.', icon: 'clock' }), 450);
+        return;
+      }
       setStartMin(m);
-      if (endMin <= m) setEndMin(Math.min(m + 60, 23 * 60 + 59)); // keep end after start
-    });
+      setEndMin(Math.min(m + length, LAST_MIN));
+    }, isToday(date) ? new Date() : undefined);
 
+  // New end: must be after the start, otherwise it is not applied.
   const pickEnd = () =>
-    openPicker('time', minToDate(endMin), (d) => setEndMin(d.getHours() * 60 + d.getMinutes()));
+    openPicker('time', minToDate(endMin), (d) => {
+      const m = d.getHours() * 60 + d.getMinutes();
+      if (m <= startMin) {
+        setTimeout(() => showNotice({ title: 'Check the end time', message: 'The end time has to be after the start time.', icon: 'clock' }), 450);
+        return;
+      }
+      setEndMin(m);
+    }, isToday(date) ? new Date() : undefined);
 
   // Saves the task; returns its id, or null if it couldn't be saved.
   const save = async () => {
@@ -138,12 +222,29 @@ export default function AddTaskScreen() {
     backToPlanner();
   };
 
+  // Warning before "Schedule Pomodoro", unless the user ticked "Don't remind me again".
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [dontRemind, setDontRemind] = useState(false);
+  const onSchedulePress = async () => {
+    if (!valid || saving) return;
+    const skip = await getSetting<boolean>(SCHEDULE_WARNING_OFF, false);
+    if (skip) return void onSchedulePomodoro();
+    setDontRemind(false);
+    setWarnOpen(true);
+  };
+  const confirmSchedule = async () => {
+    setWarnOpen(false);
+    if (dontRemind) await setSetting(SCHEDULE_WARNING_OFF, true);
+    // Let the warning finish closing before moving to the Pomodoro settings (iOS).
+    setTimeout(() => void onSchedulePomodoro(), 300);
+  };
+
   const onSchedulePomodoro = async () => {
     const id = await save();
     if (id === null) return;
     backToPlanner();
     // Pomodoro settings for this task. Saving there adds it to Upcoming Sessions; "<" leaves it as a plain task.
-    router.push({ pathname: '/settings/timer', params: { taskId: String(id) } });
+    router.push({ pathname: '/settings/timer', params: { taskId: String(id), sound } });
   };
 
   return (
@@ -161,8 +262,10 @@ export default function AddTaskScreen() {
         </Pressable>
       </View>
 
+      {/* The form itself doesn't scroll (it fits the screen); only the sound list scrolls. */}
       <ScrollView
         style={{ flex: 1 }}
+        scrollEnabled={false}
         contentContainerStyle={styles.form}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -189,6 +292,7 @@ export default function AddTaskScreen() {
           options={subjectOptions}
           placeholder="Select a subject"
           onChange={setSubjectId}
+          emptyLabel="No subjects yet"
         />
 
         <Text variant="smallStrong">Date</Text>
@@ -207,10 +311,10 @@ export default function AddTaskScreen() {
           <TimePill min={endMin} color={colors.terracotta} onPress={pickEnd} />
         </View>
 
-        <View style={styles.soundRow}>
-          <Text variant="smallStrong">Notification Sound</Text>
-          <Dropdown style={{ flex: 1 }} value={sound} options={soundOptions} onChange={setSound} />
-        </View>
+        <Text variant="smallStrong" style={{ marginTop: 14 }}>Notification Sound</Text>
+        {/* Full width like the other fields. Opens downward in the form (pushing the space below), so it
+            never slides under the Add Task / Schedule Pomodoro buttons; the form scrolls if needed. */}
+        <Dropdown value={sound} options={SOUND_OPTIONS} onChange={chooseSound} inline visibleRows={3} selectedColor={colors.tealSoft} />
       </ScrollView>
 
       {!keyboardOpen && (
@@ -219,7 +323,7 @@ export default function AddTaskScreen() {
             label="Add Task"
             backgroundColor={colors.surface}
             icon={<Ionicons name="add-circle-outline" size={20} color={colors.ink} />}
-            disabled={!valid || saving}
+            disabled={fromPomodoro || !valid || saving}
             onPress={onAddTask}
           />
           <NeoButton
@@ -227,12 +331,26 @@ export default function AddTaskScreen() {
             backgroundColor={colors.terracotta}
             icon={<Ionicons name="time-outline" size={20} color={colors.ink} />}
             disabled={!valid || saving}
-            onPress={onSchedulePomodoro}
+            onPress={onSchedulePress}
           />
         </View>
       )}
 
       {pickerElement}
+
+      <ConfirmDialog
+        visible={warnOpen}
+        title="Schedule Pomodoro?"
+        message="Choosing Schedule Pomodoro will overwrite the scheduled time."
+        checkboxLabel="Don't remind me again"
+        checked={dontRemind}
+        onToggleChecked={() => setDontRemind((v) => !v)}
+        cancelLabel="Cancel"
+        confirmLabel="Continue"
+        confirmColor={colors.terracotta}
+        onCancel={() => setWarnOpen(false)}
+        onConfirm={confirmSchedule}
+      />
 
       {/* Keep last so it draws on top of everything above the tab bar */}
       <NewSubjectSheet
@@ -288,7 +406,6 @@ const styles = StyleSheet.create({
   },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
   timeLabel: { width: 52 },
-  soundRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, marginTop: 14 },
 
   actions: {
     paddingHorizontal: spacing.xl,

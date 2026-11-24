@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId } from '@/db/id';
 import { plannedSessions, studyPlans, subjects, tasks } from '@/db/schema';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 import { cancelStudyPlanWork } from '@/features/planner/studyPlanLifecycle';
 import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { bumpData } from '@/stores/dataVersion';
@@ -35,6 +36,11 @@ export async function addSubject(name: string, color: string): Promise<void> {
   bumpData();
 }
 
+export async function renameSubject(id: string, name: string): Promise<void> {
+  await db.update(subjects).set({ name: name.trim(), updatedAt: Date.now() }).where(eq(subjects.id, id));
+  bumpData();
+}
+
 export async function updateSubjectUrgency(id: string, urgency: number): Promise<void> {
   if (!Number.isInteger(urgency) || urgency < 1 || urgency > 5) throw new Error('Choose an urgency from 1 to 5.');
   await db.update(subjects).set({ urgency, updatedAt: Date.now() })
@@ -42,7 +48,10 @@ export async function updateSubjectUrgency(id: string, urgency: number): Promise
   bumpData();
 }
 
-/** Soft delete (sync-ready). Also removes the subject's upcoming planned sessions. */
+/**
+ * Soft delete (sync-ready). Its exam plans, upcoming planned sessions and unfinished tasks go with it.
+ * Finished tasks and past focus time stay in statistics.
+ */
 export async function deleteSubject(id: string): Promise<void> {
   const now = Date.now();
   db.transaction(tx => {
@@ -55,5 +64,11 @@ export async function deleteSubject(id: string): Promise<void> {
       .where(and(eq(tasks.subjectId, id), eq(tasks.done, false), isNull(tasks.deletedAt))).run();
   });
   await regenerateSchedules().catch(error => console.warn('[planner] Subject deleted; remaining schedules will refresh later', error));
+  void refreshSessionReminders();
+  bumpData();
+}
+
+export async function setSubjectColor(id: string, color: string): Promise<void> {
+  await db.update(subjects).set({ color, updatedAt: Date.now() }).where(eq(subjects.id, id));
   bumpData();
 }

@@ -28,7 +28,7 @@ function DeleteAccountForm({ visible, deleting, onCancel, onConfirm }: Props) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel} statusBarTranslucent>
       <KeyboardAvoidingView style={styles.backdrop} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <Pressable style={StyleSheet.absoluteFill} onPress={deleting ? undefined : onCancel} accessibilityLabel="Close" />
-        <NeoBox radius={20} backgroundColor={colors.surface} style={styles.card}>
+        <NeoBox backgroundColor={colors.white} style={styles.card}>
           <Text style={styles.title}>Delete your account?</Text>
           <Text style={styles.body}>
             This permanently deletes your account, study streaks, tasks, focus history and profile picture on every
@@ -53,7 +53,7 @@ function DeleteAccountForm({ visible, deleting, onCancel, onConfirm }: Props) {
               label="Cancel"
               onPress={onCancel}
               disabled={deleting}
-              backgroundColor={colors.surface}
+              backgroundColor={colors.white}
               style={styles.button}
             />
             <NeoButton
@@ -61,7 +61,7 @@ function DeleteAccountForm({ visible, deleting, onCancel, onConfirm }: Props) {
               icon="trash"
               onPress={onConfirm}
               disabled={!ready}
-              backgroundColor={colors.dangerButton}
+              backgroundColor={colors.terracotta}
               style={styles.button}
             />
           </View>
@@ -74,24 +74,28 @@ function DeleteAccountForm({ visible, deleting, onCancel, onConfirm }: Props) {
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(17,17,17,0.45)', // same dim as areti's other popups
     justifyContent: 'center',
     paddingHorizontal: spacing.xl,
   },
+  // Same look as the other popups: white card, centered title and text.
   card: {
-    padding: spacing.lg,
+    padding: spacing.xl,
     gap: spacing.md,
   },
   title: {
     fontFamily: fonts.semiBold,
-    fontSize: 18,
-    color: colors.dangerDark,
+    fontSize: 22,
+    lineHeight: 28,
+    color: colors.ink,
+    textAlign: 'center',
   },
   body: {
     fontFamily: fonts.regular,
-    fontSize: 14,
-    lineHeight: 20,
-    color: colors.inkSoft,
+    fontSize: 15,
+    lineHeight: 21,
+    color: colors.muted,
+    textAlign: 'center',
   },
   label: {
     fontFamily: fonts.medium,
@@ -101,12 +105,12 @@ const styles = StyleSheet.create({
   },
   word: {
     fontFamily: fonts.semiBold,
-    color: colors.dangerDark,
+    color: colors.terracottaDark,
   },
   buttons: {
     flexDirection: 'row',
     gap: spacing.md,
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
   },
   button: {
     flex: 1,

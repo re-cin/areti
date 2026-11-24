@@ -21,7 +21,7 @@ export default function UserSettingsScreen() {
 
   const rows: { icon: IconName; label: string; href?: Href; onPress?: () => void }[] = [
     { icon: 'book', label: 'Subjects', href: '/settings/subjects' },
-    { icon: 'sliders', label: 'Preferences' }, // TODO: Preferences page not built yet
+    { icon: 'sliders', label: 'Preferences', href: '/settings/preferences' },
     { icon: 'shield', label: 'Data & Privacy', href: '/settings/privacy' },
     { icon: 'help', label: 'Help & Support', onPress: () => comingSoon('Help & Support') },
     { icon: 'info', label: 'Terms & Policies', onPress: () => comingSoon('Terms & Policies') },

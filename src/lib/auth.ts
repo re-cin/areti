@@ -7,6 +7,12 @@ import { supabase, supabaseConfigured } from './supabase';
  * Study data stays in SQLite on the phone and syncs to Supabase (src/sync/sync.ts).
  */
 
+/**
+ * Spaces at the start or end of a password are ignored everywhere (sign up, sign in, reset).
+ * Android keyboards add a trailing space when you pick a suggestion, which you can't see.
+ */
+export const cleanPassword = (password: string) => password.trim();
+
 /** Shortest password allowed when creating one. */
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -15,7 +21,7 @@ export type AuthErrorCode =
   | 'wrong-credentials'
   | 'confirm-email' // account exists but the email isn't confirmed yet
   | 'weak-password'
-  | 'wrong-code' // reset code is wrong or expired
+  | 'wrong-code' // emailed code is wrong or expired
   | 'same-password' // new password is the same as the old one
   | 'rate-limited' // too many emails / attempts, try again later
   | 'offline'
@@ -29,10 +35,14 @@ export class AuthError extends Error {
   }
 }
 
-/** Creates an account. Throws AuthError('confirm-email') if Supabase wants the email confirmed first. */
+/**
+ * Creates an account. With email confirmation on (Supabase > Auth > Sign In / Providers > Confirm email),
+ * Supabase emails a 6-digit code and this throws AuthError('confirm-email'): show the code screen
+ * (app/verify-email.tsx), then call verifySignUpCode. The "Confirm signup" email template must include {{ .Token }}.
+ */
 export async function signUp(email: string, password: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   // With email confirmation on, Supabase hides "already registered" by returning a user with no identities.
   if (data.user && data.user.identities?.length === 0) throw new AuthError('email-taken');
@@ -42,9 +52,28 @@ export async function signUp(email: string, password: string) {
 
 export async function signIn(email: string, password: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   return data.session; // the SIGNED_IN event starts a sync (downloads this account's data)
+}
+
+/** Sign Up, step 2: checks the emailed code. On success the account is confirmed and signed in. */
+export async function verifySignUpCode(email: string, code: string) {
+  ensureConfigured();
+  const { data, error } = await supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: code.replace(/\s/g, ''),
+    type: 'email',
+  });
+  if (error) throw toAuthError(error);
+  return data.session; // the SIGNED_IN event starts a sync
+}
+
+/** Emails a new sign-up code (also used when someone signs in before confirming). */
+export async function resendSignUpCode(email: string) {
+  ensureConfigured();
+  const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
+  if (error) throw toAuthError(error);
 }
 
 /** Uploads anything not synced yet, clears this phone's copy, then signs out. */
@@ -95,7 +124,7 @@ export async function resetPasswordWithCode(email: string, code: string, newPass
     type: 'recovery',
   });
   if (codeError) throw toAuthError(codeError);
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  const { error } = await supabase.auth.updateUser({ password: cleanPassword(newPassword) });
   if (error) throw toAuthError(error);
 }
 

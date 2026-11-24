@@ -1,4 +1,5 @@
 import { Pressable, View } from 'react-native';
+import { StreakIcon } from '@/components/ui/StreakIcon';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
@@ -86,7 +87,7 @@ export function StreakCalendar({ year, month, today, heat, streak, peakStreak, o
           paddingTop: spacing.sm,
           gap: spacing.sm,
         }}>
-        <Icon name="flame" size={20} color={colors.terracottaDark} />
+        <StreakIcon size={20} />
         <View style={{ flex: 1 }}>
           <Text variant="subheading" color={colors.terracottaDark} style={{ fontSize: 15 }}>
             {streak} Day Streak

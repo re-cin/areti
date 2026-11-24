@@ -1,12 +1,12 @@
-import { router } from 'expo-router';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { Alert, Animated, PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { setPomodoroVisible, showNotice } from '@/stores/notice';
+import { Animated, PanResponder, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UpcomingSessions } from '@/components/pomodoro/UpcomingSessions';
 import { BlockDots } from '@/components/ui/BlockDots';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { IconButton } from '@/components/ui/IconButton';
-import { Pill } from '@/components/ui/Pill';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Text } from '@/components/ui/Text';
 import { formatTimer } from '@/lib/dateHelpers';
@@ -14,6 +14,7 @@ import { useDbQuery } from '@/lib/useDbQuery';
 import { getGhost } from '@/features/pet/petRepo';
 import { getNotificationPermission, requestNotificationPermission } from '@/features/timer/notifications';
 import { DEFAULT_POMODORO, loadPomodoroSettings } from '@/features/timer/pomodoroSettings';
+import { blockMin } from '@/features/timer/session';
 import { listUpcomingToday, type UpcomingSession } from '@/features/timer/timerRepo';
 import { selectRemainingMs, useTimer, type StartOptions } from '@/features/timer/timerStore';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
@@ -25,6 +26,13 @@ const COMPACT_HEIGHT = 150;
 const SHEET_RADIUS = 28;
 
 export default function PomodoroScreen() {
+  // Lets the "Time to focus" reminder know you're already here (then it shows no popup).
+  useFocusEffect(
+    useCallback(() => {
+      setPomodoroVisible(true);
+      return () => setPomodoroVisible(false);
+    }, []),
+  );
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [expanded, setExpanded] = useState(false);
@@ -62,6 +70,20 @@ export default function PomodoroScreen() {
   };
   const snapRef = useRef(snap);
   useLayoutEffect(() => { snapRef.current = snap; });
+
+  // Leaving the tab resets the page to its default state (sheet closed, list at the top),
+  // so it looks fresh when you come back.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        listRef.current?.scrollTo({ y: 0, animated: false });
+        pos.current.expanded = false;
+        setExpanded(false);
+        sheetY.setValue(pos.current.collapsedTop);
+      },
+      [sheetY],
+    ),
+  );
 
   // Keep the sheet in place when sizes change (first layout, timer controls appearing, rotation).
   const dragging = useRef(false);
@@ -135,7 +157,7 @@ export default function PomodoroScreen() {
 
   const idle = timer.status === 'idle';
   // Idle shows a full focus block (e.g. 25:00) so the countdown starts from there, not from 00:00.
-  const displayMs = idle ? settings.focusMin * 60_000 : remaining;
+  const displayMs = idle ? blockMin(settings, 0) * 60_000 : remaining;
   const run = timer.run;
   const totalDots = run ? run.totalBlocks : settings.focusCount;
   const filledDots = run ? run.completedBlocks + (run.phase === 'focus' ? 1 : 0) : 0;
@@ -147,7 +169,8 @@ export default function PomodoroScreen() {
 
   const startSession = (s: UpcomingSession) => {
     if (!idle) {
-      if (s.id !== timer.plannedSessionId) Alert.alert('A session is running', 'Stop the current session before starting another one.');
+      if (s.id !== timer.plannedSessionId)
+        showNotice({ title: 'A session is running', message: 'Stop the current session before starting another one.' });
       return;
     }
     void start({
@@ -163,13 +186,18 @@ export default function PomodoroScreen() {
 
   // What "End session" will save: the minutes focused in the current block (under 1 min is not saved).
   const focusedMin =
-    run?.phase === 'focus' && timer.cfg ? Math.floor((timer.cfg.focusMin * 60_000 - remaining) / 60_000) : 0;
+    run?.phase === 'focus' && timer.cfg ? Math.floor((blockMin(timer.cfg, run.completedBlocks) * 60_000 - remaining) / 60_000) : 0;
   const stopHighlight =
     run?.phase !== 'focus'
-      ? `${run?.completedBlocks ?? 0} of ${run?.totalBlocks ?? 0} blocks done`
-      : focusedMin >= 1
-        ? `${focusedMin} min will be saved`
-        : 'Less than a minute, nothing saved';
+      ? // On a break: show progress only when there is some (never "0 of 0 blocks done").
+        run && run.completedBlocks > 0
+        ? `${run.completedBlocks} of ${run.totalBlocks} blocks done`
+        : undefined
+      : focusedMin >= 15
+        ? `${focusedMin} min will be credited`
+        : focusedMin >= 1
+          ? `${focusedMin} min saved, no XP (under 15 min)`
+          : 'Less than a minute, nothing saved';
 
   const circle = Math.min(width - 96, 290);
 
@@ -252,11 +280,6 @@ export default function PomodoroScreen() {
                   borderColor: colors.muted,
                 }}
               />
-              {timer.subjectName && !idle && (
-                <View style={{ marginBottom: 4 }}>
-                  <Pill label={timer.subjectName} color={timer.subjectColor ?? colors.pill.other} />
-                </View>
-              )}
               <Text accessibilityRole="timer" style={{ fontFamily: fonts.semiBold, fontSize: circle * 0.26, lineHeight: circle * 0.3 }}>
                 {formatTimer(displayMs)}
               </Text>
@@ -353,9 +376,8 @@ export default function PomodoroScreen() {
             activeSessionId={timer.plannedSessionId}
             expanded={expanded}
             onToggleExpanded={() => snap(!expanded)}
-            onAdd={() => {
-              // TODO: + (add a session) is disabled for now. The sheet lives in components/pomodoro/AddSessionSheet.tsx.
-            }}
+            // + opens Add Task in Pomodoro mode: only "Schedule Pomodoro" can be used there.
+            onAdd={() => router.push({ pathname: '/planner/add-task', params: { from: 'pomodoro' } })}
             onStart={startSession}
           />
         </ScrollView>
@@ -364,7 +386,7 @@ export default function PomodoroScreen() {
       <ConfirmDialog
         visible={confirmingStop && !idle}
         title="End this session?"
-        message="Your focus time so far goes to your statistics, and Reti keeps the XP."
+        message="Your focus time so far goes to your statistics. Reti earns XP when a block reaches 15 minutes."
         highlight={stopHighlight}
         cancelLabel="Keep going"
         confirmLabel="End session"

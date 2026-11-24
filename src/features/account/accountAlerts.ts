@@ -1,7 +1,9 @@
-import { Alert } from 'react-native';
 import { confirmSignOut } from '@/lib/confirmSignOut';
+import { showNotice } from '@/stores/notice';
 
-/** Sign-out buttons: asks "Sign out?", clears the session and shows the sign in screen (Ryan's auth). */
+/** Sign-out buttons: asks "Sign out?" in areti's popup, then shows the sign in screen. */
 export const showSignOutInfo = () => confirmSignOut();
 
-export const showComingSoon = (what: string) => Alert.alert(what, 'Coming in a later version of areti.');
+/** "Coming soon" (Premium, Help & Support, …) in areti's white popup with a terracotta Okay. */
+export const showComingSoon = (what: string) =>
+  showNotice({ title: what, message: 'Coming in a later version of areti.' });

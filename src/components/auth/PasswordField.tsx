@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import { TextField } from '@/components/ui/TextField';
 import { colors } from '@/theme';
@@ -16,6 +16,9 @@ export function PasswordField(props: Props) {
       autoCorrect={false}
       {...props}
       secureTextEntry={!visible}
+      // Shown on Android: no suggestion bar, so the keyboard can't sneak in a word + space.
+      keyboardType={visible && Platform.OS === 'android' ? 'visible-password' : 'default'}
+      spellCheck={false}
       right={
         <Pressable
           onPress={() => setVisible((v) => !v)}

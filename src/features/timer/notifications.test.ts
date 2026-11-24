@@ -9,13 +9,15 @@ const mockNotifications = {
   setNotificationChannelAsync: jest.fn().mockResolvedValue(null),
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
-  cancelAllScheduledNotificationsAsync: jest.fn().mockResolvedValue(undefined),
+  getAllScheduledNotificationsAsync: jest.fn().mockResolvedValue([]),
+  cancelScheduledNotificationAsync: jest.fn().mockResolvedValue(undefined),
   scheduleNotificationAsync: jest.fn().mockResolvedValue('notification-id'),
 };
 
 jest.mock('expo', () => ({ requireOptionalNativeModule: (name: string) => mockNativeModule(name) }));
 jest.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 jest.mock('expo-notifications', () => { mockImportNotifications(); return mockNotifications; });
+jest.mock('@/features/audio/playChime', () => ({ playChime: jest.fn() }));
 
 beforeEach(() => {
   jest.resetModules();
@@ -52,12 +54,15 @@ it('schedules local timer notifications when the native module and permission ar
   expect(await notifications.getNotificationPermission()).toBe('granted');
 });
 
-it('does not schedule notifications without permission, and supports cancellation', async () => {
+it('does not schedule notifications without permission, and cancels only timer notifications', async () => {
   mockNativeModule.mockReturnValue({});
   mockNotifications.getPermissionsAsync.mockResolvedValue({ status: 'denied', granted: false });
   const notifications = jest.requireActual<typeof import('./notifications')>('./notifications');
   await notifications.scheduleTimerNotifications([futureEnd()]);
   expect(mockNotifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+  // Cancelling the timer removes only timer notifications; Planner session reminders stay.
+  mockNotifications.getAllScheduledNotificationsAsync.mockResolvedValue([{ identifier: 'timer:0' }, { identifier: 'reminder:abc' }]);
   await notifications.cancelTimerNotifications();
-  expect(mockNotifications.cancelAllScheduledNotificationsAsync).toHaveBeenCalledTimes(2);
+  expect(mockNotifications.cancelScheduledNotificationAsync).toHaveBeenCalledWith('timer:0');
+  expect(mockNotifications.cancelScheduledNotificationAsync).not.toHaveBeenCalledWith('reminder:abc');
 });

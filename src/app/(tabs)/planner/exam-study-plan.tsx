@@ -185,11 +185,6 @@ export default function ExamStudyPlanScreen() {
     }).catch(error => Alert.alert('Could not update difficulty', String(error)))
       .finally(() => setSaving(false));
   };
-  const defaultUrgency = () => {
-    if (!exam || saving) return;
-    void updateSubjectUrgency(exam.subjectId, 1).then(() => setStatus('Default urgency selected. Your exam deadline still applies.'))
-      .catch(error => Alert.alert('Could not update urgency', String(error)));
-  };
   const closeProtectedSubjects = async () => {
     if (saving) return;
     setSaving(true);
@@ -205,7 +200,7 @@ export default function ExamStudyPlanScreen() {
 
   return <SafeAreaView style={styles.root} edges={['top']}>
     <ExamStudyPlanContent title={title} subjectName={subject?.name ?? 'Subject'} subjectColor={subject?.color ?? colors.exam}
-      difficulty={exam.difficulty} urgency={subject?.urgency === 1 ? 'default' : 'exam'} examDate={exam.examDate}
+      difficulty={exam.difficulty} examDate={exam.examDate}
       today={today} selectedDate={selectedDate} prefs={prefs} excluded={editingDates ? excludedDraft : prefs.excluded}
       editingDates={editingDates} extraOpen={extraOpen} sessions={cards} shortfall={shortfall} error={previewError} status={status}
       access={access}
@@ -213,7 +208,7 @@ export default function ExamStudyPlanScreen() {
       actions={{
         back: () => router.back(), settings: () => router.push('/settings'),
         subject: () => router.push({ pathname: '/planner/set-exam', params: { id } }),
-        difficulty: changeDifficulty, defaultUrgency, examDate: pickExamDate,
+        difficulty: changeDifficulty, examDate: pickExamDate, preferences: () => router.push('/settings/preferences'),
         scope: scope => setPrefs(p => ({ ...p, scope })),
         changeCalendar: direction => { dateSelectedByUser.current = true; setSelectedDate(date => addMonths(date, direction)); },
         selectDate: date => {

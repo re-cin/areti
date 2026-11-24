@@ -16,10 +16,11 @@ export async function refreshSubscription(): Promise<void> {
   const { data: auth } = await supabase.auth.getSession();
   const userId = auth.session?.user.id;
   if (!userId) return;
-  const { data, error } = await supabase.from('subscriptions').select('plan, expires_at').eq('user_id', userId).maybeSingle();
+  const { data, error } = await supabase.from('subscriptions').select('plan, status, current_period_end').eq('user_id', userId).maybeSingle();
   if (error) return;
   const next: SubscriptionRecord = data
-    ? { plan: data.plan === 'premium' ? 'premium' : 'free', expiresAt: data.expires_at ? Date.parse(data.expires_at) : null }
+    ? { plan: data.plan === 'premium' && ['active', 'trialing'].includes(data.status) ? 'premium' : 'free',
+        expiresAt: data.current_period_end ? Date.parse(data.current_period_end) : null }
     : { plan: 'free', expiresAt: null };
   if (next.expiresAt !== null && !Number.isFinite(next.expiresAt)) next.expiresAt = null;
   const value = JSON.stringify(next);

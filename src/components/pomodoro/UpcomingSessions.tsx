@@ -3,6 +3,7 @@ import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
 import { formatClock, formatHM } from '@/lib/dateHelpers';
+import { sessionLengthMin } from '@/features/timer/session';
 import { deletePlannedSession, type UpcomingSession } from '@/features/timer/timerRepo';
 import { colors, fonts, spacing } from '@/theme';
 
@@ -49,7 +50,8 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
       ) : (
         sessions.map((s) => {
           const left = s.blocks - s.completedBlocks;
-          const minutes = left * s.settings.focusMin; // this session's own focus length
+          // Total session length = focus blocks + short and long breaks (session structure rules).
+          const minutes = sessionLengthMin(s.settings, s.blocks);
           const active = s.id === activeSessionId;
           return (
             <Pressable

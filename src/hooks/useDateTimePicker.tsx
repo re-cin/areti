@@ -4,7 +4,7 @@ import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/d
 import { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet } from 'react-native';
 
-type PickerState = { mode: 'date' | 'time'; value: Date; onPick: (d: Date) => void } | null;
+type PickerState = { mode: 'date' | 'time'; value: Date; onPick: (d: Date) => void; minimumDate?: Date } | null;
 
 /**
  * One date/time picker for the whole app.
@@ -14,18 +14,20 @@ type PickerState = { mode: 'date' | 'time'; value: Date; onPick: (d: Date) => vo
 export function useDateTimePicker() {
   const [picker, setPicker] = useState<PickerState>(null); // iOS only
 
-  const openPicker = (mode: 'date' | 'time', value: Date, onPick: (d: Date) => void) => {
+  /** `minimumDate` greys out earlier dates/times (iOS spinner and Android date dialog; Android's time dialog can't, so callers still check). */
+  const openPicker = (mode: 'date' | 'time', value: Date, onPick: (d: Date) => void, minimumDate?: Date) => {
     if (Platform.OS === 'android') {
       DateTimePickerAndroid.open({
-        value,
+        value: minimumDate && value < minimumDate ? minimumDate : value,
         mode,
+        minimumDate: mode === 'date' ? minimumDate : undefined,
         is24Hour: false,
         onChange: (e, d) => {
           if (e.type === 'set' && d) onPick(d);
         },
       });
     } else {
-      setPicker({ mode, value, onPick });
+      setPicker({ mode, value: minimumDate && value < minimumDate ? minimumDate : value, onPick, minimumDate });
     }
   };
 
@@ -37,6 +39,7 @@ export function useDateTimePicker() {
             <DateTimePicker
               value={picker.value}
               mode={picker.mode}
+              minimumDate={picker.minimumDate}
               display="spinner"
               themeVariant="light"
               onChange={(_, d) => d && setPicker({ ...picker, value: d })}

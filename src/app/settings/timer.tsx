@@ -1,6 +1,7 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { useAudioFocus } from '@/stores/audioFocus';
+import { showNotice } from '@/stores/notice';
 import { Alert, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Dropdown } from '@/components/ui/Dropdown';
@@ -11,10 +12,8 @@ import { Slider } from '@/components/ui/Slider';
 import { Stepper } from '@/components/ui/Stepper';
 import { Text } from '@/components/ui/Text';
 import {
-  BACKGROUND_SOUNDS,
   DEFAULT_POMODORO,
   loadPomodoroSettings,
-  NOTIFICATION_SOUNDS,
   POMODORO_LIMITS,
   savePomodoroSettings,
   type PomodoroSettings,
@@ -23,7 +22,8 @@ import { useTimer } from '@/features/timer/timerStore';
 import { getTaskSummary, scheduleTaskPomodoro, type TaskSummary } from '@/features/timer/timerRepo';
 import { formatClock, startOfDay } from '@/lib/dateHelpers';
 import { Pill } from '@/components/ui/Pill';
-import { backgroundSource, notificationSource } from '@/features/audio/sounds';
+import { backgroundSource, notificationSource, useBackgroundSoundNames, useNotificationSoundNames } from '@/features/audio/sounds';
+import { refreshRemoteSounds } from '@/features/audio/remoteSounds';
 import { useSoundPreview } from '@/features/audio/useSoundPreview';
 import { colors, fonts, spacing } from '@/theme';
 
@@ -35,10 +35,18 @@ export default function TimerSettingsScreen() {
   const [loaded, setLoaded] = useState(false);
   const running = useTimer((s) => s.status !== 'idle');
   const preview = useSoundPreview();
+  const backgroundNames = useBackgroundSoundNames();
+  const notificationNames = useNotificationSoundNames();
+  // Pick up music an admin added since the app opened.
+  useEffect(() => {
+    void refreshRemoteSounds().catch(() => {});
+  }, []);
   // Opened from Planner > Add Task > Schedule Pomodoro: saving also schedules that task.
   // Only a task passed in by Add Task counts; a plain visit (gear button) never shows the scheduling card.
-  const params = useLocalSearchParams<{ taskId?: string }>();
+  const params = useLocalSearchParams<{ taskId?: string; sound?: string }>();
   const taskId = typeof params.taskId === 'string' && params.taskId.length > 0 ? params.taskId : undefined;
+  // Notification sound picked on Add Task (same list as here), used as the starting value.
+  const taskSound = taskId && typeof params.sound === 'string' && params.sound ? params.sound : undefined;
 
   // Pause the running session's background sound while this screen is open, so previews don't overlap it.
   const setSettingsOpen = useAudioFocus((st) => st.setSettingsOpen);
@@ -64,9 +72,10 @@ export default function TimerSettingsScreen() {
 
   useEffect(() => {
     loadPomodoroSettings().then((s) => {
-      setForm(s);
+      setForm(taskSound ? { ...s, notificationSound: taskSound } : s);
       setLoaded(true);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const set = <K extends keyof PomodoroSettings>(key: K, value: PomodoroSettings[K]) =>
@@ -89,10 +98,10 @@ export default function TimerSettingsScreen() {
       }
       router.setParams({ taskId: '' });
       if (scheduled.date !== startOfDay(new Date()).getTime()) {
-        Alert.alert(
-          'Pomodoro scheduled',
-          `It will show in Upcoming Sessions on ${new Date(scheduled.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`,
-        );
+        const message = `It will show in Upcoming Sessions on ${new Date(scheduled.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`;
+        // Shown once this screen has closed and the Pomodoro tab is up: iOS can't open a popup
+        // while a screen is still being dismissed, so showing it right away made it vanish.
+        setTimeout(() => showNotice({ title: 'Pomodoro scheduled', message, icon: 'clock' }), 600);
       }
       // Show it in Upcoming Sessions
       if (router.canDismiss()) router.dismissAll();
@@ -166,7 +175,12 @@ export default function TimerSettingsScreen() {
           <SectionTitle>Time Interval</SectionTitle>
           {interval('focusCount', 'Focus count')}
           {interval('focusMin', 'Focus time', minutes)}
-          {interval('breakMin', 'Break time', minutes)}
+
+          {/* Short breaks come between blocks, so with 1 block there are none (setting disabled).
+              The long break always comes once, at the end. */}
+          <View pointerEvents={form.focusCount >= 2 ? 'auto' : 'none'} style={{ opacity: form.focusCount >= 2 ? 1 : 0.4 }}>
+            {interval('breakMin', 'Break time', minutes)}
+          </View>
           {interval('longBreakMin', 'Long break time', minutes)}
           {running && (
             <Text variant="caption" color={colors.muted} style={{ marginTop: spacing.xs }}>
@@ -178,7 +192,7 @@ export default function TimerSettingsScreen() {
           <Label>Background Sound</Label>
           <Dropdown
             value={form.backgroundSound}
-            options={BACKGROUND_SOUNDS}
+            options={backgroundNames}
             onChange={(v) => {
               set('backgroundSound', v);
               preview.play(backgroundSource(v), form.backgroundVolume, { background: v });
@@ -205,7 +219,7 @@ export default function TimerSettingsScreen() {
           <Label>Notification Sound</Label>
           <Dropdown
             value={form.notificationSound}
-            options={NOTIFICATION_SOUNDS}
+            options={notificationNames}
             onChange={(v) => {
               set('notificationSound', v);
               preview.play(notificationSource(v), form.notificationVolume);
