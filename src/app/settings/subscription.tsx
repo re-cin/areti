@@ -116,7 +116,7 @@ export default function SubscriptionScreen() {
         overScrollMode="never"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ flexGrow: 1 }}>
-        {/* Teal hero: back button, wordmark, outlined "Premium" */}
+        {/* Teal hero: wordmark, outlined "Premium" (the back button floats above, see below) */}
         <View style={[styles.hero, { paddingTop: insets.top + 30 }]}>
           {/* Wordmark level with the back button, big title below, Reti perched on its top-right corner */}
           <Wordmark width={120} backgroundColor={colors.welcomeTeal} />
@@ -124,16 +124,6 @@ export default function SubscriptionScreen() {
             <OutlinedTitle text="Premium" />
           </View>
           <RunningReti />
-          <Pressable
-            onPress={() => router.back()}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            style={[styles.backWrap, { top: insets.top + 26 }]}>
-            <NeoBox backgroundColor={colors.white} radius={24} style={styles.back}>
-              <BackArrow />
-            </NeoBox>
-          </Pressable>
         </View>
 
         {/* Cream sheet */}
@@ -263,6 +253,18 @@ export default function SubscriptionScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Back button stays put while the page scrolls under it */}
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Back"
+        style={[styles.backWrap, { top: insets.top + 26 }]}>
+        <NeoBox backgroundColor={colors.white} radius={24} style={styles.back}>
+          <BackArrow />
+        </NeoBox>
+      </Pressable>
 
       <PaymentSheet
         visible={checkoutOpen}
@@ -539,7 +541,7 @@ function Star() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.welcomeTeal },
   hero: { alignItems: 'center', gap: 4, paddingBottom: 24 },
-  backWrap: { position: 'absolute', left: 20 },
+  backWrap: { position: 'absolute', left: 20, zIndex: 10, elevation: 10 },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
   titleWrap: { marginTop: 6 },
   runway: { alignSelf: 'stretch', alignItems: 'center', height: 74, justifyContent: 'flex-end', marginTop: 4 },
