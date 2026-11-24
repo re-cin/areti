@@ -47,12 +47,17 @@ export async function payWithPayPal(plan: PaidPlan, student = false): Promise<Ch
   if (!created.data) return { kind: 'error', code: created.code ?? 'unknown', message: created.message ?? 'Could not start checkout.' };
 
   const session = await WebBrowser.openAuthSessionAsync(created.data.approveUrl, returnTo);
-  if (session.type !== 'success') return { kind: 'canceled' };
-  const { queryParams } = Linking.parse(session.url);
-  if (queryParams?.result !== 'success') return { kind: 'canceled' };
+  // PayPal's "Cancel and return" comes back with result=cancel: nothing to confirm.
+  if (session.type === 'success' && Linking.parse(session.url).queryParams?.result !== 'success') return { kind: 'canceled' };
 
+  // Back from PayPal: either through the return link, or because the user closed the page.
+  // Android's browser often blocks the automatic jump back into the app, so after a close we still
+  // ask the server: it confirms the order only if PayPal says the user approved it.
   const captured = await call<{ ok: boolean; currentPeriodEnd: string }>({ action: 'capture', orderId: created.data.orderId });
-  if (!captured.data?.ok) return { kind: 'error', code: captured.code ?? 'unknown', message: captured.message ?? 'Payment could not be confirmed.' };
+  if (!captured.data?.ok) {
+    if (session.type !== 'success' && captured.code === 'not_approved') return { kind: 'canceled' };
+    return { kind: 'error', code: captured.code ?? 'unknown', message: captured.message ?? 'Payment could not be confirmed.' };
+  }
 
   await refreshSubscription(); // pulls the new Premium row into the phone's cache
   return { kind: 'paid', currentPeriodEnd: Date.parse(captured.data.currentPeriodEnd) };
