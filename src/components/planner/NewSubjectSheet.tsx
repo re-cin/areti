@@ -1,7 +1,9 @@
+
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
+import { SubjectColorModal } from '@/components/settings/SubjectColorModal';
 import { addSubject } from '@/db/queries/subjects';
 import { useSubjects } from '@/hooks/useSubjects';
 import { borders, colors, spacing } from '@/theme';
@@ -19,19 +21,15 @@ import {
   View,
 } from 'react-native';
 
-const SUBJECT_COLORS = colors.subjectPalette;
+/** Seven quick picks in the sheet; the "…" circle after them opens all the presets. */
+const SUBJECT_COLORS: readonly string[] = colors.subjectPalette.slice(0, 7);
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  /** Called with the new subject's id so the caller can select it. */
   onCreated: (subjectId: string) => void;
 };
 
-/**
- * Bottom sheet drawn INSIDE the screen (not a native Modal) so the tab bar stays visible under it.
- * Render it last in the screen's root View so it sits on top.
- */
 export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
   const { subjects } = useSubjects();
 
@@ -42,58 +40,75 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
   const [name, setName] = useState('');
   const [color, setColor] = useState<string>(SUBJECT_COLORS[0]);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [customColorOpen, setCustomColorOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [wasVisible, setWasVisible] = useState(false);
+  const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (visible) {
-      const unused = SUBJECT_COLORS.find(c => !subjects.some(s => s.color.toLowerCase() === c.toLowerCase()));
+      const unused = colors.subjectPalette.find(
+        c => !subjects.some(s => s.color.toLowerCase() === c.toLowerCase()),
+      );
       setName('');
       setColor(unused ?? SUBJECT_COLORS[0]);
       setPaletteOpen(false);
+      setCustomColorOpen(false);
       setMounted(true);
     }
   }
 
-  // Slide in/out, and reset the form every time it opens.
   useEffect(() => {
     if (visible) {
-      Animated.timing(progress, { toValue: 1, duration: 260, useNativeDriver: true }).start();
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 260,
+        useNativeDriver: true,
+      }).start();
     } else {
-      Animated.timing(progress, { toValue: 0, duration: 200, useNativeDriver: true }).start(({ finished }) => {
+      Animated.timing(progress, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
         if (finished) setMounted(false);
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
 
-  // Android back button closes the sheet.
-  useEffect(() => {
-    if (!visible) return;
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      close();
-      return true;
-    });
-    return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   function close() {
     Keyboard.dismiss();
+    setCustomColorOpen(false);
     onClose();
   }
+
+  useEffect(() => {
+    if (!visible) return;
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      close();
+      return true;
+    });
+
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const valid = name.trim().length > 0;
 
   const submit = async () => {
     if (!valid || saving) return;
+
     setSaving(true);
+
     try {
       const id = await addSubject({
         name: name.trim(),
         color,
       });
+
       onCreated(id);
       close();
     } catch (error) {
@@ -107,31 +122,50 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {/* dimmed backdrop; tapping it closes the sheet */}
       <Animated.View style={[StyleSheet.absoluteFill, { opacity: progress }]}>
-        <Pressable style={[StyleSheet.absoluteFill, styles.backdrop]} onPress={close} />
+        <Pressable
+          style={[StyleSheet.absoluteFill, styles.backdrop]}
+          onPress={close}
+        />
       </Animated.View>
 
       <KeyboardAvoidingView
         style={styles.kav}
         pointerEvents="box-none"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <Animated.View
           onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}
           style={[
             styles.sheet,
-            { transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [sheetH, 0] }) }] },
-          ]}>
+            {
+              transform: [
+                {
+                  translateY: progress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [sheetH, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
           <View style={styles.handle} />
 
           <View style={styles.titleRow}>
-            <Text variant="title" style={{ fontSize: 22 }}>New Subject</Text>
+            <Text variant="title" style={{ fontSize: 22 }}>
+              New Subject
+            </Text>
+
             <Pressable onPress={close} hitSlop={12}>
               <Ionicons name="close" size={22} color={colors.ink} />
             </Pressable>
           </View>
 
-          <Text variant="smallStrong" style={styles.label}>Subject Name</Text>
+          <Text variant="smallStrong" style={styles.label}>
+            Subject Name
+          </Text>
+
           <TextField
             value={name}
             onChangeText={setName}
@@ -139,11 +173,31 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
             autoCapitalize="characters"
             returnKeyType="done"
             right={
-              <Pressable onPress={() => setPaletteOpen((o) => !o)} hitSlop={8} accessibilityLabel="Pick a color">
+              <Pressable
+                onPress={() => setPaletteOpen((o) => !o)}
+                hitSlop={8}
+                accessibilityLabel="Pick a color"
+              >
                 {({ pressed }) => (
-                  <View style={{ transform: pressed ? [{ translateX: 2 }, { translateY: 2 }] : [] }}>
-                    <NeoBox offset={2} shadow={!pressed} radius={16} backgroundColor={color} style={styles.paletteBtn}>
-                      <Ionicons name="color-palette-outline" size={16} color={colors.white} />
+                  <View
+                    style={{
+                      transform: pressed
+                        ? [{ translateX: 2 }, { translateY: 2 }]
+                        : [],
+                    }}
+                  >
+                    <NeoBox
+                      offset={2}
+                      shadow={!pressed}
+                      radius={16}
+                      backgroundColor={color}
+                      style={styles.paletteBtn}
+                    >
+                      <Ionicons
+                        name="color-palette-outline"
+                        size={16}
+                        color={getContrastColor(color)}
+                      />
                     </NeoBox>
                   </View>
                 )}
@@ -153,25 +207,62 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
 
           {paletteOpen && (
             <View style={styles.swatches}>
-              {SUBJECT_COLORS.map((c) => (
+              {/* A color picked from "…" that isn't a quick pick shows first, so the choice stays visible. */}
+              {(SUBJECT_COLORS.some((c) => c.toLowerCase() === color.toLowerCase())
+                ? SUBJECT_COLORS
+                : [color, ...SUBJECT_COLORS.slice(0, 6)]
+              ).map((c) => (
                 <Pressable
                   key={c}
                   onPress={() => {
                     setColor(c);
                     setPaletteOpen(false);
                   }}
-                  style={[styles.swatch, { backgroundColor: c }]}>
-                  {c === color && <Ionicons name="checkmark" size={16} color={colors.white} />}
+                  style={[styles.swatch, { backgroundColor: c }]}
+                >
+                  {c.toLowerCase() === color.toLowerCase() && (
+                    <Ionicons
+                      name="checkmark"
+                      size={16}
+                      color={getContrastColor(c)}
+                    />
+                  )}
                 </Pressable>
               ))}
+
+              <Pressable
+                onPress={() => {
+                  setPaletteOpen(false);
+                  setCustomColorOpen(true);
+                }}
+                style={[
+                  styles.swatch,
+                  { backgroundColor: colors.white },
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="More colors"
+              >
+                <Ionicons
+                  name="ellipsis-horizontal"
+                  size={18}
+                  color={colors.ink}
+                />
+              </Pressable>
             </View>
           )}
+
 
           <View style={{ marginTop: spacing.lg }}>
             <NeoButton
               label="Add Subject"
               backgroundColor={colors.teal}
-              icon={<Ionicons name="add-circle-outline" size={22} color={colors.ink} />}
+              icon={
+                <Ionicons
+                  name="add-circle-outline"
+                  size={22}
+                  color={colors.ink}
+                />
+              }
               disabled={!valid || saving}
               onPress={submit}
             />
@@ -179,13 +270,32 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
         </Animated.View>
       </KeyboardAvoidingView>
 
+      <SubjectColorModal
+        visible={customColorOpen}
+        subjectName={name.trim() || 'New Subject'}
+        current={color}
+        onPick={(selectedColor) => {
+          setColor(selectedColor);
+          setCustomColorOpen(false);
+        }}
+        onClose={() => setCustomColorOpen(false)}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { backgroundColor: 'rgba(0,0,0,0.45)' },
-  kav: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end' },
+  backdrop: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  kav: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+  },
   sheet: {
     backgroundColor: colors.sheetRaised,
     borderTopLeftRadius: 28,
@@ -203,10 +313,27 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mutedSoft,
     marginBottom: 12,
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  label: { marginTop: 8 },
-  paletteBtn: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
-  swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, paddingVertical: 4 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  label: {
+    marginTop: 8,
+  },
+  paletteBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swatches: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingVertical: 4,
+  },
   swatch: {
     width: 30,
     height: 30,
@@ -217,3 +344,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+function getContrastColor(backgroundColor: string): string {
+  const hex = backgroundColor.replace('#', '');
+
+  if (!/^[0-9A-Fa-f]{6}$/.test(hex)) {
+    return colors.ink;
+  }
+
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+  const linearize = (value: number) =>
+    value <= 0.04045
+      ? value / 12.92
+      : Math.pow((value + 0.055) / 1.055, 2.4);
+
+  const luminance =
+    0.2126 * linearize(r) +
+    0.7152 * linearize(g) +
+    0.0722 * linearize(b);
+
+  return luminance > 0.179 ? colors.ink : colors.white;
+}

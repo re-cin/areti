@@ -10,6 +10,8 @@ import { formatClock } from '@/lib/dateHelpers';
 import type { SubjectRow } from '@/features/subjects/subjectsRepo';
 import { addPlannedSession } from '@/features/timer/timerRepo';
 import { colors, spacing } from '@/theme';
+import { usePreferences } from '@/features/preferences/preferencesStore';
+
 
 type Props = { visible: boolean; onClose: () => void; subjects: SubjectRow[] };
 
@@ -26,10 +28,11 @@ export function AddSessionSheet({ visible, onClose, subjects }: Props) {
 }
 
 function AddSessionForm({ visible, onClose, subjects }: Props) {
-  const [selectedSubjectId, setSubjectId] = useState<string | null>(null);
-  const subjectId = subjects.some(subject => subject.id === selectedSubjectId) ? selectedSubjectId : subjects[0]?.id ?? null;
-  const [startMinute, setStartMinute] = useState(nextQuarter);
-  const [blocks, setBlocks] = useState(2);
+    const timeFormat = usePreferences(s => s.preferences.timeFormat);
+    const [selectedSubjectId, setSubjectId] = useState<string | null>(null);
+    const subjectId = subjects.some(subject => subject.id === selectedSubjectId) ? selectedSubjectId : subjects[0]?.id ?? null;
+    const [startMinute, setStartMinute] = useState(nextQuarter);
+    const [blocks, setBlocks] = useState(2);
 
   const save = async () => {
     if (!subjectId) return;
@@ -80,7 +83,7 @@ function AddSessionForm({ visible, onClose, subjects }: Props) {
                   min={0}
                   max={23 * 60 + 45}
                   step={15}
-                  format={formatClock}
+                  format={(value) => formatClock(value, timeFormat)}
                   accessibilityLabel="start time"
                 />
               </Row>

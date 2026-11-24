@@ -6,6 +6,7 @@ import { Text } from '@/components/ui/Text';
 import { addMonths, dayKey, isSameDay, monthGrid, MONTHS, WEEKDAYS_SHORT } from '@/lib/dateHelpers';
 import { intensityLevel } from '@/features/stats/stats';
 import { borders, colors, fonts, spacing } from '@/theme';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 
 type Props = {
   month: Date; // any day in the shown month
@@ -19,7 +20,15 @@ type Props = {
 };
 
 export function CalendarHeatmap({ month, selected, today, minutesByDay, streak, peakStreak, onSelect, onChangeMonth }: Props) {
-  const days = monthGrid(month);
+  const firstDay = usePreferences(s => s.preferences.firstDay);
+  const weekStartsOn = firstDay === 'Sunday' ? 0 : 1;
+
+  const days = monthGrid(month, weekStartsOn);
+
+  const weekdays =
+    weekStartsOn === 0
+      ? [...WEEKDAYS_SHORT.slice(-1), ...WEEKDAYS_SHORT.slice(0, -1)]
+      : WEEKDAYS_SHORT;
   const weeks = Array.from({ length: 6 }, (_, w) => days.slice(w * 7, w * 7 + 7));
   // Hide a 6th row that belongs entirely to the next month.
   const visibleWeeks = weeks.filter((w, i) => i < 5 || w.some((d) => d.getMonth() === month.getMonth()));
@@ -40,7 +49,7 @@ export function CalendarHeatmap({ month, selected, today, minutesByDay, streak, 
       <View style={{ height: 1, backgroundColor: colors.line }} />
 
       <View style={{ flexDirection: 'row' }}>
-        {WEEKDAYS_SHORT.map((d) => (
+        {weekdays.map((d) => (
           <Text key={d} variant="caption" color={colors.muted} style={{ flex: 1, textAlign: 'center' }}>
             {d}
           </Text>

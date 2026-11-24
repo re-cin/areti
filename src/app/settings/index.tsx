@@ -27,8 +27,8 @@ export default function UserSettingsScreen() {
     { icon: 'book', label: 'Subjects', href: '/settings/subjects' },
     { icon: 'sliders', label: 'Preferences', href: '/settings/preferences' },
     { icon: 'shield', label: 'Data & Privacy', href: '/settings/privacy' },
-    { icon: 'help', label: 'Help & Support', onPress: () => comingSoon('Help & Support') },
-    { icon: 'info', label: 'Terms & Policies', onPress: () => comingSoon('Terms & Policies') },
+    { icon: 'help', label: 'Help & Support', href: '/settings/help' as Href },
+    { icon: 'info', label: 'Terms & Policies', href: '/settings/terms' as Href },
   ];
 
   return (

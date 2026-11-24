@@ -4,6 +4,8 @@ import { db } from '@/db/client';
 import { plannedSessions, settings as settingsTable, subjects, tasks } from '@/db/schema';
 import { formatClock, startOfDay } from '@/lib/dateHelpers';
 import { scheduleSessionReminders, type SessionReminder } from './notifications';
+import { usePreferences } from '@/features/preferences/preferencesStore';
+
 
 /** How long before a scheduled Pomodoro session the reminder pops up. */
 export const REMINDER_LEAD_MIN = 5;
@@ -40,6 +42,7 @@ export function refreshSessionReminders(): Promise<void> {
 
 async function buildReminders(): Promise<SessionReminder[]> {
   const today = startOfDay(new Date()).getTime();
+  const timeFormat = usePreferences.getState().preferences.timeFormat;
   const rows = await db
     .select({
       id: plannedSessions.id,
@@ -92,7 +95,7 @@ async function buildReminders(): Promise<SessionReminder[]> {
         id: `${r.id}:before`,
         at: start - REMINDER_LEAD_MIN * 60_000,
         title: `Pomodoro in ${REMINDER_LEAD_MIN} minutes`,
-        body: `Your session starts at ${formatClock(r.startMinute ?? 0)}. Get ready to focus!`,
+        body: `Your session starts at ${formatClock(r.startMinute ?? 0, timeFormat)}. Get ready to focus!`,
         silent,
         sound,
         volume,
@@ -127,7 +130,7 @@ async function buildReminders(): Promise<SessionReminder[]> {
         id: `task:${t.id}:before`,
         at: start - REMINDER_LEAD_MIN * 60_000,
         title: `${t.title} in ${REMINDER_LEAD_MIN} minutes`,
-        body: `Your task starts at ${formatClock(t.startMinute)}. Get ready!`,
+        body: `Your task starts at ${formatClock(t.startMinute, timeFormat)}. Get ready!`,
         silent,
         sound: t.sound,
         volume,

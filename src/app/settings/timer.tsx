@@ -26,14 +26,35 @@ import { backgroundSource, notificationSource, useBackgroundSoundNames, useNotif
 import { refreshRemoteSounds } from '@/features/audio/remoteSounds';
 import { useSoundPreview } from '@/features/audio/useSoundPreview';
 import { colors, fonts, spacing } from '@/theme';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 
 const minutes = (v: number) => `${v} min`;
+const formatDate = (ts: number, format: string) => {
+  const date = new Date(ts);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  switch (format) {
+    case 'mm/dd/yy':
+      return `${month}/${day}/${String(year).slice(-2)}`;
+    case 'yyyy-mm-dd':
+      return `${year}-${month}-${day}`;
+    case 'dd/mm/yy':
+    default:
+      return `${day}/${month}/${String(year).slice(-2)}`;
+  }
+};
 
 export default function TimerSettingsScreen() {
   const { width } = useWindowDimensions();
   const [form, setForm] = useState<PomodoroSettings>(DEFAULT_POMODORO);
   const [loaded, setLoaded] = useState(false);
   const running = useTimer((s) => s.status !== 'idle');
+
+  const timeFormat = usePreferences(s => s.preferences.timeFormat);
+  const dateFormat = usePreferences(s => s.preferences.dateFormat);
+
   const preview = useSoundPreview();
   const backgroundNames = useBackgroundSoundNames();
   const notificationNames = useNotificationSoundNames();
@@ -98,7 +119,7 @@ export default function TimerSettingsScreen() {
       }
       router.setParams({ taskId: '' });
       if (scheduled.date !== startOfDay(new Date()).getTime()) {
-        const message = `It will show in Upcoming Sessions on ${new Date(scheduled.date).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })}.`;
+        const message = `It will show in Upcoming Sessions on ${formatDate(scheduled.date, dateFormat)}.`;
         // Shown once this screen has closed and the Pomodoro tab is up: iOS can't open a popup
         // while a screen is still being dismissed, so showing it right away made it vanish.
         setTimeout(() => showNotice({ title: 'Pomodoro scheduled', message, icon: 'clock' }), 600);
@@ -164,8 +185,8 @@ export default function TimerSettingsScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
               <Pill label={task.subjectName} color={task.subjectColor} />
               <Text variant="caption" color={colors.muted}>
-                {new Date(task.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} ·{' '}
-                {formatClock(task.startMinute)} – {formatClock(task.endMinute)}
+                {formatDate(task.date, dateFormat)} ·{' '}
+                {formatClock(task.startMinute, timeFormat)} – {formatClock(task.endMinute, timeFormat)}
               </Text>
             </View>
           </NeoBox>

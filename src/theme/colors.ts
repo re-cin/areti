@@ -97,15 +97,18 @@ export const colors = {
     },
   },
 
-  // Swatches offered when creating a subject (first four match the pill colors)
+  // Subject colors: the only colors a subject can have (no custom picker). 40 presets in muted tones that sit
+  // on the cream page next to teal and terracotta. The first eight are the original swatches.
   subjectPalette: [
-    '#7B4FD6',
-    '#B3261E',
-    '#2E7D4F',
-    '#1F6F6A',
-    '#E0A33A',
-    '#4C8BD9',
-    '#D96FA8',
-    '#8A6D4B',
+    // Original eight (existing subjects keep these)
+    '#7B4FD6', '#B3261E', '#2E7D4F', '#1F6F6A', '#E0A33A', '#4C8BD9', '#D96FA8', '#8A6D4B',
+    // Teals & greens
+    '#3E8F8A', '#7FC4C0', '#5FA8A0', '#2F6E5E', '#6E9E5A', '#9BB86A', '#4E7D3A', '#A9C99B',
+    // Blues & purples
+    '#2F5D8A', '#5B8DB8', '#8FB3D9', '#3B4F7A', '#5E4A8C', '#9C7FD1', '#B79AD9', '#7A4E7E',
+    // Reds, pinks & oranges
+    '#C9534C', '#E9837C', '#B85C7A', '#E3A1B5', '#C9733F', '#D9A27E', '#E08A4F', '#C2570C',
+    // Yellows & earth tones
+    '#E8B931', '#D9C26A', '#C9A24A', '#EBC3A5', '#6B4F3A', '#A0826D', '#5B5650', '#8A847D',
   ],
 } as const;

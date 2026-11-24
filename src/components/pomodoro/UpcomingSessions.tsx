@@ -1,3 +1,4 @@
+
 import { Alert, Pressable, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
@@ -5,6 +6,7 @@ import { Text } from '@/components/ui/Text';
 import { formatClock, formatHM } from '@/lib/dateHelpers';
 import { sessionLengthMin } from '@/features/timer/session';
 import { deletePlannedSession, type UpcomingSession } from '@/features/timer/timerRepo';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 import { colors, fonts, spacing } from '@/theme';
 
 type Props = {
@@ -18,8 +20,10 @@ type Props = {
 };
 
 export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded, onToggleExpanded, onAdd, onStart }: Props) {
+  const timeFormat = usePreferences(s => s.preferences.timeFormat);
+
   const confirmDelete = (s: UpcomingSession) =>
-    Alert.alert('Remove session?', `${s.subjectName}${s.startMinute != null ? ` at ${formatClock(s.startMinute)}` : ''}`, [
+    Alert.alert('Remove session?', `${s.subjectName}${s.startMinute != null ? ` at ${formatClock(s.startMinute, timeFormat)}` : ''}`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: () => void deletePlannedSession(s.id) },
     ]);
@@ -76,7 +80,7 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
                   </Text>
                 ) : null}
                 <Text variant="caption" color={colors.muted} style={{ fontFamily: fonts.semiBold, paddingLeft: 4 }}>
-                  {active ? 'IN PROGRESS' : s.startMinute != null ? formatClock(s.startMinute) : 'Any time'}
+                  {active ? 'IN PROGRESS' : s.startMinute != null ? formatClock(s.startMinute, timeFormat) : 'Any time'}
                 </Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
