@@ -1,9 +1,9 @@
-import { FREE_MONTHLY_GENERATIONS, PRIORITY_MULTIPLIER, entitlementsFor, generationsAreLimited, isExamPriority, parseSubscription, resolveTier } from './entitlements';
+import { FREE_MONTHLY_GENERATIONS, entitlementsFor, generationsAreLimited, parseSubscription, resolveTier } from './entitlements';
 
 describe('entitlements', () => {
   it('gives Free a monthly generation allowance and Premium automatic, adaptive planning', () => {
-    expect(entitlementsFor('free')).toMatchObject({ autoScheduling: false, monthlyGenerations: 3, priorityControls: false, autoMissedRecovery: false, detailedInsights: false });
-    expect(entitlementsFor('premium')).toMatchObject({ autoScheduling: true, monthlyGenerations: Infinity, priorityControls: true, autoMissedRecovery: true, detailedInsights: true });
+    expect(entitlementsFor('free')).toMatchObject({ autoScheduling: false, monthlyGenerations: 3, autoMissedRecovery: false, detailedInsights: false });
+    expect(entitlementsFor('premium')).toMatchObject({ autoScheduling: true, monthlyGenerations: Infinity, autoMissedRecovery: true, detailedInsights: true });
     expect(FREE_MONTHLY_GENERATIONS).toBe(3);
   });
 
@@ -30,10 +30,4 @@ describe('entitlements', () => {
     expect(parseSubscription('{"plan":"premium","expiresAt":"soon"}')).toEqual({ plan: 'premium', expiresAt: null });
   });
 
-  it('validates priorities and keeps Normal neutral', () => {
-    expect(PRIORITY_MULTIPLIER.normal).toBe(1);
-    expect(isExamPriority('high')).toBe(true);
-    expect(isExamPriority('urgent')).toBe(false);
-    expect(isExamPriority(2)).toBe(false);
-  });
 });

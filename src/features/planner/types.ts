@@ -1,4 +1,4 @@
-export type Subject = { id: string; name: string; urgency: number };
+export type Subject = { id: string; name: string };
 
 export type PlannerInput = {
   today: Date;

@@ -4,15 +4,14 @@ import type { StudyPlanAccess } from '@/components/planner/PlanAccessCard';
 import { Text } from '@/components/ui/Text';
 import {
   DEFAULT_EXAM_PREFERENCES, examName, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds,
-  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule, setExamPriority,
+  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule,
   updateExam, updateExamDifficulty, type ExamPreferences,
 } from '@/features/planner/examsRepo';
 import { showComingSoon } from '@/features/account/accountAlerts';
-import { PremiumRequiredError, type ExamPriority } from '@/features/subscription/entitlements';
+import { PremiumRequiredError } from '@/features/subscription/entitlements';
 import { GenerationLimitError } from '@/features/subscription/generationQuota';
 import { getGenerationQuota } from '@/features/subscription/generationQuotaRepo';
 import type { StudySession } from '@/features/planner/engine';
-import { updateSubjectUrgency } from '@/features/subjects/subjectsRepo';
 import { useStudyPlanDeletion } from '@/features/planner/useStudyPlanDeletion';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
@@ -56,7 +55,7 @@ export default function ExamStudyPlanScreen() {
   const [protectedDraft, setProtectedDraft] = useState<string[]>([]);
   const [protectOpen, setProtectOpen] = useState(false);
   // Free until the server confirms otherwise; `loaded` stops us previewing before we know the tier.
-  const [access, setAccess] = useState<StudyPlanAccess & { loaded: boolean }>({ tier: 'free', generation: null, priority: 'normal', insights: null, loaded: false });
+  const [access, setAccess] = useState<StudyPlanAccess & { loaded: boolean }>({ tier: 'free', generation: null, insights: null, loaded: false });
   // This month's Free generations come from the server. Read without blocking the screen; unknown stays null.
   const refreshQuota = useCallback(() => {
     void getGenerationQuota().then(generation => setAccess(old => old.tier === 'premium' ? old : { ...old, generation }));
@@ -81,7 +80,7 @@ export default function ExamStudyPlanScreen() {
       if (!live) return;
       setExam(row); setTitle(name); setLabels(names); setProtectedIds(protectedSubjects);
       setAccess(old => ({ tier: planAccess.entitlements.tier, generation: planAccess.entitlements.tier === 'premium' ? null : old.generation,
-        priority: planAccess.priority, insights, loaded: true }));
+        insights, loaded: true }));
       if (planAccess.entitlements.tier !== 'premium') refreshQuota();
       if (firstLoad) {
         setPrefs({ ...DEFAULT_EXAM_PREFERENCES, ...saved, longBreakMin: Math.max(30, saved?.longBreakMin ?? 30) });
@@ -150,13 +149,6 @@ export default function ExamStudyPlanScreen() {
     if (message) Alert.alert('Premium feature', message, [{ text: 'Not now', style: 'cancel' }, { text: 'See Premium', onPress: () => showComingSoon('Premium') }]);
     else showComingSoon('Premium');
   };
-  const changePriority = (priority: ExamPriority) => {
-    if (!exam || saving) return;
-    setSaving(true);
-    void setExamPriority(exam.id, priority).then(() => setStatus('Priority updated. Your available time is shared again; total study time is unchanged.'))
-      .catch(error => { if (error instanceof PremiumRequiredError) upgrade(error.message); else Alert.alert('Could not update priority', String(error)); })
-      .finally(() => setSaving(false));
-  };
   const pickTime = (key: 'start' | 'end') => {
     const value = prefs[key];
     const date = new Date();
@@ -170,8 +162,9 @@ export default function ExamStudyPlanScreen() {
       if (next <= today) { Alert.alert('Choose another date', 'The exam must be after today.'); return; }
       setSaving(true);
       updateExam(exam.id, { name: title, subjectId: exam.subjectId, date: next })
-        .then(() => updateSubjectUrgency(exam.subjectId, 5))
-        .then(() => { setExam(old => old ? { ...old, examDate: next } : old); setStatus('Exam date updated. Your study schedule adjusts automatically.'); })
+        .then(() => { setExam(old => old ? { ...old, examDate: next } : old); setStatus(access.tier === 'premium'
+          ? 'Exam date updated. Your study schedule adjusts automatically.'
+          : 'Exam date updated. Regenerate to refresh your study schedule.'); })
         .catch(error => Alert.alert('Could not update exam', String(error)))
         .finally(() => setSaving(false));
     });
@@ -233,7 +226,7 @@ export default function ExamStudyPlanScreen() {
         protectSubjects: () => { setProtectedDraft([...protectedIds]); setProtectOpen(true); },
         regenerate: () => void persist(prefs, false), save: () => void persist(prefs, true),
         deletePlan: () => { if (!saving) deletion.request(exam.id, title); },
-        priority: changePriority, upgrade: () => upgrade(), rescheduleMissed: () => void persist(prefs, false),
+        upgrade: () => upgrade(), rescheduleMissed: () => void persist(prefs, false),
       }} />
     <ProtectedSubjectsSheet visible={protectOpen} subjects={subjects} selected={protectedDraft} saving={saving}
       onToggle={id => setProtectedDraft(old => old.includes(id) ? old.filter(value => value !== id) : [...old, id])}

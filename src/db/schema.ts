@@ -14,7 +14,7 @@ export const subjects = sqliteTable('subjects', {
   ...base,
   name: text('name').notNull(),
   color: text('color').notNull(),
-  urgency: integer('urgency').notNull().default(3), // scale TBD
+  urgency: integer('urgency').notNull().default(3), // Legacy column, retained for database compatibility; scheduling uses exam date.
   sortOrder: integer('sort_order').notNull().default(0),
 });
 

@@ -36,5 +36,6 @@ describe('generation quota', () => {
     expect(error.message).toContain('3 free schedule generations');
     expect(error.message).toContain('December 1');
     expect(new GenerationUnavailableError().message).toContain('Connect to the internet');
+    expect(new GenerationUnavailableError(undefined, 'server-schema').message).toContain('server database needs an update');
   });
 });

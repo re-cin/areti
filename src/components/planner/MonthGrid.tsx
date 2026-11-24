@@ -10,12 +10,13 @@ type Props = {
   weeks: number[][];
   selectedDate: number;
   tasksByDay: Map<number, TaskChip[]>;
+  examsByDay: Map<number, { id: string; subject: string; color: string }[]>;
   subjectsById: Map<string, { color: string }>;
   onSelect: (day: number) => void;
 };
 
 /** Full month view of the planner calendar: one row per week, up to two task chips per day. */
-export function MonthGrid({ weeks, selectedDate, tasksByDay, subjectsById, onSelect }: Props) {
+export function MonthGrid({ weeks, selectedDate, tasksByDay, examsByDay, subjectsById, onSelect }: Props) {
   return (
     <View style={styles.root}>
       <View style={styles.headRow}>
@@ -32,17 +33,24 @@ export function MonthGrid({ weeks, selectedDate, tasksByDay, subjectsById, onSel
             const active = sameDay(day, selectedDate);
             const inMonth = sameMonth(day, selectedDate);
             const chips = tasksByDay.get(day) ?? [];
-            const extra = chips.length - MAX_CHIPS;
+            const exams = examsByDay.get(day) ?? [];
+            const taskSlots = Math.max(0, MAX_CHIPS - exams.length);
+            const extra = exams.length + chips.length - MAX_CHIPS;
             const numColor = active ? colors.white : inMonth ? colors.ink : colors.mutedSoft;
             return (
               <Pressable
                 key={day}
                 onPress={() => onSelect(day)}
+                accessibilityRole="button"
+                accessibilityLabel={`${new Date(day).toDateString()}${exams.length ? `, ${exams.map(exam => `${exam.subject} exam`).join(', ')}` : ''}`}
                 style={[styles.cell, active && styles.cellActive]}>
                 <Text variant="heading" color={numColor} style={styles.dayNum}>
                   {new Date(day).getDate()}
                 </Text>
-                {chips.slice(0, MAX_CHIPS).map((t) => (
+                {exams.slice(0, MAX_CHIPS).map(exam => <View key={`exam:${exam.id}`} style={[styles.chip, { backgroundColor: exam.color }]}>
+                  <Text numberOfLines={1} color={colors.white} style={styles.chipText}>{exam.subject} EXAM</Text>
+                </View>)}
+                {chips.slice(0, taskSlots).map((t) => (
                   <View
                     key={t.id}
                     style={[

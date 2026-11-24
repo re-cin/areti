@@ -24,7 +24,9 @@ export async function reserveGeneration(): Promise<void> {
   try {
     if (!await signedIn()) throw new GenerationUnavailableError();
     const { data, error } = await supabase.rpc('consume_schedule_generation');
-    if (error) throw new GenerationUnavailableError(error.message);
+    if (error) throw /column .+ does not exist/i.test(error.message) || error.code === '42703'
+      ? new GenerationUnavailableError(undefined, 'server-schema')
+      : new GenerationUnavailableError(error.message);
     reply = data;
   } catch (error) {
     if (error instanceof GenerationUnavailableError) throw error;

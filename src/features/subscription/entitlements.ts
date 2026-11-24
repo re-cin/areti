@@ -17,8 +17,6 @@ export type Entitlements = {
   autoScheduling: boolean;
   /** How many times a month the student can generate or regenerate a schedule. Infinity = unlimited. */
   monthlyGenerations: number;
-  /** Student-adjusted exam priority (Normal / High / Highest). */
-  priorityControls: boolean;
   /** Missed sessions are moved automatically; Free students reschedule them by hand. */
   autoMissedRecovery: boolean;
   /** Missed-session, time-left and workload-fit analysis instead of basic progress only. */
@@ -27,11 +25,11 @@ export type Entitlements = {
 
 const FREE: Entitlements = {
   tier: 'free', autoScheduling: false, monthlyGenerations: FREE_MONTHLY_GENERATIONS,
-  priorityControls: false, autoMissedRecovery: false, detailedInsights: false,
+  autoMissedRecovery: false, detailedInsights: false,
 };
 const PREMIUM: Entitlements = {
   tier: 'premium', autoScheduling: true, monthlyGenerations: Infinity,
-  priorityControls: true, autoMissedRecovery: true, detailedInsights: true,
+  autoMissedRecovery: true, detailedInsights: true,
 };
 
 export const entitlementsFor = (tier: PlanTier): Entitlements => (tier === 'premium' ? PREMIUM : FREE);
@@ -59,14 +57,6 @@ export function resolveTier(record: SubscriptionRecord | null, now: number): Pla
   if (!record || record.plan !== 'premium') return 'free';
   return record.expiresAt === null || record.expiresAt > now ? 'premium' : 'free';
 }
-
-/** Student-chosen emphasis for one exam. It re-shares the same study time; it never adds hours. */
-export type ExamPriority = 'normal' | 'high' | 'highest';
-export const EXAM_PRIORITIES: readonly ExamPriority[] = ['normal', 'high', 'highest'];
-export const PRIORITY_MULTIPLIER: Record<ExamPriority, number> = { normal: 1, high: 1.5, highest: 2 };
-
-export const isExamPriority = (value: unknown): value is ExamPriority =>
-  typeof value === 'string' && (EXAM_PRIORITIES as readonly string[]).includes(value);
 
 /** Thrown when a Free student uses a Premium capability. The UI turns this into an upgrade prompt. */
 export class PremiumRequiredError extends Error {

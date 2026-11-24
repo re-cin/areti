@@ -11,7 +11,7 @@ import { useTimer } from '@/features/timer/timerStore';
 import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
 import { SUBSCRIPTION_SETTING_KEY, PremiumRequiredError, type PlanTier } from '@/features/subscription/entitlements';
 import { GenerationLimitError, GenerationUnavailableError } from '@/features/subscription/generationQuota';
-import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, setExamPriority, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
+import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
 
 jest.mock('@/db/client', () => {
   const { DatabaseSync } = jest.requireActual('node:sqlite');
@@ -585,20 +585,4 @@ describe('Free vs Premium', () => {
     expect(insights.detailed).toMatchObject({ enoughTime: false, shortfallBlocks: 4, daysLeft: 3 });
   });
 
-  it('keeps priority controls Premium-only and never changes the total study time', async () => {
-    addScience();
-    const math = await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });
-    const sci = await createExam({ name: 'Science final', subjectId: 'sci', date: addDays(day, 4) });
-    const total = () => blocksFor(math) + blocksFor(sci);
-    const before = { math: blocksFor(math), sci: blocksFor(sci), total: total() };
-    await setExamPriority(math, 'highest');
-    expect((await getExamAccess(math)).priority).toBe('highest');
-    expect(blocksFor(math)).toBeGreaterThan(before.math);
-    expect(blocksFor(sci)).toBeLessThan(before.sci);
-    expect(total()).toBe(before.total); // redistributed, not added
-    setTier('free');
-    await expect(setExamPriority(math, 'normal')).rejects.toBeInstanceOf(PremiumRequiredError);
-    await regenerateSchedules(); // a stale saved priority is ignored once the subscription lapses
-    expect((await getExamAccess(math)).priority).toBe('normal');
-  });
 });

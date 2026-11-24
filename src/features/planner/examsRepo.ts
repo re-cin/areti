@@ -9,8 +9,8 @@ import { generateSchedule, sessionMinutes, type BusyTime, type SchedulePlan } fr
 import { cancelStudyPlanWork } from './studyPlanLifecycle';
 import { buildInsights, type PlanInsights } from './insights';
 import {
-  PRIORITY_MULTIPLIER, PremiumRequiredError, SUBSCRIPTION_SETTING_KEY, entitlementsFor, generationsAreLimited, isExamPriority,
-  parseSubscription, resolveTier, type Entitlements, type ExamPriority,
+  SUBSCRIPTION_SETTING_KEY, entitlementsFor, generationsAreLimited,
+  parseSubscription, resolveTier, type Entitlements,
 } from '@/features/subscription/entitlements';
 import { reserveGeneration } from '@/features/subscription/generationQuotaRepo';
 import type { Run, TimerConfig } from '@/features/timer/session';
@@ -81,7 +81,7 @@ function validateDifficulty(difficulty: number) {
   if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5) throw new Error('Choose an exam difficulty from 1 to 5.');
 }
 
-/** Only this exam's priority changes, even when other exams have the same subject. */
+/** Only this exam's difficulty changes, even when other exams have the same subject. */
 export async function updateExamDifficulty(id: string, difficulty: number): Promise<void> {
   validateDifficulty(difficulty);
   const changed = db.update(studyPlans).set({ difficulty, updatedAt: Date.now() })
@@ -220,11 +220,8 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
           endMinute: start + sessionMinutes(row.completedBlocks, frozen), focusMinutes: row.completedBlocks * frozen.focusMin });
       }
     }
-    const subject = activeSubjects.find(s => s.id === exam.subjectId)!;
-    const savedPriority = readJson<unknown>(stored.get(`exam-priority:${exam.id}`) ?? 'null', null);
-    const priority = entitlements.priorityControls && isExamPriority(savedPriority) ? PRIORITY_MULTIPLIER[savedPriority] : 1;
-    plans.push({ ...p, id: exam.id, subjectId: exam.subjectId, examDate: exam.examDate, priority,
-      difficulty: exam.difficulty, urgency: subject.urgency, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
+    plans.push({ ...p, id: exam.id, subjectId: exam.subjectId, examDate: exam.examDate,
+      difficulty: exam.difficulty, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
   }
   const externalTasks = allTasks.filter(t => !(t.source === 'generated' && knownPlanIds.has(t.planId ?? '')));
   for (const task of externalTasks) busy.push({ date: task.date, startMinute: task.startMinute, endMinute: task.endMinute });
@@ -417,32 +414,11 @@ export async function getEntitlements(now = Date.now()): Promise<Entitlements> {
 
 export type ExamAccess = {
   entitlements: Entitlements;
-  priority: ExamPriority;
 };
 
-export async function getExamAccess(id: string, now = Date.now()): Promise<ExamAccess> {
+export async function getExamAccess(_id: string, now = Date.now()): Promise<ExamAccess> {
   const entitlements = await getEntitlements(now);
-  const saved = await readPriority(id);
-  return { entitlements, priority: entitlements.priorityControls ? saved : 'normal' };
-}
-
-async function readPriority(id: string): Promise<ExamPriority> {
-  const rows = await db.select().from(settings).where(eq(settings.key, `exam-priority:${id}`)).limit(1);
-  const value = rows.length ? readJson<unknown>(rows[0].value, null) : null;
-  return isExamPriority(value) ? value : 'normal';
-}
-
-/** Premium: re-shares the same study time toward (or away from) one exam. Never adds study hours. */
-export async function setExamPriority(id: string, priority: ExamPriority): Promise<void> {
-  if (!(await getEntitlements()).priorityControls) throw new PremiumRequiredError('Priority controls');
-  if (!isExamPriority(priority)) throw new Error('Choose Normal, High or Highest priority.');
-  if (!await getExam(id)) throw new Error('This exam no longer exists.');
-  const value = JSON.stringify(priority);
-  const now = Date.now();
-  await db.insert(settings).values({ key: `exam-priority:${id}`, value, updatedAt: now })
-    .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now } });
-  await regenerateSchedules();
-  bumpData();
+  return { entitlements };
 }
 
 /** Basic progress for everyone; missed-session, time-left and workload-fit analysis for Premium. */

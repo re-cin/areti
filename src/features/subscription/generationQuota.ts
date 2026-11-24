@@ -32,8 +32,10 @@ export class GenerationLimitError extends PremiumRequiredError {
 
 /** The server could not confirm the allowance (offline, signed out or an error). Nothing is generated. */
 export class GenerationUnavailableError extends Error {
-  constructor(detail?: string) {
-    super(`Connect to the internet and sign in to generate a schedule on the Free plan.${detail ? ` (${detail})` : ''}`);
+  constructor(detail?: string, cause: 'connection' | 'server-schema' = 'connection') {
+    super(cause === 'server-schema'
+      ? 'Schedule generation is unavailable because the server database needs an update. Please try again after it is updated.'
+      : `Connect to the internet and sign in to generate a schedule on the Free plan.${detail ? ` (${detail})` : ''}`);
     this.name = 'GenerationUnavailableError';
   }
 }
