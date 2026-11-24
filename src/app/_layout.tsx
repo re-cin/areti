@@ -1,5 +1,6 @@
 import { SplashOverlay } from '@/components/brand/SplashOverlay';
 import { NoticeDialog } from '@/components/ui/NoticeDialog';
+import { PremiumEndingReminders } from '@/features/subscription/PremiumEndingReminders';
 import { Text } from '@/components/ui/Text';
 import { db } from '@/db/client';
 import { AudioController } from '@/features/audio/AudioController';
@@ -112,6 +113,8 @@ export default function RootLayout() {
           <Stack.Screen name="welcome" options={{ gestureEnabled: false, animation: 'fade' }} />
         </Stack>
         <NoticeDialog />
+        {/* "24 hours / 1 hour of Premium left" pop-ups */}
+        <PremiumEndingReminders />
       </>
     );
   }
