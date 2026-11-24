@@ -8,7 +8,8 @@ import { TaskCard } from '@/components/planner/TaskCard';
 import { WeekBar } from '@/components/planner/WeekBar';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
-import { setTaskDone } from '@/db/queries/tasks';
+import { deleteTask, setTaskDone } from '@/db/queries/tasks';
+import type { CardTask } from '@/features/planner/cardTask';
 import { toCardTask } from '@/features/planner/cardTask';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useTaskDays } from '@/hooks/useTaskDays';
@@ -29,7 +30,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
 import Animated, {
   Easing,
   Extrapolation,
@@ -71,11 +72,28 @@ export default function PlannerScreen() {
   const { todo: todayTodo } = useTasksForDate(today);
   const markedDays = useTaskDays(days[0], days[6]);
 
+  // Edit mode (Edit button or long press on a task): your own tasks show a delete button. "Done" just exits.
+  // Study plan sessions are never deleted here: tapping one opens its plan, where it can be removed.
+  const [editing, setEditing] = useState(false);
+  const openPlan = (task: CardTask) => {
+    if (task.generated && task.planId) {
+      router.push({ pathname: '/planner/exam-study-plan', params: { id: task.planId, date: String(selectedDate) } });
+    }
+  };
+  const confirmDelete = (task: CardTask) => {
+    Alert.alert(`Delete "${task.title}"?`, task.hasPomodoro ? 'Its Pomodoro session is removed too.' : undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => void deleteTask(task.id) },
+    ]);
+  };
+
   // Month view (opened from the calendar icon)
   const [expanded, setExpanded] = useState(false);
   const weeks = monthWeeks(selectedDate); // TODO: follow the "first day of week" setting
   const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
   const scrollRef = useRef<ScrollViewInstance>(null);
+
+  const progress = useSharedValue(0); // 0 = week strip, 1 = full month
 
   // Leaving the tab resets the page (scrolled to the top, week view), so it looks fresh when you come back.
   useFocusEffect(
@@ -83,13 +101,13 @@ export default function PlannerScreen() {
       () => () => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
         setExpanded(false);
+        setEditing(false);
         progress.set(0);
       },
       // eslint-disable-next-line react-hooks/exhaustive-deps
       [],
     ),
   );
-  const progress = useSharedValue(0); // 0 = week strip, 1 = full month
 
   useEffect(() => {
     progress.set(withTiming(expanded ? 1 : 0, { duration: EXPAND_MS, easing: Easing.out(Easing.cubic) }));
@@ -191,16 +209,20 @@ export default function PlannerScreen() {
           <View pointerEvents="none" style={styles.sheetOverscroll} />
           <View style={styles.sectionRow}>
             <Text variant="smallStrong" color={extra.muted}>Daily Tasks</Text>
-            <Pressable style={styles.editBtn} hitSlop={10}>
-              <Ionicons name="pencil" size={13} color={extra.muted} />
-              <Text variant="smallStrong" color={extra.muted}>Edit</Text>
+            <Pressable style={styles.editBtn} hitSlop={10} onPress={() => setEditing(e => !e)}
+              accessibilityRole="button" accessibilityLabel={editing ? 'Done editing tasks' : 'Edit tasks'}>
+              <Ionicons name={editing ? 'checkmark' : 'pencil'} size={13} color={editing ? colors.ink : extra.muted} />
+              <Text variant="smallStrong" color={editing ? colors.ink : extra.muted}>{editing ? 'Done' : 'Edit'}</Text>
             </Pressable>
           </View>
 
           <View style={styles.taskList}>
-            {todo.map((t) => (
-              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, true)} />
-            ))}
+            {todo.map((t) => {
+              const card = toCardTask(t, byId);
+              return <TaskCard key={t.id} task={card} editing={editing} onToggle={() => setTaskDone(t.id, true)}
+                onDelete={card.generated ? undefined : () => confirmDelete(card)}
+                onPress={card.generated && !editing ? () => openPlan(card) : undefined} onLongPress={() => setEditing(true)} />;
+            })}
           </View>
 
           <View style={[styles.sectionRow, { marginTop: spacing.md }]}>
@@ -209,9 +231,12 @@ export default function PlannerScreen() {
           </View>
 
           <View style={styles.taskList}>
-            {finished.map((t) => (
-              <TaskCard key={t.id} task={toCardTask(t, byId)} onToggle={() => setTaskDone(t.id, false)} />
-            ))}
+            {finished.map((t) => {
+              const card = toCardTask(t, byId);
+              return <TaskCard key={t.id} task={card} editing={editing} onToggle={() => setTaskDone(t.id, false)}
+                onDelete={card.generated ? undefined : () => confirmDelete(card)}
+                onPress={card.generated && !editing ? () => openPlan(card) : undefined} onLongPress={() => setEditing(true)} />;
+            })}
           </View>
         </View>
       </ScrollView>

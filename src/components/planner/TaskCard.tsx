@@ -11,12 +11,23 @@ import { plannerColors as extra } from './plannerColors';
  * A task in the Daily Tasks / Finished lists. Plain tasks have a done tick box;
  * tasks scheduled as a Pomodoro session show a clock instead and no tick box.
  */
-export function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => void }) {
+export function TaskCard({ task, onToggle, editing = false, onDelete, onPress, onLongPress }: {
+  task: CardTask;
+  onToggle: () => void;
+  /** Planner "Edit" mode: shows a delete button instead of the tick box. */
+  editing?: boolean;
+  onDelete?: () => void;
+  /** Tap the card (e.g. open its study plan). */
+  onPress?: () => void;
+  /** Long press the card (the Planner turns on Edit mode). */
+  onLongPress?: () => void;
+}) {
   const done = task.done;
   const fg = colors.ink;
   return (
     // Finished: the whole card fades (Figma "Planner - Home"), flat with no hard shadow.
-    <View style={done ? styles.finished : undefined}>
+    <Pressable style={done ? styles.finished : undefined} onPress={onPress} onLongPress={onLongPress} delayLongPress={350}
+      disabled={!onPress && !onLongPress} accessibilityHint={onPress ? 'Opens its study plan' : undefined}>
     <NeoBox
       offset={3}
       shadow={!done}
@@ -45,8 +56,14 @@ export function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => v
           {task.hasPomodoro && !done && <Ionicons name="time" size={16} color={task.color} />}
         </View>
       </View>
+      {editing && onDelete && (
+        <Pressable onPress={onDelete} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Delete ${task.title}`}
+          style={styles.delete}>
+          <Ionicons name="trash-outline" size={16} color={colors.white} />
+        </Pressable>
+      )}
       {/* Pomodoro sessions are not tickable: no tick box at all. */}
-      {!task.hasPomodoro && (
+      {!editing && !task.hasPomodoro && (
         <Pressable
           onPress={onToggle}
           hitSlop={10}
@@ -63,12 +80,22 @@ export function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => v
         </Pressable>
       )}
     </NeoBox>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   finished: { opacity: 0.5 },
+  delete: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: borders.width,
+    borderColor: colors.ink,
+    backgroundColor: colors.dangerDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   taskBox: {
     flexDirection: 'row',
     alignItems: 'center',

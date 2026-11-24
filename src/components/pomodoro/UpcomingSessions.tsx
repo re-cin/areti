@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { Alert, Pressable, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import { Pill } from '@/components/ui/Pill';
@@ -6,6 +7,7 @@ import { formatClock, formatHM } from '@/lib/dateHelpers';
 import { sessionLengthMin } from '@/features/timer/session';
 import { deletePlannedSession, type UpcomingSession } from '@/features/timer/timerRepo';
 import { colors, fonts, spacing } from '@/theme';
+import { useToday } from '@/hooks/useToday';
 
 type Props = {
   sessions: UpcomingSession[];
@@ -18,6 +20,7 @@ type Props = {
 };
 
 export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded, onToggleExpanded, onAdd, onStart }: Props) {
+  const today = useToday();
   const confirmDelete = (s: UpcomingSession) =>
     Alert.alert('Remove session?', `${s.subjectName}${s.startMinute != null ? ` at ${formatClock(s.startMinute)}` : ''}`, [
       { text: 'Cancel', style: 'cancel' },
@@ -42,21 +45,39 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
         </Pressable>
       </View>
       <View style={{ height: 2, backgroundColor: colors.ink }} />
+      {/* Note: this list only covers today and tomorrow. Later days live in the Planner. */}
+      <Text variant="caption" color={colors.muted}>
+        Showing today’s and tomorrow’s sessions. See later days in the Planner.
+      </Text>
 
       {sessions.length === 0 ? (
         <Text variant="body" color={colors.muted} style={{ paddingVertical: spacing.lg }}>
-          Nothing planned for the rest of today. Tap + to add a session, or press play for a free focus run.
+          Nothing planned for today or tomorrow. Tap + to add a session, or press play for a free focus run.
         </Text>
       ) : (
-        sessions.map((s) => {
+        sessions.map((s, index) => {
+          const isTomorrow = s.date > today;
+          const firstOfDay = index === 0 || sessions[index - 1].date !== s.date;
+          // Tomorrow's sessions can be started early, after a quick check.
+          const start = () => isTomorrow
+            ? Alert.alert('Start tomorrow’s session now?', 'It counts as studying ahead, and the Planner adjusts.', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Start', onPress: () => onStart(s) },
+              ])
+            : onStart(s);
           const left = s.blocks - s.completedBlocks;
           // Total session length = focus blocks + short and long breaks (session structure rules).
           const minutes = sessionLengthMin(s.settings, s.blocks);
           const active = s.id === activeSessionId;
           return (
+            <Fragment key={s.id}>
+            {firstOfDay && (
+              <Text variant="captionStrong" color={colors.ink} style={{ marginTop: spacing.sm }}>
+                {isTomorrow ? 'TOMORROW' : 'TODAY'}
+              </Text>
+            )}
             <Pressable
-              key={s.id}
-              onPress={() => onStart(s)}
+              onPress={start}
               onLongPress={() => confirmDelete(s)}
               accessibilityRole="button"
               accessibilityHint="Starts this session. Long press to remove it."
@@ -88,6 +109,7 @@ export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded
                 </Text>
               </View>
             </Pressable>
+            </Fragment>
           );
         })
       )}

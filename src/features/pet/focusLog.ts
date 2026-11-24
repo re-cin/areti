@@ -1,6 +1,6 @@
 import { applyDailyCeiling, creditedMinutes, decayMomentum, gainMomentum, MOMENTUM_START } from './credit';
 import { expForMinutes } from './levels';
-import { DEFAULT_STUDY_SLOTS, minutesInSlots, type TimeWindow } from './schedule';
+import { DEFAULT_STUDY_SLOTS, minutesInSlots, type TimeWindow, type WeeklySlots } from './schedule';
 
 /** The parts of a `focus_sessions` row the ghost needs. */
 export type FocusRecord = { startedAt: number; durationSec: number };
@@ -67,7 +67,7 @@ export function focusStats(records: readonly FocusRecord[], now: number): FocusS
 export function momentumNow(
   records: readonly FocusRecord[],
   now: number,
-  slots: readonly TimeWindow[] = DEFAULT_STUDY_SLOTS,
+  slots: readonly TimeWindow[] | WeeklySlots = DEFAULT_STUDY_SLOTS,
 ): number {
   const sorted = [...records].sort((a, b) => a.startedAt - b.startedAt);
   let m = MOMENTUM_START;

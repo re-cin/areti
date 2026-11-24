@@ -4,14 +4,12 @@ import { newId } from '@/db/id';
 import { plannedSessions, studyPlans, subjects, tasks } from '@/db/schema';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { cancelStudyPlanWork } from '@/features/planner/studyPlanLifecycle';
-import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
 export type SubjectRow = {
   id: string;
   name: string;
   color: string;
-  difficulty: number;
 };
 
 export async function listSubjects(): Promise<SubjectRow[]> {
@@ -20,7 +18,6 @@ export async function listSubjects(): Promise<SubjectRow[]> {
       id: subjects.id,
       name: subjects.name,
       color: subjects.color,
-      difficulty: subjects.difficulty,
     })
     .from(subjects)
     .where(isNull(subjects.deletedAt))
@@ -86,7 +83,7 @@ export async function deleteSubject(id: string): Promise<void> {
     tx.update(tasks).set({ deletedAt: now, updatedAt: now })
       .where(and(eq(tasks.subjectId, id), eq(tasks.done, false), isNull(tasks.deletedAt))).run();
   });
-  await regenerateSchedules().catch(error => console.warn('[planner] Subject deleted; remaining schedules will refresh later', error));
+  // Other subjects' plans stay as they are; they only change on Save / Reschedule.
   void refreshSessionReminders();
   bumpData();
 }

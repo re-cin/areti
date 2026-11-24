@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Segmented } from '@/components/ui/Segmented';
 import { Text } from '@/components/ui/Text';
-import type { ExamPreferences } from '@/features/planner/examsRepo';
+import type { DayExplanation, ExamPreferences } from '@/features/planner/examsRepo';
 import { studyWindows } from '@/features/planner/engine';
 import { addDays, monthLabel, startOfDay, startOfWeek } from '@/lib/dates';
 import { formatDuration, formatTime } from '@/lib/format';
@@ -15,21 +16,35 @@ const difficultyOptions = [{ key: '1', label: 'Low' }, { key: '3', label: 'Mediu
 export type StudyPlanCard = {
   key: string; title: string; subject: string; color: string;
   startMinute: number; endMinute: number; blocks?: number; locked?: boolean;
+  /** Saved study session behind this card (generated plans only). Long press shows a trash button. */
+  sessionId?: string;
 };
-type SettingKey = 'focusCount' | 'focusMin' | 'breakMin' | 'longBreakMin' | 'dailyGoalMin';
+type SettingKey = 'sessionsPerDay' | 'focusCount' | 'focusMin' | 'breakMin' | 'longBreakMin' | 'dailyGoalMin';
 export type ExamStudyPlanContentProps = {
   title: string; subjectName: string; subjectColor: string; difficulty: number;
   urgency: 'default' | 'exam'; examDate: number; today: number; selectedDate: number;
   prefs: ExamPreferences; excluded: number[]; editingDates: boolean; extraOpen: boolean;
   sessions: StudyPlanCard[]; shortfall: number; error: string; status: string;
+  /** Days this plan goes over the daily goal, and the goal itself (minutes). */
+  overGoalDays: number; dailyGoalMin: number;
+  /** Auto-sized sessions the planner made shorter or longer than the set size. */
+  resized: { shrunk: number; grown: number };
+  /** Exam start time (minutes from midnight), or null for exams made before times existed. */
+  examTime: number | null;
+  /** Open study time and what is already using time on the selected day. */
+  day: DayExplanation | null;
   saving: boolean; loadingPreview: boolean; protectedCount: number;
   deleting?: boolean;
   actions: {
     back: () => void; settings: () => void; subject: () => void;
-    difficulty: (value: number) => void; defaultUrgency: () => void; examDate: () => void;
+    difficulty: (value: number) => void; defaultUrgency: () => void; examDate: () => void; examTime: () => void;
     scope: (scope: 'this' | 'all') => void; changeCalendar: (direction: number) => void;
     selectDate: (date: number) => void; editDates: () => void; cancelDates: () => void; saveDates: () => void;
-    pickStart: () => void; pickEnd: () => void; adjust: (key: SettingKey, direction: number) => void;
+    pickStart: () => void; pickEnd: () => void; useStudySlots: () => void; openPreferences: () => void;
+    /** Hand the session size back to the planner (auto size). */
+    autoSize: () => void;
+    skipSession: (card: StudyPlanCard) => void; cannotSkip: (card: StudyPlanCard) => void;
+    undoSkip: (item: DayExplanation['used'][number]) => void; adjust: (key: SettingKey, direction: number) => void;
     toggleExtra: () => void; toggleWeekday: (day: number) => void;
     protectSubjects: () => void; regenerate: () => void; save: () => void;
     deletePlan: () => void;
@@ -38,6 +53,8 @@ export type ExamStudyPlanContentProps = {
 
 /** Shared, controlled view: real data in the app and the same layout for visual verification. */
 export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
+  // Long-pressed session card that shows its trash button.
+  const [armed, setArmed] = useState<string | null>(null);
   const { prefs, actions } = p;
   const first = startOfWeek(p.selectedDate);
   const dates = Array.from({ length: 14 }, (_, i) => addDays(first, i));
@@ -80,7 +97,13 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
               <Text variant="smallStrong" color={p.urgency === 'exam' ? palette.surface : palette.text}>{new Date(p.examDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</Text>
             </NeoBox>
           </Pressable>
+          <Pressable onPress={actions.examTime} accessibilityRole="button" accessibilityLabel={p.examTime === null ? 'Set exam time' : 'Change exam time'}>
+            <NeoBox radius={radii.pill} offset={2} backgroundColor={p.examTime === null ? colors.dangerDark : palette.surface} style={styles.urgencyPill}>
+              <Text variant="smallStrong" color={p.examTime === null ? colors.white : palette.text}>{p.examTime === null ? 'Set time' : formatTime(p.examTime)}</Text>
+            </NeoBox>
+          </Pressable>
         </View>
+        {p.examTime === null && <Text variant="caption" style={styles.warning}>This exam has no start time yet. Set it so study can also be planned on the exam day, before the exam.</Text>}
         {!!p.status && <Text accessibilityLiveRegion="polite" variant="caption" style={styles.status}>{p.status}</Text>}
       </View>
 
@@ -131,8 +154,12 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
           <Text variant="caption" color={colors.terracottaDark} style={styles.countdown}>{daysLeft === 0 ? 'Exam today' : `Exam in\n${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`}</Text>
         </View>
 
-        {!p.editingDates && prefs.scope === 'all' && <View style={styles.sessionList}>
-          {p.loadingPreview ? <Text variant="caption" style={styles.empty}>Updating schedule…</Text> : p.sessions.length ? p.sessions.map(session => <NeoBox key={session.key} shadow={false} offset={0} radius={12} backgroundColor={palette.surface} style={styles.session}>
+        {!p.editingDates && <View style={styles.sessionList}>
+          {p.loadingPreview ? <Text variant="caption" style={styles.empty}>Updating schedule…</Text> : p.sessions.length ? p.sessions.map(session => <Pressable key={session.key}
+            onLongPress={() => (session.sessionId ? setArmed(armed === session.key ? null : session.key) : actions.cannotSkip(session))}
+            onPress={() => { if (armed) setArmed(null); }} delayLongPress={350}
+            accessibilityHint={session.sessionId ? 'Long press to remove this session' : undefined}>
+          <NeoBox shadow={false} offset={0} radius={12} backgroundColor={palette.surface} style={styles.session}>
             <View style={styles.sessionTime}><Text variant="captionStrong" style={styles.timeText}>{formatTime(session.startMinute)}</Text><Text variant="caption" style={styles.durationText}>{formatDuration(session.endMinute - session.startMinute)}</Text></View>
             <View style={[styles.sessionDetails, { borderLeftColor: session.color }]}>
               <Text variant="smallStrong" numberOfLines={2} style={styles.sessionTitle}>{session.title}</Text>
@@ -140,7 +167,27 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
                 {session.locked && <Text variant="caption" style={styles.durationText}>Fixed</Text>}
               </View>
             </View>
-          </NeoBox>) : <Text variant="caption" style={styles.empty}>{p.selectedDate === p.examDate ? 'Exam day. Your study sessions are scheduled before this date.' : 'No study sessions on this day. Select a purple date to view your plan.'}</Text>}
+            {armed === session.key && <Pressable onPress={() => { setArmed(null); actions.skipSession(session); }} hitSlop={8}
+              accessibilityRole="button" accessibilityLabel={`Remove ${session.title}`} style={styles.trash}>
+              <Icon name="trash" size={15} color={colors.white} />
+            </Pressable>}
+          </NeoBox></Pressable>) : <Text variant="caption" style={styles.empty}>{p.selectedDate === p.examDate ? 'Exam day. No study sessions left before the exam.' : 'No study sessions on this day. Select a purple date to view your plan.'}</Text>}
+          {!p.loadingPreview && p.day && <View style={styles.dayInfo}>
+            <Text variant="captionStrong">Study time this day</Text>
+            <Text variant="caption" style={styles.quiet}>{p.day.windows.length
+              ? p.day.windows.map(w => `${formatTime(w.start)} – ${formatTime(w.end)}`).join(', ')
+              : 'None left (outside your Study Slots, already past, or too close to the exam)'}</Text>
+            {p.day.used.length > 0 && <>
+              <Text variant="captionStrong" style={{ marginTop: spacing.xs }}>Already using time</Text>
+              {p.day.used.map((item, i) => <View key={`${item.label}:${item.startMinute}:${i}`} style={styles.usedRow}>
+                <Text variant="caption" style={styles.usedTime}>{formatTime(item.startMinute)} – {formatTime(item.endMinute)}</Text>
+                <Text variant="caption" style={[styles.quiet, styles.grow]} numberOfLines={2}>{item.label}</Text>
+                {item.skippedPlanId && <Pressable onPress={() => actions.undoSkip(item)} hitSlop={8} accessibilityRole="button">
+                  <Text variant="captionStrong" color={colors.tealText}>Undo</Text>
+                </Pressable>}
+              </View>)}
+            </>}
+          </View>}
           {prefs.scope === 'all' && <Pressable onPress={actions.protectSubjects} style={styles.protectedRow} accessibilityRole="button">
             <Text variant="caption" style={[styles.quiet, styles.grow]}>Select subjects that shouldn’t be moved{p.protectedCount ? ` (${p.protectedCount})` : ''}</Text><Icon name="chevronRight" size={15} color={palette.muted} />
           </Pressable>}
@@ -148,22 +195,52 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
 
         <View style={styles.range}>
           <Text variant="caption" style={styles.quiet}>Study range</Text>
-          <View style={styles.row}>
+          {prefs.useStudySlots !== false ? (
+            <Pressable onPress={actions.pickStart} accessibilityRole="button" accessibilityLabel="Set this exam's own study times">
+              <Text variant="smallStrong">Your Study Slots</Text>
+            </Pressable>
+          ) : <View style={styles.row}>
             <Pressable onPress={actions.pickStart} accessibilityLabel="Study start time"><NeoBox radius={12} offset={1} backgroundColor={colors.welcomeTeal} style={styles.timePill}><Text variant="smallStrong">{time(prefs.start)}</Text></NeoBox></Pressable>
             <Text variant="caption" style={styles.quiet}>to</Text>
             <Pressable onPress={actions.pickEnd} accessibilityLabel={`Study end time${prefs.end < prefs.start ? ', next day' : ''}`}><NeoBox radius={12} offset={1} backgroundColor={colors.buttonPeach} style={styles.timePill}><Text variant="smallStrong">{time(prefs.end)}</Text>{prefs.end < prefs.start && <Text variant="caption">Next day</Text>}</NeoBox></Pressable>
-          </View>
+          </View>}
         </View>
-        <Text variant="caption" style={styles.scopeHint}>{prefs.end < prefs.start
+        {prefs.useStudySlots !== false ? (
+          <Text variant="caption" style={styles.scopeHint}>Uses the Planner Study Slots in Settings › Preferences, day by day. Tap to give this exam its own hours instead.</Text>
+        ) : (
+          <Pressable onPress={actions.useStudySlots} accessibilityRole="button">
+            <Text variant="captionStrong" style={styles.scopeHint}>Use my Study Slots instead</Text>
+          </Pressable>
+        )}
+        {prefs.useStudySlots === false && <Text variant="caption" style={styles.scopeHint}>{prefs.end < prefs.start
           ? 'Ends the next morning. Study days refer to the day you start; after-midnight sessions appear on the next date. Excluded dates and exam day stay free.'
-          : 'Your plan adjusts automatically within this range, including time for breaks.'}</Text>
-        {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.shortfall} focus blocks won’t fit before the exam. Adjust your study range or daily goal.</Text>}
+          : 'Sessions are placed within this range, including time for breaks.'}</Text>}
+        {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>Some sessions couldn’t be placed ({p.shortfall} focus blocks): no day before the exam had room. {p.examTime === null ? 'Set the exam time, widen' : 'Widen'} your Study Slots, raise your daily goal, or lower sessions per day.</Text>}
+        {p.overGoalDays > 0 && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>
+          This plan goes over your daily goal ({formatDuration(p.dailyGoalMin)}) on {p.overGoalDays} {p.overGoalDays === 1 ? 'day' : 'days'}. You can still save it, or change your goal in Preferences.
+        </Text>}
+        {(p.resized.shrunk > 0 || p.resized.grown > 0) && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.scopeHint}>
+          To fit your daily goal, Areti {[p.resized.shrunk > 0 && `shortened ${p.resized.shrunk} ${p.resized.shrunk === 1 ? 'session' : 'sessions'}`,
+            p.resized.grown > 0 && `lengthened ${p.resized.grown} ${p.resized.grown === 1 ? 'session' : 'sessions'} (exam soon or hard)`].filter(Boolean).join(' and ')}.
+        </Text>}
+        <Pressable onPress={actions.openPreferences} accessibilityRole="button" style={styles.prefsButton}>
+          <Icon name="sliders" size={15} color={palette.text} />
+          <Text variant="captionStrong">Study Slots & daily goal in Preferences</Text>
+          <Icon name="chevronRight" size={14} color={palette.text} />
+        </Pressable>
         {!!p.error && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.error}</Text>}
         <View style={styles.divider} />
-        {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error} onPress={actions.regenerate} /><View style={styles.divider} /></>}
+        {!p.editingDates && <><NeoButton label={p.saving ? 'Rescheduling…' : prefs.scope === 'all' ? 'Reschedule all exams' : 'Reschedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error} onPress={actions.regenerate} /><View style={styles.divider} /></>}
 
         <View style={styles.between}><Text variant="smallStrong">Pomodoro</Text><Text variant="caption" color={colors.terracottaDark}>Target: {prefs.focusCount} blocks</Text></View>
-        <SettingRow label="Focus count" value={String(prefs.focusCount)} onMinus={() => actions.adjust('focusCount', -1)} onPlus={() => actions.adjust('focusCount', 1)} />
+        <SettingRow label="Sessions per day" value={String(prefs.sessionsPerDay ?? 1)} onMinus={() => actions.adjust('sessionsPerDay', -1)} onPlus={() => actions.adjust('sessionsPerDay', 1)} />
+        <SettingRow label="Focus blocks per session" value={String(prefs.focusCount)} onMinus={() => actions.adjust('focusCount', -1)} onPlus={() => actions.adjust('focusCount', 1)} />
+        {prefs.autoSize !== false
+          ? <Text variant="caption" style={styles.scopeHint}>Auto size: when you reschedule, Areti shortens sessions to fit your daily goal and lengthens them for close or hard exams when there is room. Changing focus blocks or focus time keeps your size instead.</Text>
+          : <Pressable onPress={actions.autoSize} accessibilityRole="button">
+            <Text variant="caption" style={styles.scopeHint}>You set this size, so Areti keeps it even past your daily goal. <Text variant="captionStrong">Let Areti adjust it</Text></Text>
+          </Pressable>}
+        <Text variant="caption" style={styles.scopeHint}>Changes show in the preview. Save the study plan (or tap Reschedule) to rearrange your sessions.</Text>
         <SettingRow label="Focus time" value={`${prefs.focusMin} min`} onMinus={() => actions.adjust('focusMin', -1)} onPlus={() => actions.adjust('focusMin', 1)} />
         <SettingRow label="Break time" value={`${prefs.breakMin} min`} onMinus={() => actions.adjust('breakMin', -1)} onPlus={() => actions.adjust('breakMin', 1)} />
         <SettingRow label="Long break time" value={`${prefs.longBreakMin} min`} onMinus={() => actions.adjust('longBreakMin', -1)} onPlus={() => actions.adjust('longBreakMin', 1)} />
@@ -213,6 +290,6 @@ const styles = StyleSheet.create({
   editFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs }, smallButton: { backgroundColor: colors.welcomeTeal, borderWidth: borders.thin, borderColor: palette.border, borderRadius: radii.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, backgroundColor: colors.splash, borderRadius: spacing.xs, padding: spacing.md, marginBottom: spacing.xs }, summaryDate: { flex: 1, color: palette.muted, fontSize: 12 }, countdown: { fontSize: 11, lineHeight: 14, textAlign: 'right' },
   sessionList: { gap: spacing.sm }, session: { flexDirection: 'row', alignItems: 'center', padding: spacing.sm, borderWidth: 1, borderColor: palette.border }, sessionTime: { width: 46, alignItems: 'center', paddingRight: spacing.sm }, timeText: { fontSize: 11 }, durationText: { fontFamily: fonts.medium, fontSize: 10, lineHeight: 14, color: palette.muted }, sessionDetails: { flex: 1, borderLeftWidth: 3, paddingLeft: spacing.md, gap: spacing.xs }, sessionTitle: { fontSize: 12, lineHeight: 16 }, sessionSubject: { alignSelf: 'flex-start', borderRadius: radii.pill, borderWidth: 0.5, borderColor: palette.border, paddingHorizontal: spacing.xs + 2, paddingVertical: 1 }, sessionSubjectText: { fontSize: 8, lineHeight: 11, letterSpacing: 0.2 }, protectedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, borderBottomWidth: 1, borderColor: palette.divider, gap: spacing.sm }, empty: { color: palette.muted, fontFamily: fonts.medium, fontSize: 12, paddingVertical: spacing.sm },
-  range: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm }, timePill: { paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm }, warning: { color: colors.dangerDark, fontFamily: fonts.medium, fontSize: 11, lineHeight: 15 }, regenerate: { marginVertical: spacing.xs }, buttonFace: { paddingVertical: spacing.sm + 2, borderRadius: 14 },
+  range: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm }, timePill: { paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.sm }, dayInfo: { gap: 2, paddingTop: spacing.sm }, usedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm }, usedTime: { width: 120, fontFamily: fonts.medium, fontSize: 11 }, trash: { width: 30, height: 30, borderRadius: 15, borderWidth: borders.thin, borderColor: colors.ink, backgroundColor: colors.dangerDark, alignItems: 'center', justifyContent: 'center', marginLeft: spacing.sm }, warning: { color: colors.dangerDark, fontFamily: fonts.medium, fontSize: 11, lineHeight: 15 }, prefsButton: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: spacing.xs, borderWidth: borders.thin, borderColor: palette.border, borderRadius: radii.pill, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2, marginTop: spacing.xs }, regenerate: { marginVertical: spacing.xs }, buttonFace: { paddingVertical: spacing.sm + 2, borderRadius: 14 },
   settingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderBottomWidth: 1, borderColor: palette.divider, paddingVertical: spacing.md }, settingValue: { width: 66, textAlign: 'center' }, additional: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm }, studyDay: { flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: palette.border, borderRadius: radii.pill, height: 32 }, save: { marginTop: spacing.md, marginBottom: spacing.sm }, saveButtonFace: { paddingVertical: spacing.md, borderRadius: 15 },
 });

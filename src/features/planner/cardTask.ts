@@ -12,6 +12,9 @@ export type CardTask = {
   done: boolean;
   /** Scheduled as a Pomodoro session: shows the clock and has no tick box. */
   hasPomodoro: boolean;
+  /** Made by an exam study plan (changed from that plan, not deleted one by one). */
+  generated: boolean;
+  planId: string | null;
 };
 
 export function toCardTask(
@@ -29,5 +32,7 @@ export function toCardTask(
     color: s?.color ?? '#5B5650',
     done: t.done,
     hasPomodoro: Boolean(t.hasPomodoro),
+    generated: t.source === 'generated',
+    planId: t.planId ?? null,
   };
 }

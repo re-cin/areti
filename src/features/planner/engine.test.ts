@@ -9,6 +9,8 @@ const plan = (changes: Partial<SchedulePlan> = {}): SchedulePlan => ({
   focusMin: 25, focusCount: 4, breakMin: 5, longBreakMin: 30, excluded: [], ...changes,
 });
 
+// Tests marked goalMode: 'cap' check the fair-share rules when the daily goal is a hard limit.
+// The app uses the default 'target' mode, where the goal only warns (see 'daily goal as a target').
 describe('student scheduling', () => {
   it('uses both sides of midnight, with recovery carried into the next date', () => {
     const result = generateSchedule({ now: today, plans: [plan({ start: 22 * 60, end: 2 * 60, remainingBlocks: 8,
@@ -38,7 +40,7 @@ describe('student scheduling', () => {
 
   it('honors after-midnight commitments and the shared calendar-day budget', () => {
     const tomorrow = addDays(day, 1);
-    const result = generateSchedule({ now: today, plans: [plan({ start: 1320, end: 120, remainingBlocks: 20,
+    const result = generateSchedule({ goalMode: 'cap', now: today, plans: [plan({ start: 1320, end: 120, remainingBlocks: 20,
       planStartDate: day })], busy: [{ date: tomorrow, startMinute: 0, endMinute: 60, focusMinutes: 60 }], dailyGoalMin: 100 });
     const next = result.sessions.filter(s => s.date === tomorrow);
     expect(next[0].startMinute).toBeGreaterThanOrEqual(90);
@@ -155,14 +157,14 @@ describe('student scheduling', () => {
   it('gives Low, Medium, and High comparable subjects a 1:2:3 share of limited study time', () => {
     const plans = [1, 3, 5].map(difficulty => plan({ id: String(difficulty), subjectId: String(difficulty), difficulty,
       start: 9 * 60, end: 15 * 60, examDate: addDays(day, 1), remainingBlocks: 30 }));
-    const result = generateSchedule({ now: today, plans, busy: [], dailyGoalMin: 150 });
+    const result = generateSchedule({ goalMode: 'cap', now: today, plans, busy: [], dailyGoalMin: 150 });
     const blocks = (id: string) => result.sessions.filter(s => s.planId === id).reduce((sum, s) => sum + s.blocks, 0);
     expect([blocks('1'), blocks('3'), blocks('5')]).toEqual([1, 2, 3]);
     expect(result.shortfallBlocks).toBe(84);
   });
 
   it('gives an easier subject time across days even with only one block per day', () => {
-    const result = generateSchedule({ now: today, busy: [], dailyGoalMin: 25, plans: [
+    const result = generateSchedule({ goalMode: 'cap', now: today, busy: [], dailyGoalMin: 25, plans: [
       plan({ id: 'easy', difficulty: 1, examDate: addDays(day, 4), remainingBlocks: 20 }),
       plan({ id: 'hard', difficulty: 5, examDate: addDays(day, 4), remainingBlocks: 20 }),
     ] });
@@ -175,7 +177,7 @@ describe('student scheduling', () => {
     const plans = [plan({ id: 'easy', difficulty: 1, focusMin: 25, remainingBlocks: 12 }),
       plan({ id: 'hard', difficulty: 5, focusMin: 50, remainingBlocks: 6 })]
       .map(p => ({ ...p, examDate: addDays(day, 1), start: 9 * 60, end: 18 * 60 }));
-    const result = generateSchedule({ now: today, plans, busy: [], dailyGoalMin: 200 });
+    const result = generateSchedule({ goalMode: 'cap', now: today, plans, busy: [], dailyGoalMin: 200 });
     const minutes = (id: string) => result.sessions.filter(s => s.planId === id).reduce((sum, s) => sum + s.blocks * plans.find(p => p.id === id)!.focusMin, 0);
     expect(minutes('hard')).toBeGreaterThan(minutes('easy'));
     expect(minutes('hard') + minutes('easy')).toBeLessThanOrEqual(200);
@@ -197,5 +199,21 @@ describe('student scheduling', () => {
     ] });
     expect(result.shortfallByPlan.easy).toBe(0);
     expect(result.sessions.filter(s => s.date === day).every(s => s.planId === 'easy')).toBe(true);
+  });
+});
+
+describe('daily goal as a target', () => {
+  it('plans what the exam needs past the goal and reports those days', () => {
+    const today = new Date(2026, 10, 23, 8);
+    const day = new Date(2026, 10, 23).getTime();
+    const base = { scope: 'this', focusCount: 4, focusMin: 25, breakMin: 5, longBreakMin: 30, start: 9 * 60, end: 18 * 60,
+      excluded: [], id: 'math', subjectId: 'math', difficulty: 3, urgency: 3 } as const;
+    const plans = [{ ...base, examDate: day + 2 * 86_400_000, remainingBlocks: 8 }];
+    const target = generateSchedule({ now: today, plans: plans as never, busy: [], dailyGoalMin: 50 });
+    expect(target.shortfallBlocks).toBe(0);
+    expect(target.overGoalDays.length).toBeGreaterThan(0);
+    const cap = generateSchedule({ goalMode: 'cap', now: today, plans: plans as never, busy: [], dailyGoalMin: 50 });
+    expect(cap.shortfallBlocks).toBeGreaterThan(0);
+    expect(cap.overGoalDays).toEqual([]);
   });
 });

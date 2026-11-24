@@ -194,7 +194,7 @@ export default function HelpScreen() {
                     <View
                       style={{
                         borderTopWidth: 1,
-                        borderTopColor: colors.border,
+                        borderTopColor: colors.line,
                         paddingTop: spacing.md,
                       }}
                     >

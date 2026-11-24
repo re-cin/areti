@@ -11,7 +11,6 @@ import {
   setPetSetting,
 } from '@/db/queries/pet';
 import {
-  DEFAULT_SLEEP,
   EXPRESSIONS,
   focusStats,
   getExpression,
@@ -25,6 +24,8 @@ import {
   unlockedExpressions,
 } from '@/features/pet';
 import { startOfDay } from '@/lib/dates';
+import { normalizePreferences, toMinutes, weeklyStudySlots, type AppPreferences } from '@/features/settings/preferences';
+import { weeklyWindows } from '@/features/pet/schedule';
 import { EXPRESSION_PREVIEW, PET_NAME_MAX, usePetStore } from '@/stores/petStore';
 
 const DAY_MS = 86_400_000;
@@ -69,9 +70,14 @@ export function usePetView() {
     const lastLevelSeen = parse<number | null>(setting(PET_SETTINGS.lastLevelSeen), null);
     const lastCelebrationDay = parse<number | null>(setting(PET_SETTINGS.lastCelebrationDay), null);
 
+    // Study Slots and sleep period from Settings > Preferences.
+    const prefs = normalizePreferences(parse<Partial<AppPreferences> | null>(setting(PET_SETTINGS.preferences), null));
+    const sleep = { start: toMinutes(prefs.sleepStart), end: toMinutes(prefs.sleepEnd) };
+    const slots = weeklyWindows(weeklyStudySlots(prefs.studySlots), sleep);
+
     const records = log ?? [];
     const stats = focusStats(records, now);
-    const momentum = momentumNow(records, now);
+    const momentum = momentumNow(records, now, slots);
     const lvl = levelProgress(stats.totalExp);
     const examDate = exams?.[0]?.examDate ?? null;
     const examInDays = examDate === null ? null : Math.round((startOfDay(examDate) - today) / DAY_MS);
@@ -83,7 +89,7 @@ export function usePetView() {
       goalMinutes,
       session,
       examInDays,
-      isSleepPeriod: inWindow(now, DEFAULT_SLEEP),
+      isSleepPeriod: sleep.start !== sleep.end && inWindow(now, sleep),
       brief,
     });
     // DEV preview from the Expressions grid overrides what the rules picked.

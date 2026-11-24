@@ -7,10 +7,27 @@ export type SchedulePlan = {
   difficulty: number; urgency: number; start: number; end: number;
   focusMin: number; focusCount: number; breakMin: number; longBreakMin: number;
   excluded: number[]; studyDays?: number[]; planStartDate?: number;
+  /** Study time per weekday (index = Date.getDay(), null = no study that day). Overrides start/end. */
+  weekly?: ({ start: number; end: number } | null)[];
+  /** Exam start time on the exam day (minutes from midnight). Set: study is allowed that day until shortly before. */
+  examMinute?: number;
 };
-export type BusyTime = { date: number; startMinute: number; endMinute: number; focusMinutes?: number };
-export type StudySession = { planId: string; subjectId: string; date: number; startMinute: number; endMinute: number; blocks: number };
-export type ScheduleResult = { sessions: StudySession[]; shortfallBlocks: number; shortfallByPlan: Record<string, number> };
+
+/** Free time kept between the last study block and the exam. */
+export const EXAM_BUFFER_MIN = 30;
+
+/** Last calendar day that can hold study for this plan. */
+export const lastStudyDay = (plan: Pick<SchedulePlan, 'examDate' | 'examMinute'>) =>
+  plan.examMinute === undefined ? addDays(startOfDay(plan.examDate), -1) : startOfDay(plan.examDate);
+export type BusyTime = { date: number; startMinute: number; endMinute: number; focusMinutes?: number;
+  /** What takes this time, for the study plan's "time already used" list (the scheduler ignores it). */
+  label?: string; skippedPlanId?: string };
+export type StudySession = { planId: string; subjectId: string; date: number; startMinute: number; endMinute: number; blocks: number;
+  /** Focus time of this session's blocks when the planner shortened it (defaults to the plan's). */
+  focusMin?: number };
+export type ScheduleResult = { sessions: StudySession[]; shortfallBlocks: number; shortfallByPlan: Record<string, number>;
+  /** Days whose study (planned plus already busy) goes over the daily goal. The goal warns; it never blocks. */
+  overGoalDays: { date: number; minutes: number }[] };
 
 /** Elapsed minutes, including breaks between blocks, never a break after the final block. */
 export function sessionMinutes(blocks: number, prefs: Pick<SchedulePlan, 'focusMin' | 'focusCount' | 'breakMin' | 'longBreakMin'>): number {
@@ -21,26 +38,38 @@ export function sessionMinutes(blocks: number, prefs: Pick<SchedulePlan, 'focusM
 }
 
 /** Overnight windows belong to their starting weekday. Exclusions block the whole calendar date. */
-export function studyWindows(plan: Pick<SchedulePlan, 'start' | 'end' | 'examDate' | 'excluded' | 'studyDays' | 'planStartDate'>, date: number): { start: number; end: number }[] {
-  if (date >= startOfDay(plan.examDate) || plan.excluded.includes(date) || plan.start === plan.end) return [];
+export function studyWindows(plan: Pick<SchedulePlan, 'start' | 'end' | 'examDate' | 'excluded' | 'studyDays' | 'planStartDate' | 'weekly' | 'examMinute'>, date: number): { start: number; end: number }[] {
+  const examDay = startOfDay(plan.examDate);
+  if (date > examDay || plan.excluded.includes(date)) return [];
+  if (date === examDay && plan.examMinute === undefined) return [];
+  const slotFor = (anchor: number) => plan.weekly
+    ? plan.weekly[new Date(anchor).getDay()] ?? null
+    : plan.start === plan.end ? null : { start: plan.start, end: plan.end };
   const allowed = (anchor: number) => (plan.planStartDate === undefined || anchor >= plan.planStartDate)
     && !plan.excluded.includes(anchor) && (!plan.studyDays || plan.studyDays.includes(new Date(anchor).getDay()));
-  if (plan.end > plan.start) return allowed(date) ? [{ start: plan.start, end: plan.end }] : [];
-  const windows = [];
-  if (plan.end > 0 && allowed(addDays(date, -1))) windows.push({ start: 0, end: plan.end });
-  if (allowed(date)) windows.push({ start: plan.start, end: 1440 });
-  return windows;
+  const windows: { start: number; end: number }[] = [];
+  const previous = addDays(date, -1);
+  const before = slotFor(previous);
+  if (before && before.end < before.start && before.end > 0 && allowed(previous)) windows.push({ start: 0, end: before.end });
+  const slot = slotFor(date);
+  if (slot && allowed(date)) windows.push(slot.end > slot.start ? { start: slot.start, end: slot.end } : { start: slot.start, end: 1440 });
+  if (date !== examDay) return windows;
+  // Exam day: only before the exam, leaving a short gap.
+  const cutoff = (plan.examMinute ?? 0) - EXAM_BUFFER_MIN;
+  return windows.map(w => ({ start: w.start, end: Math.min(w.end, cutoff) })).filter(w => w.end > w.start);
 }
 
 const eligible = (plan: SchedulePlan, date: number) => studyWindows(plan, date).length > 0;
 
 /** Pure, deterministic scheduler. Plans share time slots and one daily focus budget. */
-export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy: BusyTime[]; dailyGoalMin: number }): ScheduleResult {
+export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy: BusyTime[]; dailyGoalMin: number;
+  /** 'target' (app default): plan what the exams need and report days over the goal. 'cap': never go over the goal. */
+  goalMode?: 'target' | 'cap' }): ScheduleResult {
   const { plans, busy } = input;
   const today = startOfDay(input.now);
   const remaining = new Map(plans.map(p => [p.id, Math.max(0, Math.floor(p.remainingBlocks))]));
   const sessions: StudySession[] = [];
-  const deadline = Math.max(today, ...plans.map(p => startOfDay(p.examDate)));
+  const deadline = Math.max(today - 1, ...plans.map(p => lastStudyDay(p)));
   // Weighted fair allocation in MINUTES: harder exams receive more of limited capacity.
   // Remaining work per eligible day also accounts for deadlines and unavailable dates.
   // Carry service across days so a small daily goal doesn't always choose the same subject.
@@ -48,17 +77,18 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
   const lastStudyDates = new Map<string, number>();
   const shares = new Map(plans.map(p => {
     let days = 0;
-    for (let date = today; date < startOfDay(p.examDate); date = addDays(date, 1)) if (eligible(p, date)) {
+    for (let date = today; date <= lastStudyDay(p); date = addDays(date, 1)) if (eligible(p, date)) {
       days++;
       lastStudyDates.set(p.id, date);
     }
     return [p.id, Math.max(1, p.remainingBlocks * p.focusMin / Math.max(1, days)) * difficultyWeight(p.difficulty)];
   }));
   const used = new Map<string, number>();
+  const overGoalDays: { date: number; minutes: number }[] = [];
   let cursor = input.now.getHours() * 60 + input.now.getMinutes() + (input.now.getSeconds() > 0 ? 1 : 0);
   let continuous = 0;
   let previous: SchedulePlan | undefined;
-  for (let date = today; date < deadline; date = addDays(date, 1)) {
+  for (let date = today; date <= deadline; date = addDays(date, 1)) {
     if (date !== today) {
       cursor -= 1440;
       if (!previous || cursor <= -Math.max(LONG_BREAK_MIN, previous.longBreakMin)) {
@@ -75,7 +105,18 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
         ? [{ ...b, startMinute: b.startMinute - 1440, endMinute: b.endMinute - 1440,
           focusMinutes: b.endMinute > 1440 ? (b.focusMinutes ?? b.endMinute - b.startMinute) * (b.endMinute - 1440) / (b.endMinute - b.startMinute) : 0 }]
         : []);
-    let budget = Math.max(0, input.dailyGoalMin - occupied.reduce((sum, b) => sum + (b.focusMinutes ?? b.endMinute - b.startMinute), 0));
+    const occupiedFocus = occupied.reduce((sum, b) => sum + (b.focusMinutes ?? b.endMinute - b.startMinute), 0);
+    // The daily goal is a target, not a limit: when the plans need more than the goal to finish
+    // in time, plan what they need (spread evenly over the days left) and report the day as over goal.
+    const needed = plans.reduce((sum, p) => {
+      const left = remaining.get(p.id) ?? 0;
+      if (!left || !eligible(p, date)) return sum;
+      let daysLeft = 0;
+      for (let d = date; d <= lastStudyDay(p); d = addDays(d, 1)) if (eligible(p, d)) daysLeft++;
+      return sum + Math.ceil(left / Math.max(1, daysLeft)) * p.focusMin;
+    }, 0);
+    let budget = Math.max(0, input.dailyGoalMin - occupiedFocus, input.goalMode === 'cap' ? 0 : needed);
+    let plannedFocus = 0;
     const blocked = new Set<string>();
     while (true) {
       const candidates = plans.filter(p => eligible(p, date) && !blocked.has(p.id) && (remaining.get(p.id) ?? 0) > 0
@@ -114,13 +155,15 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
       servedMinutes.set(plan.id, (servedMinutes.get(plan.id) ?? 0) + plan.focusMin);
       remaining.set(plan.id, remaining.get(plan.id)! - 1);
       budget -= plan.focusMin;
+      plannedFocus += plan.focusMin;
       continuous += plan.focusMin;
       cursor = start + plan.focusMin;
       previous = plan;
     }
+    if (plannedFocus > 0 && occupiedFocus + plannedFocus > input.dailyGoalMin) overGoalDays.push({ date, minutes: occupiedFocus + plannedFocus });
   }
   const shortfallByPlan = Object.fromEntries(remaining);
-  return { sessions, shortfallByPlan, shortfallBlocks: [...remaining.values()].reduce((a, b) => a + b, 0) };
+  return { sessions, shortfallByPlan, overGoalDays, shortfallBlocks: [...remaining.values()].reduce((a, b) => a + b, 0) };
 }
 
 /** Public API for an ordinary study week or one exam, using the same scheduler. */

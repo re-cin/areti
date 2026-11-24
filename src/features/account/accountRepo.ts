@@ -106,18 +106,32 @@ export async function exportAllData(): Promise<string> {
   return JSON.stringify(data, null, 2);
 }
 
+/** Settings that belong to exams, study sessions or the pet's progress (cleared with the history). */
+const HISTORY_SETTING_PREFIXES = ['exam-', 'session.settings:', 'timer.state', 'pet.lastLevelSeen', 'pet.lastCelebrationDay', 'planner.protectedSubjects'];
+
 /**
- * "Clear study history": soft-deletes (so it syncs to every phone) all focus logs (statistics and streak),
- * scheduled Pomodoro sessions and Planner tasks, and resets Reti to level 1 with 0 XP (XP comes from that
- * focus time). Subjects and settings stay.
+ * "Clear study history": soft-deletes (so it syncs to every phone) all exams and their study plans,
+ * scheduled Pomodoro sessions, Planner tasks and focus logs (statistics and streak), and resets Reti to
+ * level 1 with 0 XP. Exams go too, otherwise the planner would rebuild their sessions straight away.
+ * Subjects, Preferences, Pomodoro settings and the account stay. Returns how many items were cleared.
  */
-export async function clearStudyHistory(): Promise<void> {
+export async function clearStudyHistory(): Promise<number> {
   const now = Date.now();
   const gone = { deletedAt: now, updatedAt: now };
-  await db.update(focusSessions).set(gone).where(isNull(focusSessions.deletedAt));
-  await db.update(plannedSessions).set(gone).where(isNull(plannedSessions.deletedAt));
-  await db.update(tasks).set(gone).where(isNull(tasks.deletedAt));
-  await db.update(ghostState).set({ level: 1, xp: 0, updatedAt: now }).where(isNull(ghostState.deletedAt));
+  // One transaction, so automatic re-planning never sees half-cleared data.
+  const count = db.transaction(tx => {
+    let n = 0;
+    n += tx.update(studyPlans).set(gone).where(isNull(studyPlans.deletedAt)).run().changes;
+    n += tx.update(plannedSessions).set(gone).where(isNull(plannedSessions.deletedAt)).run().changes;
+    n += tx.update(tasks).set(gone).where(isNull(tasks.deletedAt)).run().changes;
+    n += tx.update(focusSessions).set(gone).where(isNull(focusSessions.deletedAt)).run().changes;
+    tx.update(ghostState).set({ level: 1, xp: 0, updatedAt: now }).where(isNull(ghostState.deletedAt)).run();
+    for (const row of tx.select().from(settings).all()) {
+      if (HISTORY_SETTING_PREFIXES.some(prefix => row.key.startsWith(prefix))) tx.delete(settings).where(eq(settings.key, row.key)).run();
+    }
+    return n;
+  });
   bumpData();
   void refreshSessionReminders(); // no more reminders for the cleared tasks and sessions
+  return count;
 }

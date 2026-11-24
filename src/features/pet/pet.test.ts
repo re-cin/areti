@@ -155,3 +155,15 @@ describe('dialogue + format', () => {
     expect(formatShortDuration(90)).toBe('1h 30m');
   });
 });
+
+describe('Study Slots from Preferences', () => {
+  const { weeklyWindows, minutesInSlots } = jest.requireActual('./schedule') as typeof import('./schedule');
+  it('splits overnight slots, removes the sleep period, and counts per weekday', () => {
+    const perDay = Array.from({ length: 7 }, (_, d) => (d === 1 ? { start: 22 * 60, end: 2 * 60 } : null));
+    const w = weeklyWindows(perDay, { start: 23 * 60, end: 7 * 60 });
+    expect(w[1]).toEqual([{ start: 22 * 60, end: 23 * 60 }]);
+    expect(w[2]).toEqual([]);
+    const monday = new Date(2026, 10, 23).getTime(); // a Monday
+    expect(minutesInSlots(monday, monday + 86_400_000, w)).toBe(60);
+  });
+});

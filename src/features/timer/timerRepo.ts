@@ -1,8 +1,9 @@
-import { and, asc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, or, sql } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId } from '@/db/id';
 import { focusSessions, plannedSessions, settings as settingsTable, studyPlans, subjects, tasks } from '@/db/schema';
 import { startOfDay } from '@/lib/dateHelpers';
+import { addDays } from '@/lib/dates';
 import { awardXp } from '@/features/pet/petRepo';
 import { creditedMinutes, creditWithDailyCap } from '@/features/pet/xp';
 import { bumpData } from '@/stores/dataVersion';
@@ -27,6 +28,8 @@ export type UpcomingSession = {
   /** Planner task name, when the session came from "Schedule Pomodoro". */
   taskTitle: string | null;
   startMinute: number | null;
+  /** Local midnight of the session's day: today or tomorrow. */
+  date: number;
   blocks: number;
   completedBlocks: number;
   /** Pomodoro settings frozen when the session was scheduled (later settings changes don't touch it). */
@@ -46,8 +49,10 @@ export async function getSessionSettings(plannedId: string): Promise<PomodoroSet
 }
 
 /** Today's planned sessions that still have blocks left, earliest first. */
+/** Unfinished sessions for today and tomorrow (the Pomodoro tab shows both, today first). */
 export async function listUpcomingToday(now = new Date()): Promise<UpcomingSession[]> {
   const today = startOfDay(now).getTime();
+  const tomorrow = addDays(today, 1);
   const rows = await db
     .select({
       id: plannedSessions.id,
@@ -56,6 +61,7 @@ export async function listUpcomingToday(now = new Date()): Promise<UpcomingSessi
       subjectColor: subjects.color,
       taskTitle: tasks.title,
       startMinute: plannedSessions.startMinute,
+      date: plannedSessions.date,
       blocks: plannedSessions.blocks,
       completedBlocks: plannedSessions.completedBlocks,
     })
@@ -65,19 +71,19 @@ export async function listUpcomingToday(now = new Date()): Promise<UpcomingSessi
     .leftJoin(studyPlans, eq(plannedSessions.planId, studyPlans.id))
     .where(
       and(
-        eq(plannedSessions.date, today),
+        inArray(plannedSessions.date, [today, tomorrow]),
         isNull(plannedSessions.deletedAt),
         eq(plannedSessions.excluded, false),
         isNull(subjects.deletedAt),
         or(eq(plannedSessions.planId, MANUAL_PLAN_ID),
           and(sql`${plannedSessions.planId} LIKE 'task:%'`, sql`${tasks.id} IS NOT NULL`, isNull(tasks.deletedAt), eq(tasks.done, false)),
-          and(sql`${studyPlans.id} IS NOT NULL`, isNull(studyPlans.deletedAt), eq(studyPlans.status, 'active'), gt(studyPlans.examDate, today))),
+          and(sql`${studyPlans.id} IS NOT NULL`, isNull(studyPlans.deletedAt), eq(studyPlans.status, 'active'), gte(studyPlans.examDate, today))),
         sql`${plannedSessions.completedBlocks} < ${plannedSessions.blocks}`,
         // A session made from a Planner task goes away when that task is deleted.
         sql`(${plannedSessions.planId} not like 'task:%' or (${tasks.id} is not null and ${tasks.deletedAt} is null))`,
       ),
     )
-    .orderBy(asc(plannedSessions.startMinute));
+    .orderBy(asc(plannedSessions.date), asc(plannedSessions.startMinute));
 
   // Attach each session's frozen settings. Older sessions without a copy get today's settings frozen now.
   const keys = rows.map((r) => sessionSettingsKey(r.id));

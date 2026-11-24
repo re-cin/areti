@@ -1,5 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { usePreventRemove } from 'expo-router';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -9,7 +11,21 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { SettingsScaffold } from '@/components/settings/SettingsScaffold';
 import { Text } from '@/components/ui/Text';
+import { NeoButton } from '@/components/ui/NeoButton';
+import { showNotice } from '@/stores/notice';
 import { fonts } from '@/theme';
+import {
+  CUSTOM_RESET_SCHEDULE,
+  DEFAULT_DAILY_GOAL_MIN,
+  DEFAULT_PREFERENCES,
+  DEFAULT_STUDY_SLOTS,
+  loadDailyGoalMin,
+  loadPreferences,
+  saveDailyGoalMin,
+  savePreferences,
+  type AppPreferences,
+} from '@/features/settings/preferences';
+import { regenerateSchedules } from '@/features/planner/examsRepo';
 
 const C = {
   page: '#E8E1D9',
@@ -37,25 +53,8 @@ const DAYS = [
 type Day = (typeof DAYS)[number];
 type Schedule = Record<Day, { start: string; end: string }>;
 
-const DEFAULT_SCHEDULE: Schedule = {
-  Monday: { start: '06:00', end: '20:00' },
-  Tuesday: { start: '06:00', end: '20:00' },
-  Wednesday: { start: '06:00', end: '20:00' },
-  Thursday: { start: '06:00', end: '20:00' },
-  Friday: { start: '06:00', end: '20:00' },
-  Saturday: { start: '06:00', end: '20:00' },
-  Sunday: { start: '06:00', end: '20:00' },
-};
-
-const CUSTOM_SCHEDULE: Schedule = {
-  Monday: { start: '18:00', end: '20:30' },
-  Tuesday: { start: '18:00', end: '20:30' },
-  Wednesday: { start: '18:00', end: '20:30' },
-  Thursday: { start: '18:00', end: '20:30' },
-  Friday: { start: '18:00', end: '20:30' },
-  Saturday: { start: '18:00', end: '20:30' },
-  Sunday: { start: '18:00', end: '20:30' },
-};
+const DEFAULT_SCHEDULE: Schedule = DEFAULT_STUDY_SLOTS.schedule;
+const CUSTOM_SCHEDULE: Schedule = CUSTOM_RESET_SCHEDULE;
 
 const TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
   const hour = Math.floor(index / 2);
@@ -485,24 +484,131 @@ function ScheduleRow({
 }
 
 export default function PreferencesScreen() {
-  const [backgroundWork, setBackgroundWork] = useState(true);
-  const [notifications, setNotifications] = useState(true);
-  const [petPhysics, setPetPhysics] = useState(true);
+  const D = DEFAULT_PREFERENCES;
+  const [backgroundWork, setBackgroundWork] = useState(D.backgroundWork);
+  const [notifications, setNotifications] = useState(D.notifications);
+  const [petPhysics, setPetPhysics] = useState(D.petPhysics);
 
-  const [sleepStart, setSleepStart] = useState('07:30');
-  const [sleepEnd, setSleepEnd] = useState('21:30');
+  const [sleepStart, setSleepStart] = useState(D.sleepStart);
+  const [sleepEnd, setSleepEnd] = useState(D.sleepEnd);
 
-  const [chatter, setChatter] = useState('Balanced');
-  const [dailyGoal, setDailyGoal] = useState(3);
+  const [chatter, setChatter] = useState(D.chatter);
+  // Hours on screen; saved as minutes in the one daily goal the Planner and Reti both use.
+  const [dailyGoal, setDailyGoal] = useState(DEFAULT_DAILY_GOAL_MIN / 60);
 
-  const [dateFormat, setDateFormat] = useState('dd/mm/yy');
-  const [firstDay, setFirstDay] = useState('Monday');
-  const [timeFormat, setTimeFormat] = useState('12-Hour (AM/PM)');
+  const [dateFormat, setDateFormat] = useState(D.dateFormat);
+  const [firstDay, setFirstDay] = useState(D.firstDay);
+  const [timeFormat, setTimeFormat] = useState(D.timeFormat);
 
-  const [mode, setMode] = useState<'Default' | 'Custom'>('Default');
+  const [mode, setMode] = useState<'Default' | 'Custom'>(D.studySlots.mode);
   const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
 
   const [enabledDays, setEnabledDays] = useState<Day[]>([...DAYS]);
+
+  // Load the saved preferences once. Changes are kept on this screen until "Save settings",
+  // which saves everything at once and re-plans study sessions a single time.
+  const loaded = useRef(false);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([loadPreferences(), loadDailyGoalMin()]).then(([p, goalMin]) => {
+      if (cancelled) return;
+      setBackgroundWork(p.backgroundWork);
+      setNotifications(p.notifications);
+      setPetPhysics(p.petPhysics);
+      setSleepStart(p.sleepStart);
+      setSleepEnd(p.sleepEnd);
+      setChatter(p.chatter);
+      setDateFormat(p.dateFormat);
+      setFirstDay(p.firstDay);
+      setTimeFormat(p.timeFormat);
+      setMode(p.studySlots.mode);
+      setSchedule(p.studySlots.schedule);
+      setEnabledDays(p.studySlots.enabledDays);
+      const goalHours = Math.round((goalMin / 60) * 2) / 2;
+      setDailyGoal(goalHours);
+      setSavedKey(JSON.stringify([p, goalHours]));
+      loaded.current = true;
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const prefs: AppPreferences = {
+    backgroundWork, notifications, petPhysics, sleepStart, sleepEnd, chatter,
+    dateFormat, firstDay, timeFormat, studySlots: { mode, schedule, enabledDays },
+  };
+  const currentKey = JSON.stringify([prefs, dailyGoal]);
+  const dirty = savedKey !== null && currentKey !== savedKey;
+
+  /** Asks before rescheduling: study plans only change when the user agrees. */
+  const confirmReschedule = (message: string) => new Promise<boolean>((resolve) => {
+    Alert.alert('Reschedule your study plans?', message, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Reschedule', onPress: () => resolve(true) },
+    ], { cancelable: true, onDismiss: () => resolve(false) });
+  });
+
+  const save = async () => {
+    if (!dirty || saving) return false;
+    const before = savedKey ? (JSON.parse(savedKey) as [AppPreferences, number]) : null;
+    // Study slots or the goal changed: saving them means rescheduling the plans, so ask first.
+    const planChanged = !before || JSON.stringify([before[0].studySlots, before[1]]) !== JSON.stringify([prefs.studySlots, dailyGoal]);
+    if (planChanged && !(await confirmReschedule(
+      'To save this update, your study plans need to be rescheduled to fit your new Study Slots and daily goal. Sessions you finished or started stay.'))) {
+      return false;
+    }
+    setSaving(true);
+    try {
+      await savePreferences(prefs);
+      await saveDailyGoalMin(dailyGoal * 60);
+      if (planChanged) await regenerateSchedules();
+      setSavedKey(currentKey);
+      showNotice({ title: 'Settings saved', message: planChanged
+        ? 'Your study plans were rescheduled to fit your Study Slots and daily goal.' : 'Your preferences were updated.' });
+      return true;
+    } catch (e) {
+      showNotice({ title: 'Could not save settings', message: e instanceof Error ? e.message : String(e) });
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /** Refresh button on the Study Slots and Daily Goal sections. */
+  const refreshPlans = async () => {
+    if (saving) return;
+    if (dirty) { await save(); return; }
+    if (!(await confirmReschedule('Rearrange your study plans now with your saved Study Slots and daily goal?'))) return;
+    setSaving(true);
+    try {
+      await regenerateSchedules();
+      showNotice({ title: 'Study plans rescheduled', message: 'Your sessions were rearranged to fit your Study Slots and daily goal.' });
+    } catch (e) {
+      showNotice({ title: 'Could not reschedule', message: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const refreshButton = (label: string) => (
+    <Pressable onPress={() => void refreshPlans()} disabled={saving} hitSlop={8} accessibilityRole="button"
+      accessibilityLabel={`Reschedule study plans (${label})`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1.5, borderColor: C.black, borderRadius: 16,
+        paddingHorizontal: 10, paddingVertical: 5, backgroundColor: C.card }}>
+      <Ionicons name="refresh" size={14} color={C.black} />
+      <Label size={12}>Reschedule</Label>
+    </Pressable>
+  );
+
+  // Leaving with unsaved changes: ask first. (Prevention is switched off before the blocked "back" repeats.)
+  const [allowLeave, setAllowLeave] = useState(false);
+  usePreventRemove(dirty && !saving && !allowLeave, ({ repeat }) => {
+    Alert.alert('Save your changes?', 'Your preference changes are not saved yet.', [
+      { text: 'Keep editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => { setAllowLeave(true); setTimeout(repeat, 0); } },
+      { text: 'Save', onPress: () => void save().then(ok => { if (ok) { setAllowLeave(true); setTimeout(repeat, 0); } }) },
+    ]);
+  });
 
   const format = timeFormat === '24-Hour' ? '24-Hour' : '12-Hour (AM/PM)';
 
@@ -554,7 +660,19 @@ export default function PreferencesScreen() {
   };
 
   return (
-    <SettingsScaffold title="Preferences">
+    <SettingsScaffold
+      title="Preferences"
+      footer={
+        <View style={{ gap: 6, paddingTop: 8 }}>
+          {dirty && <Text style={{ textAlign: 'center', color: C.gray, fontSize: 12, fontFamily: fonts.medium }}>You have unsaved changes</Text>}
+          <NeoButton
+            label={saving ? 'Saving & updating your plans…' : 'Save settings'}
+            backgroundColor={dirty ? C.teal : C.card}
+            disabled={!dirty || saving}
+            onPress={() => void save()}
+          />
+        </View>
+      }>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
@@ -703,7 +821,10 @@ export default function PreferencesScreen() {
               }}
             >
               <View style={{ flex: 1, gap: 3 }}>
-                <Label>Daily Goal</Label>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <Label>Daily Goal</Label>
+                  {refreshButton('daily goal')}
+                </View>
                 <Description>
                   Set how many hours to study for in a day affecting Reti's reactions
                 </Description>
@@ -790,7 +911,10 @@ export default function PreferencesScreen() {
               gap: 8,
             }}
           >
-            <SectionHeading>Planner Study Slots</SectionHeading>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 }}>
+              <SectionHeading>Planner Study Slots</SectionHeading>
+              {refreshButton('study slots')}
+            </View>
 
             <View
               style={{
@@ -833,23 +957,7 @@ export default function PreferencesScreen() {
                     }}
                   >
                     <Label size={17}>WEEKDAYS:</Label>
-                    <View style={{ flexDirection: 'row', gap: 5 }}>
-                      {['M', 'T', 'W', 'T', 'F'].map((day, index) => (
-                        <View
-                          key={`${day}-${index}`}
-                          style={{
-                            width: 35,
-                            height: 35,
-                            borderRadius: 20,
-                            backgroundColor: C.black,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Label color={C.white} size={14}>{day}</Label>
-                        </View>
-                      ))}
-                    </View>
+                    <Label color={C.gray} size={15}>Mon – Fri</Label>
                   </View>
 
                   <View
@@ -905,25 +1013,7 @@ export default function PreferencesScreen() {
                     }}
                   >
                     <Label size={17}>WEEKENDS:</Label>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {['S', 'S'].map((day, index) => (
-                        <View
-                          key={index}
-                          style={{
-                            width: 35,
-                            height: 35,
-                            borderRadius: 20,
-                            backgroundColor: C.card,
-                            borderWidth: 1.7,
-                            borderColor: C.black,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Label size={14}>{day}</Label>
-                        </View>
-                      ))}
-                    </View>
+                    <Label color={C.gray} size={15}>Sat – Sun</Label>
                   </View>
 
                   <View
@@ -1002,7 +1092,7 @@ export default function PreferencesScreen() {
                     fontWeight: '500',
                   }}
                 >
-                  The modifications will only apply to future study plans
+                  Upcoming study sessions are re-planned to fit these times
                 </Text>
               </View>
 

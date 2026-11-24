@@ -7,6 +7,10 @@ import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
 import { TimePill } from '@/components/planner/TimePill';
 import { useDateTimePicker } from '@/hooks/useDateTimePicker';
 import { useSubjects } from '@/hooks/useSubjects';
+import { useTasksForDate } from '@/hooks/useTasksForDate';
+import { useDbQuery } from '@/lib/useDbQuery';
+import { DEFAULT_DAILY_GOAL_MIN, loadDailyGoalMin } from '@/features/settings/preferences';
+import { formatDuration } from '@/lib/format';
 import { startOfDay } from '@/lib/dates';
 import { borders, colors, radii, spacing } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -136,6 +140,14 @@ export default function AddTaskScreen() {
 
   const duration = endMin - startMin;
   const valid = name.trim().length > 0 && subjectId !== null && duration > 0;
+
+  // The daily goal never blocks a task; it only warns when this day would go over it.
+  const goalMin = useDbQuery(loadDailyGoalMin, DEFAULT_DAILY_GOAL_MIN);
+  const { todo: dayTodo, finished: dayDone } = useTasksForDate(date);
+  const dayMinutes = [...dayTodo, ...dayDone].reduce((sum, t) => sum + Math.max(0, t.endMinute - t.startMinute), 0);
+  const overGoal = duration > 0 && dayMinutes + duration > goalMin;
+  // Study plans don't move on their own any more, so point out a clash with a planned study session.
+  const clash = dayTodo.find(t => t.source === 'generated' && t.startMinute < endMin && startMin < t.endMinute);
 
   const subjectOptions = subjects.map((s) => ({ key: s.id, label: s.name, color: s.color }));
 
@@ -310,6 +322,25 @@ export default function AddTaskScreen() {
           <Text variant="smallStrong">-</Text>
           <TimePill min={endMin} color={colors.terracotta} onPress={pickEnd} />
         </View>
+
+        {clash && (
+          <Text variant="caption" color={colors.dangerDark} style={{ marginTop: 8 }}>
+            This overlaps the study session “{clash.title}”. You can still add it; Reschedule that exam’s study plan to move the session.
+          </Text>
+        )}
+        {overGoal && (
+          <View style={{ marginTop: 8, gap: 6 }}>
+            <Text variant="caption" color={colors.dangerDark}>
+              This day will have {formatDuration(dayMinutes + duration)} of study, over your daily goal of {formatDuration(goalMin)}. You can still add it.
+            </Text>
+            <Pressable onPress={() => router.push('/settings/preferences')} accessibilityRole="button"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start' }}>
+              <Ionicons name="options-outline" size={15} color={colors.ink} />
+              <Text variant="captionStrong">Change daily goal in Preferences</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.ink} />
+            </Pressable>
+          </View>
+        )}
 
         <Text variant="smallStrong" style={{ marginTop: 14 }}>Notification Sound</Text>
         {/* Full width like the other fields. Opens downward in the form (pushing the space below), so it

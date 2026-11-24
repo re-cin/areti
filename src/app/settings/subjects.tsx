@@ -36,24 +36,18 @@ export default function SubjectsScreen() {
   const [renaming, setRenaming] = useState<SubjectRow | null>(null);
   const [coloring, setColoring] = useState<SubjectRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<
-    'all' | '1' | '3' | '5'
-  >('all');
 
   const filteredSubjects = subjects.filter((subject) => {
     const matchesSearch = subject.name
       .toLowerCase()
       .includes(searchQuery.trim().toLowerCase());
 
-    const matchesDifficulty =
-      difficultyFilter === 'all' ||
-      subject.difficulty === Number(difficultyFilter);
-
-    return matchesSearch && matchesDifficulty;
+    // Difficulty is set per exam now (Set Exam), so subjects are filtered by name only.
+    return matchesSearch;
   });
 
   const isFiltering =
-    searchQuery.trim().length > 0 || difficultyFilter !== 'all';
+    searchQuery.trim().length > 0;
 
   const remove = (s: SubjectRow) =>
     showNotice({
@@ -176,56 +170,6 @@ export default function SubjectsScreen() {
           </View>
         </View>
 
-        {/* Difficulty filters */}
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: spacing.sm,
-          }}
-        >
-          {[
-            { label: 'All', value: 'all' },
-            { label: 'Low', value: '1' },
-            { label: 'Medium', value: '3' },
-            { label: 'High', value: '5' },
-          ].map((option) => {
-            const selected =
-              difficultyFilter === option.value;
-
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() =>
-                  setDifficultyFilter(
-                    option.value as 'all' | '1' | '3' | '5',
-                  )
-                }
-                style={{
-                  flex: 1,
-                  paddingVertical: 9,
-                  alignItems: 'center',
-                  borderWidth: borders.thin,
-                  borderColor: colors.ink,
-                  borderRadius: 12,
-                  backgroundColor: selected
-                    ? colors.teal
-                    : colors.surface,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: fonts.semiBold,
-                    fontSize: 12,
-                  }}
-                  color={colors.ink}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
         {subjects.length === 0 && (
           <Text color={colors.muted}>
             No subjects yet. Add your first one below.
@@ -235,7 +179,7 @@ export default function SubjectsScreen() {
         {subjects.length > 0 &&
           filteredSubjects.length === 0 && (
             <Text color={colors.muted}>
-              No subjects match your search or filter.
+              No subjects match your search.
             </Text>
           )}
 
@@ -287,26 +231,6 @@ export default function SubjectsScreen() {
                 >
                   <Pill label={s.name} color={s.color} />
 
-                  <Text
-                    variant="caption"
-                    style={{
-                      fontFamily: fonts.medium,
-                      fontSize: 11,
-                    }}
-                    color={
-                      s.difficulty === 1
-                        ? colors.teal
-                        : s.difficulty === 5
-                          ? colors.dangerDark
-                          : colors.terracottaDark
-                    }
-                  >
-                    {s.difficulty === 1
-                      ? 'Low difficulty'
-                      : s.difficulty === 5
-                        ? 'High difficulty'
-                        : 'Medium difficulty'}
-                  </Text>
                 </View>
 
                 <RoundButton

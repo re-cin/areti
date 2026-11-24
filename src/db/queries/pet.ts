@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { db } from '../client';
 import { newId } from '../id';
 import { focusSessions, ghostState, settings, studyPlans } from '../schema';
+import { DAILY_GOAL_KEY, DEFAULT_DAILY_GOAL_MIN, PREFERENCES_KEY } from '@/features/settings/preferences';
 
 // ---------------------------------------------------------------------------
 // Reads (pass these to useLiveQuery)
@@ -30,8 +31,10 @@ export const ghostQuery = () =>
 
 /** Keys the pet keeps in the `settings` table (values are JSON). */
 export const PET_SETTINGS = {
-  /** Daily goal in minutes, 60..420 in 30-minute steps (spec 3.2). */
-  dailyGoal: 'pet.dailyGoalMinutes',
+  /** The one daily goal in minutes, shared with the Planner (set in Settings > Preferences). */
+  dailyGoal: DAILY_GOAL_KEY,
+  /** Settings > Preferences (Study Slots and sleep period). */
+  preferences: PREFERENCES_KEY,
   /** Highest level the user has already seen the memory flash for. */
   lastLevelSeen: 'pet.lastLevelSeen',
   /** Local-midnight epoch ms of the last day the goal celebration played. */
@@ -41,7 +44,7 @@ export const PET_SETTINGS = {
 export const petSettingsQuery = () =>
   db.select().from(settings).where(inArray(settings.key, Object.values(PET_SETTINGS)));
 
-export const DEFAULT_DAILY_GOAL = 120;
+export const DEFAULT_DAILY_GOAL = DEFAULT_DAILY_GOAL_MIN;
 
 // ---------------------------------------------------------------------------
 // Writes
@@ -66,5 +69,6 @@ export async function setPetSetting(key: (typeof PET_SETTINGS)[keyof typeof PET_
 /** Spec 3.2: 1 to 7 hours in 30-minute steps. Today's progress recomputes automatically. */
 export async function setDailyGoal(minutes: number) {
   const clamped = Math.min(420, Math.max(60, Math.round(minutes / 30) * 30));
+  // Same goal as the Planner; plans pick it up the next time they are rescheduled.
   await setPetSetting(PET_SETTINGS.dailyGoal, clamped);
 }

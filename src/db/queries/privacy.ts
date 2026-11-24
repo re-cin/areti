@@ -1,4 +1,4 @@
-import { and, isNull, ne } from 'drizzle-orm';
+import { isNull, ne } from 'drizzle-orm';
 import Constants from 'expo-constants';
 import { db } from '../client';
 import {
@@ -46,20 +46,10 @@ export async function exportAllData(): Promise<string> {
   );
 }
 
-/**
- * Erases the study logs (Pomodoro / focus session history) and nothing else:
- * subjects, schedules, tasks, the ghost's XP and the account stay.
- * Uses a soft delete (deletedAt), like every other delete in the app, so it can sync later.
- * Returns how many sessions were cleared.
- */
+/** Same as Settings > Privacy & Data > Clear study history (one implementation, in accountRepo). */
 export async function clearStudyHistory(): Promise<number> {
-  const now = Date.now();
-  const cleared = await db
-    .update(focusSessions)
-    .set({ deletedAt: now, updatedAt: now })
-    .where(and(isNull(focusSessions.deletedAt)))
-    .returning({ id: focusSessions.id });
-  return cleared.length;
+  const { clearStudyHistory: clear } = await import('@/features/account/accountRepo');
+  return clear();
 }
 
 function safeParse(value: string) {

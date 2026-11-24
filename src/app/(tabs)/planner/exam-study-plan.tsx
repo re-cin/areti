@@ -1,9 +1,9 @@
 import { ExamStudyPlanContent, type StudyPlanCard } from '@/components/planner/ExamStudyPlanContent';
 import { ProtectedSubjectsSheet } from '@/components/planner/ProtectedSubjectsSheet';
 import { Text } from '@/components/ui/Text';
-import {
+import { explainStudyDay, restoreSkippedTime, type DayExplanation, examTime,
   DEFAULT_EXAM_PREFERENCES, examName, getExam, getExamPreferences, getProtectedSubjectIds,
-  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule,
+  getStudyPlanLabels, previewStudySchedule, saveProtectedSubjectIds, saveStudySchedule, skipStudySession,
   updateExam, updateExamDifficulty, type ExamPreferences,
 } from '@/features/planner/examsRepo';
 import type { StudySession } from '@/features/planner/engine';
@@ -14,6 +14,7 @@ import { useSubjects } from '@/hooks/useSubjects';
 import { useTasksForDate } from '@/hooks/useTasksForDate';
 import { useToday } from '@/hooks/useToday';
 import { addMonths, startOfDay } from '@/lib/dates';
+import { loadDailyGoalMin } from '@/features/settings/preferences';
 import { useDataVersion } from '@/stores/dataVersion';
 import { colors, spacing } from '@/theme';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -24,7 +25,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 type Exam = NonNullable<Awaited<ReturnType<typeof getExam>>>;
 
 export default function ExamStudyPlanScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, date: dateParam } = useLocalSearchParams<{ id: string; date?: string }>();
   const deletion = useStudyPlanDeletion(() => router.dismissTo('/planner'));
   const { subjects, byId } = useSubjects();
   const { openPicker, pickerElement } = useDateTimePicker();
@@ -45,6 +46,10 @@ export default function ExamStudyPlanScreen() {
   const [loadingPreview, setLoadingPreview] = useState(true);
   const [preview, setPreview] = useState<StudySession[]>([]);
   const [shortfall, setShortfall] = useState(0);
+  const [overGoal, setOverGoal] = useState({ days: 0, goalMin: 0 });
+  const [resized, setResized] = useState({ shrunk: 0, grown: 0 });
+  const [time, setTime] = useState<number | null>(null);
+  const [day, setDay] = useState<DayExplanation | null>(null);
   const [previewError, setPreviewError] = useState('');
   const [status, setStatus] = useState('');
   const [protectedIds, setProtectedIds] = useState<string[]>([]);
@@ -61,23 +66,30 @@ export default function ExamStudyPlanScreen() {
     if (!id) { setLoadError('No exam was selected.'); return; }
     let live = true;
     (async () => {
-      const [row, names, protectedSubjects] = await Promise.all([getExam(id), getStudyPlanLabels(), getProtectedSubjectIds()]);
+      const [row, names, protectedSubjects, savedTime] = await Promise.all([getExam(id), getStudyPlanLabels(), getProtectedSubjectIds(), examTime(id)]);
       if (!row) throw new Error('This exam no longer exists.');
       const name = names[id] ?? await examName(id, 'Subject');
       const firstLoad = initialized.current !== id;
       const saved = firstLoad ? await getExamPreferences(id) : null;
       if (!live) return;
-      setExam(row); setTitle(name); setLabels(names); setProtectedIds(protectedSubjects);
+      setExam(row); setTitle(name); setLabels(names); setProtectedIds(protectedSubjects); setTime(savedTime);
+      // Coming back from Preferences: pick up the daily goal set there (it's the one shared goal).
+      if (!firstLoad) {
+        const goal = await loadDailyGoalMin();
+        if (live) setPrefs(p => (p.dailyGoalMin === goal ? p : { ...p, dailyGoalMin: goal }));
+      }
       if (firstLoad) {
         setPrefs({ ...DEFAULT_EXAM_PREFERENCES, ...saved, longBreakMin: Math.max(30, saved?.longBreakMin ?? 30) });
-        setSelectedDate(startOfDay(Date.now()));
-        dateSelectedByUser.current = false;
+        // Opened from a Planner task: show that day.
+        const opened = dateParam ? startOfDay(Number(dateParam)) : NaN;
+        setSelectedDate(Number.isFinite(opened) ? opened : startOfDay(Date.now()));
+        dateSelectedByUser.current = Number.isFinite(opened);
         initialized.current = id;
       }
       setLoadError(''); setLoaded(true);
     })().catch(error => { if (live) setLoadError(String(error)); });
     return () => { live = false; };
-  }, [id, version]));
+  }, [id, version, dateParam]));
 
   useEffect(() => {
     if (!loaded || !id) return;
@@ -87,6 +99,7 @@ export default function ExamStudyPlanScreen() {
       previewStudySchedule(id, prefs).then(result => {
         if (!live) return;
         setPreview(result.sessions); setShortfall(result.shortfallBlocks); setPreviewError('');
+        setOverGoal({ days: result.overGoalDays.length, goalMin: result.dailyGoalMin }); setResized(result.resized);
         if (!dateSelectedByUser.current && result.sessions[0]) setSelectedDate(result.sessions[0].date);
       }).catch(error => { if (live) { setPreview([]); setPreviewError(String(error)); } })
         .finally(() => { if (live) setLoadingPreview(false); });
@@ -94,13 +107,26 @@ export default function ExamStudyPlanScreen() {
     return () => { live = false; clearTimeout(timeout); };
   }, [id, loaded, prefs, version]);
 
+  // What the selected day has to work with: open study time and what's already using time.
+  useEffect(() => {
+    if (!loaded || !id) return;
+    let live = true;
+    const t = setTimeout(() => {
+      explainStudyDay(id, prefs, selectedDate).then(result => { if (live) setDay(result); }).catch(() => { if (live) setDay(null); });
+    }, 220);
+    return () => { live = false; clearTimeout(t); };
+  }, [id, loaded, prefs, version, selectedDate]);
+
   const cards = useMemo<StudyPlanCard[]>(() => {
     const generated = preview.filter(session => session.date === selectedDate).map((session, index) => {
       const subject = byId.get(session.subjectId);
+      // The saved session behind this preview card (none while unsaved changes are previewed).
+      const saved = todo.find(task => task.source === 'generated' && task.planId === session.planId
+        && task.startMinute === session.startMinute && task.endMinute === session.endMinute);
       return { key: `${session.planId}:${session.date}:${index}`, title: labels[session.planId] ?? `${subject?.name ?? 'Subject'} study`,
         subject: subject?.name ?? 'Subject', color: subject?.color ?? colors.exam,
         startMinute: session.startMinute, endMinute: session.endMinute, blocks: session.blocks,
-        locked: protectedIds.includes(session.subjectId) };
+        locked: protectedIds.includes(session.subjectId), sessionId: saved?.id };
     });
     const manual = prefs.scope === 'all' ? todo.filter(task => task.source !== 'generated').map(task => {
       const subject = byId.get(task.subjectId);
@@ -115,9 +141,10 @@ export default function ExamStudyPlanScreen() {
     setSaving(true);
     try {
       await saveStudySchedule(exam.id, next);
-      setPrefs(next); setEditingDates(false); setPreviewError(''); setStatus('Study schedule saved. Automatic updates are on.');
+      setPrefs(next); setEditingDates(false); setPreviewError(''); setStatus('Study plan saved. Your sessions were rearranged.');
       const result = await previewStudySchedule(exam.id, next);
       setPreview(result.sessions); setShortfall(result.shortfallBlocks);
+      setOverGoal({ days: result.overGoalDays.length, goalMin: result.dailyGoalMin }); setResized(result.resized);
       if (leave) router.dismissTo('/planner');
     } catch (error) { Alert.alert('Could not save study plan', String(error)); }
     finally { setSaving(false); }
@@ -126,18 +153,31 @@ export default function ExamStudyPlanScreen() {
     const value = prefs[key];
     const date = new Date();
     date.setHours(Math.floor(value / 60), value % 60, 0, 0);
-    openPicker('time', date, d => setPrefs(p => ({ ...p, [key]: d.getHours() * 60 + d.getMinutes() })));
+    openPicker('time', date, d => setPrefs(p => ({ ...p, [key]: d.getHours() * 60 + d.getMinutes(), useStudySlots: false })));
   };
   const pickExamDate = () => {
     if (!exam || saving) return;
     openPicker('date', new Date(exam.examDate), date => {
       const next = startOfDay(date);
-      if (next <= today) { Alert.alert('Choose another date', 'The exam must be after today.'); return; }
+      // updateExam checks the date against the exam's time (today is fine if the exam is later today).
       setSaving(true);
       updateExam(exam.id, { name: title, subjectId: exam.subjectId, date: next })
         .then(() => updateSubjectUrgency(exam.subjectId, 5))
-        .then(() => { setExam(old => old ? { ...old, examDate: next } : old); setStatus('Exam date updated. Your study schedule adjusts automatically.'); })
+        .then(() => { setExam(old => old ? { ...old, examDate: next } : old); setStatus('Exam date updated. Your sessions were rescheduled.'); })
         .catch(error => Alert.alert('Could not update exam', String(error)))
+        .finally(() => setSaving(false));
+    });
+  };
+  const pickExamTime = () => {
+    if (!exam || saving) return;
+    const start = new Date(exam.examDate);
+    start.setHours(Math.floor((time ?? 540) / 60), (time ?? 540) % 60, 0, 0);
+    openPicker('time', start, picked => {
+      const next = picked.getHours() * 60 + picked.getMinutes();
+      setSaving(true);
+      updateExam(exam.id, { name: title, subjectId: exam.subjectId, date: exam.examDate, time: next })
+        .then(() => { setTime(next); setStatus('Exam time updated. Your sessions were rescheduled.'); })
+        .catch(error => Alert.alert('Could not update exam', error instanceof Error ? error.message : String(error)))
         .finally(() => setSaving(false));
     });
   };
@@ -146,7 +186,7 @@ export default function ExamStudyPlanScreen() {
     setSaving(true);
     void updateExamDifficulty(exam.id, value).then(() => {
       setExam(old => old ? { ...old, difficulty: value } : old);
-      setStatus('Exam difficulty updated. Your study schedule adjusts automatically.');
+      setStatus('Exam difficulty updated. Your sessions were rescheduled.');
     }).catch(error => Alert.alert('Could not update difficulty', String(error)))
       .finally(() => setSaving(false));
   };
@@ -172,12 +212,12 @@ export default function ExamStudyPlanScreen() {
     <ExamStudyPlanContent title={title} subjectName={subject?.name ?? 'Subject'} subjectColor={subject?.color ?? colors.exam}
       difficulty={exam.difficulty} urgency={subject?.urgency === 1 ? 'default' : 'exam'} examDate={exam.examDate}
       today={today} selectedDate={selectedDate} prefs={prefs} excluded={editingDates ? excludedDraft : prefs.excluded}
-      editingDates={editingDates} extraOpen={extraOpen} sessions={cards} shortfall={shortfall} error={previewError} status={status}
+      editingDates={editingDates} extraOpen={extraOpen} sessions={cards} shortfall={shortfall} overGoalDays={overGoal.days} dailyGoalMin={overGoal.goalMin} resized={resized} examTime={time} day={day} error={previewError} status={status}
       saving={saving || deletion.busy} deleting={deletion.busy} loadingPreview={loadingPreview} protectedCount={protectedIds.length}
       actions={{
         back: () => router.back(), settings: () => router.push('/settings'),
         subject: () => router.push({ pathname: '/planner/set-exam', params: { id } }),
-        difficulty: changeDifficulty, defaultUrgency, examDate: pickExamDate,
+        difficulty: changeDifficulty, defaultUrgency, examDate: pickExamDate, examTime: pickExamTime,
         scope: scope => setPrefs(p => ({ ...p, scope })),
         changeCalendar: direction => { dateSelectedByUser.current = true; setSelectedDate(date => addMonths(date, direction)); },
         selectDate: date => {
@@ -189,10 +229,34 @@ export default function ExamStudyPlanScreen() {
         editDates: () => { setExcludedDraft([...prefs.excluded]); setEditingDates(true); },
         cancelDates: () => setEditingDates(false), saveDates: () => void persist({ ...prefs, excluded: excludedDraft }, false),
         pickStart: () => pickTime('start'), pickEnd: () => pickTime('end'),
+        useStudySlots: () => setPrefs(p => ({ ...p, useStudySlots: true })),
+        autoSize: () => setPrefs(p => ({ ...p, autoSize: true })),
+        openPreferences: () => router.push('/settings/preferences'),
+        skipSession: card => {
+          if (!card.sessionId) return;
+          const sessionId = card.sessionId;
+          Alert.alert(`Remove "${card.title}"?`, 'This time is kept free. Nothing else moves until you reschedule.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Remove', style: 'destructive', onPress: () => void skipStudySession(sessionId)
+              .then(() => setStatus('Session removed. Tap Reschedule to plan around the freed time.'))
+              .catch(error => Alert.alert('Could not remove session', error instanceof Error ? error.message : String(error))) },
+          ]);
+        },
+        undoSkip: item => {
+          if (!item.skippedPlanId) return;
+          void restoreSkippedTime(item.skippedPlanId, selectedDate, item.startMinute)
+            .then(() => setStatus('That time can hold study again.'))
+            .catch(error => Alert.alert('Could not undo', String(error)));
+        },
+        cannotSkip: card => Alert.alert('Can’t remove this one here',
+          card.locked && !card.blocks ? 'This is your own task. Delete it from the Planner with Edit.'
+            : 'Save the study plan first, then long press the session to remove it.'),
         adjust: (key, direction) => setPrefs(p => {
-          const limits = key === 'focusCount' ? [1, 8, 1] : key === 'focusMin' ? [5, 120, 5] : key === 'breakMin' ? [1, 60, 5] : key === 'longBreakMin' ? [30, 60, 5] : [p.focusMin, 720, p.focusMin];
-          const value = key === 'dailyGoalMin' ? p.dailyGoalMin ?? p.focusCount * p.focusMin : p[key];
-          return { ...p, [key]: Math.min(limits[1], Math.max(limits[0], value + direction * limits[2])) };
+          const limits = key === 'sessionsPerDay' ? [1, 6, 1] : key === 'focusCount' ? [1, 8, 1] : key === 'focusMin' ? [5, 120, 5] : key === 'breakMin' ? [1, 60, 5] : key === 'longBreakMin' ? [30, 60, 5] : [p.focusMin, 720, p.focusMin];
+          const value = key === 'dailyGoalMin' ? p.dailyGoalMin ?? p.focusCount * p.focusMin : key === 'sessionsPerDay' ? p.sessionsPerDay ?? 1 : p[key];
+          const next = Math.min(limits[1], Math.max(limits[0], value + direction * limits[2]));
+          // Choosing a size yourself turns off auto size: Reschedule then keeps it as set.
+          return { ...p, [key]: next, ...((key === 'focusCount' || key === 'focusMin') && next !== value && { autoSize: false }) };
         }),
         toggleExtra: () => setExtraOpen(open => !open),
         toggleWeekday: day => setPrefs(p => {
