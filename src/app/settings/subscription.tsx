@@ -74,6 +74,9 @@ export default function SubscriptionScreen() {
   const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
   const sub = usePremium(); // live: admin edits, payments and the countdown
+  const planName = sub.period
+    ? (prices.find((x) => x.plan === sub.period)?.label ?? sub.period[0].toUpperCase() + sub.period.slice(1))
+    : null;
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -128,6 +131,15 @@ export default function SubscriptionScreen() {
 
         {/* Cream sheet */}
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 36 }]}>
+          {sub.isPremium ? (
+            <>
+              {/* Subscriber view: their plan, what they get, and Cancel / Resume */}
+              <Text style={styles.headline}>Thanks for being Premium!</Text>
+              <PremiumStatus sub={sub} now={sub.now} planName={planName} />
+              <PremiumBenefits />
+            </>
+          ) : (
+            <>
           <Text style={styles.headline}>Premium members get more out of every study session</Text>
 
           {/* Benefits: Free vs Premium. The user's current plan column is highlighted. */}
@@ -172,10 +184,6 @@ export default function SubscriptionScreen() {
             </View>
           </NeoBox>
 
-          {sub.isPremium ? (
-            <PremiumStatus sub={sub} now={sub.now} />
-          ) : (
-            <>
           {/* Plans */}
           <View style={styles.plans} accessibilityRole="radiogroup">
             {prices.length === 0 && <Text style={styles.renews}>Loading prices…</Text>}
@@ -286,7 +294,7 @@ export default function SubscriptionScreen() {
 const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
-function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
+function PremiumStatus({ sub, now, planName }: { sub: PremiumInfo; now: number; planName: string | null }) {
   const [busy, setBusy] = useState(false);
   // Flips the button right away after Cancel / Resume, until the saved status catches up.
   const [override, setOverride] = useState<boolean | null>(null);
@@ -341,6 +349,11 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
       <View style={styles.statusHead}>
         <Icon name="crown" size={22} color={colors.ink} fill={colors.gold} strokeWidth={1.4} />
         <Text style={styles.statusTitle}>You&apos;re Premium</Text>
+        {planName ? (
+          <View style={styles.planPill}>
+            <Text style={styles.planPillText}>{planName}</Text>
+          </View>
+        ) : null}
       </View>
       {ending ? <Text style={styles.statusLeft}>{timeLeftText(ending, now)}</Text> : null}
       <Text style={styles.statusLine}>{line}</Text>
@@ -364,6 +377,21 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
           />
         )}
       </View>
+    </NeoBox>
+  );
+}
+
+/** Subscriber view of the benefits: everything they have now, no Free column. */
+function PremiumBenefits() {
+  return (
+    <NeoBox style={styles.perks}>
+      <Text style={styles.perksTitle}>Your Premium benefits</Text>
+      {BENEFITS.map((b) => (
+        <View key={b.label} style={styles.perkRow} accessible accessibilityLabel={`${b.label}: included`}>
+          <Star />
+          <Text style={styles.benefit}>{b.label}</Text>
+        </View>
+      ))}
     </NeoBox>
   );
 }
@@ -602,6 +630,11 @@ const styles = StyleSheet.create({
   statusLeft: { fontFamily: fonts.semiBold, fontSize: 22, color: colors.tealDark },
   statusLine: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
   statusAction: { marginTop: 10 },
+  planPill: { marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: colors.tealSoft },
+  planPillText: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.tealDark },
+  perks: { paddingVertical: 16, paddingHorizontal: 20, gap: 14 },
+  perksTitle: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.muted },
+  perkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   renews: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   link: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.ink, textDecorationLine: 'underline' },

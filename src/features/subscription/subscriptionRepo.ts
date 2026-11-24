@@ -18,7 +18,7 @@ export async function refreshSubscription(): Promise<void> {
   const { data: auth } = await supabase.auth.getSession();
   const userId = auth.session?.user.id;
   if (!userId) return;
-  const { data, error } = await supabase.from('subscriptions').select('plan, status, current_period_end').eq('user_id', userId).maybeSingle();
+  const { data, error } = await supabase.from('subscriptions').select('plan, status, current_period_end, billing_period').eq('user_id', userId).maybeSingle();
   if (error) return;
   const next: SubscriptionRecord = recordFromRow(data);
   const value = JSON.stringify(next);

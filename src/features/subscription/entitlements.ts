@@ -43,10 +43,15 @@ export type SubscriptionRecord = {
   expiresAt: number | null;
   /** Canceled: Premium stays until expiresAt, then ends (no renewal). Left out when not canceled. */
   canceled?: true;
+  /** Billing period of a Premium subscription (shown on the Subscription page). Left out when unknown. */
+  period?: BillingPeriod;
 };
 
+export type BillingPeriod = 'weekly' | 'monthly' | 'yearly';
+const isPeriod = (v: unknown): v is BillingPeriod => v === 'weekly' || v === 'monthly' || v === 'yearly';
+
 /** The server's subscriptions row, as refreshSubscription reads it. */
-export type SubscriptionRow = { plan: string; status: string; current_period_end: string | null };
+export type SubscriptionRow = { plan: string; status: string; current_period_end: string | null; billing_period?: string | null };
 
 /**
  * Turns the server row into the phone's cached record.
@@ -58,9 +63,10 @@ export function recordFromRow(row: SubscriptionRow | null): SubscriptionRecord {
   const parsed = row.current_period_end ? Date.parse(row.current_period_end) : NaN;
   const expiresAt = Number.isFinite(parsed) ? parsed : null;
   if (row.plan !== 'premium') return { plan: 'free', expiresAt };
-  if (row.status === 'active' || row.status === 'trialing') return { plan: 'premium', expiresAt };
+  const period = isPeriod(row.billing_period) ? { period: row.billing_period } : {};
+  if (row.status === 'active' || row.status === 'trialing') return { plan: 'premium', expiresAt, ...period };
   // Canceled without a due time has nothing left to run out: Free straight away.
-  if (row.status === 'canceled' && expiresAt !== null) return { plan: 'premium', expiresAt, canceled: true };
+  if (row.status === 'canceled' && expiresAt !== null) return { plan: 'premium', expiresAt, canceled: true, ...period };
   return { plan: 'free', expiresAt };
 }
 
@@ -82,7 +88,12 @@ export function parseSubscription(raw: string | null | undefined): SubscriptionR
     const value = JSON.parse(raw) as Partial<SubscriptionRecord> | null;
     if (!value || (value.plan !== 'free' && value.plan !== 'premium')) return null;
     const expiresAt = typeof value.expiresAt === 'number' && Number.isFinite(value.expiresAt) ? value.expiresAt : null;
-    return value.canceled === true ? { plan: value.plan, expiresAt, canceled: true } : { plan: value.plan, expiresAt };
+    return {
+      plan: value.plan,
+      expiresAt,
+      ...(value.canceled === true ? { canceled: true as const } : {}),
+      ...(isPeriod(value.period) ? { period: value.period } : {}),
+    };
   } catch {
     return null;
   }

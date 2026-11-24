@@ -73,3 +73,12 @@ describe('renewedTo', () => {
     expect(renewedTo(active(now - 1), { plan: 'free', expiresAt: null }, now)).toBeNull();
   });
 });
+
+describe('billing period', () => {
+  it('is kept for Premium and survives the phone cache', () => {
+    const record = recordFromRow({ plan: 'premium', status: 'active', current_period_end: null, billing_period: 'yearly' });
+    expect(record).toEqual({ plan: 'premium', expiresAt: null, period: 'yearly' });
+    expect(parseSubscription(JSON.stringify(record))).toEqual(record);
+    expect(parseSubscription('{"plan":"premium","expiresAt":null,"period":"daily"}')).toEqual({ plan: 'premium', expiresAt: null });
+  });
+});
