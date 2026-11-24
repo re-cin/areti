@@ -36,6 +36,12 @@ export function nameFromEmail(email: string): string {
     .join(' ');
 }
 
+/** The username chosen at sign-up (kept in the account's metadata), if any. */
+function usernameOf(user: { user_metadata?: Record<string, unknown> }): string | null {
+  const name = user.user_metadata?.username;
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
 /**
  * The signed-in user's profile. Email and join date come from their Supabase account;
  * name and picture from the synced `profile` row (id = user id, see src/db/queries/profile.ts).
@@ -50,8 +56,8 @@ export async function getProfile(): Promise<Profile> {
   const email = user.email ?? '';
   return {
     id: user.id,
-    // Sign up only asks for an email, so until a name is set we use the email's first part.
-    name: row?.displayName?.trim() || nameFromEmail(email),
+    // Until a name is set: the username from sign-up, or (older accounts) the email's first part.
+    name: row?.displayName?.trim() || usernameOf(user) || nameFromEmail(email),
     email,
     pictureUri: row?.pictureUri ?? null,
     plan,

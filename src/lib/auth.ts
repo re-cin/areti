@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { clearLocalData, finishAndClearLocalData } from '@/sync/sync';
 import { supabase, supabaseConfigured } from './supabase';
+import { normalizeUsername } from './username';
 
 /**
  * Accounts are Supabase Auth (email + password), so the same account works on any phone.
@@ -18,6 +19,7 @@ export const MIN_PASSWORD_LENGTH = 8;
 
 export type AuthErrorCode =
   | 'email-taken'
+  | 'username-taken'
   | 'wrong-credentials'
   | 'confirm-email' // account exists but the email isn't confirmed yet
   | 'weak-password'
@@ -29,8 +31,11 @@ export type AuthErrorCode =
   | 'unknown';
 
 export class AuthError extends Error {
-  constructor(public code: AuthErrorCode, message?: string) {
+  /** For 'confirm-email' after a username sign-in: the account's email, for the code screen. */
+  email?: string;
+  constructor(public code: AuthErrorCode, message?: string, email?: string) {
     super(message ?? code);
+    this.email = email;
     this.name = 'AuthError';
   }
 }
@@ -40,9 +45,18 @@ export class AuthError extends Error {
  * Supabase emails a 6-digit code and this throws AuthError('confirm-email'): show the code screen
  * (app/verify-email.tsx), then call verifySignUpCode. The "Confirm signup" email template must include {{ .Token }}.
  */
-export async function signUp(email: string, password: string) {
+export async function signUp(email: string, password: string, username: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: cleanPassword(password) });
+  const name = normalizeUsername(username);
+  // Checked first so the usual case gets a clear message. Supabase's unique index is the real guard.
+  if (!(await isUsernameAvailable(name))) throw new AuthError('username-taken');
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password: cleanPassword(password),
+    options: { data: { username: name } }, // saved to public.usernames by a database trigger
+  });
+  // Someone took the username a moment ago: the database refuses the new user.
+  if (error && /database error/i.test(error.message)) throw new AuthError('username-taken', error.message);
   if (error) throw toAuthError(error);
   // With email confirmation on, Supabase hides "already registered" by returning a user with no identities.
   if (data.user && data.user.identities?.length === 0) throw new AuthError('email-taken');
@@ -55,6 +69,47 @@ export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: cleanPassword(password) });
   if (error) throw toAuthError(error);
   return data.session; // the SIGNED_IN event starts a sync (downloads this account's data)
+}
+
+/** True if nobody has this username yet (public.username_available). Throws when offline. */
+export async function isUsernameAvailable(username: string): Promise<boolean> {
+  ensureConfigured();
+  const { data, error } = await supabase.rpc('username_available', { p_username: normalizeUsername(username) });
+  if (error) throw toAuthError({ ...error, status: 0 });
+  return data === true;
+}
+
+/**
+ * Sign in with a username. The username-sign-in edge function finds the account's email on the
+ * server (emails stay private) and signs in; the app then uses the session it returns.
+ */
+export async function signInWithUsername(username: string, password: string) {
+  ensureConfigured();
+  const { data, error } = await supabase.functions.invoke('username-sign-in', {
+    body: { username: normalizeUsername(username), password: cleanPassword(password) },
+  });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const payload = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+    switch (payload?.error) {
+      case 'wrong-credentials':
+        throw new AuthError('wrong-credentials');
+      case 'confirm-email':
+        throw new AuthError('confirm-email', undefined, payload.email);
+      case 'rate-limited':
+        throw new AuthError('rate-limited');
+      case undefined:
+        throw new AuthError('offline', error.message);
+      default:
+        throw new AuthError('unknown', payload?.message);
+    }
+  }
+  const { data: signedIn, error: sessionError } = await supabase.auth.setSession({
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+  });
+  if (sessionError) throw toAuthError(sessionError);
+  return signedIn.session; // the SIGNED_IN event starts a sync
 }
 
 /** Sign Up, step 2: checks the emailed code. On success the account is confirmed and signed in. */
