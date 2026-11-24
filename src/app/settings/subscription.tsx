@@ -247,8 +247,8 @@ export default function SubscriptionScreen() {
             {!sub.isPremium && (
               <Text style={styles.renews}>
                 {selected
-                  ? `One-time payment of ${money(total, selected.currency)} for ${periodText(selected)}. No automatic charges.`
-                  : 'One-time payment. No automatic charges.'}
+                  ? `${money(total, selected.currency)} for ${periodText(selected)}. Renews automatically. Cancel anytime.`
+                  : 'Renews automatically. Cancel anytime.'}
               </Text>
             )}
             <View style={styles.links}>

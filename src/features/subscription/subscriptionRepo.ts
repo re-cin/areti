@@ -4,7 +4,9 @@ import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
 import { eq } from 'drizzle-orm';
-import { SUBSCRIPTION_SETTING_KEY, parseSubscription, recordFromRow, type SubscriptionRecord } from './entitlements';
+import { showNotice } from '@/stores/notice';
+import { SUBSCRIPTION_SETTING_KEY, parseSubscription, recordFromRow, renewedTo, type SubscriptionRecord } from './entitlements';
+import { premiumDateTimeText } from './premiumInfo';
 
 /**
  * Copies the student's plan from Supabase into a local cache so scheduling works offline.
@@ -21,8 +23,19 @@ export async function refreshSubscription(): Promise<void> {
   const next: SubscriptionRecord = recordFromRow(data);
   const value = JSON.stringify(next);
   const current = db.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).get();
-  if (current && JSON.stringify(parseSubscription(current.value)) === value) return;
+  const previous = current ? parseSubscription(current.value) : null;
+  if (current && JSON.stringify(previous) === value) return;
   const now = Date.now();
+  // The server renewed it at the due time (public.renew_due_subscriptions): tell the student.
+  const renewedUntil = renewedTo(previous, next, now);
+  if (renewedUntil !== null) {
+    showNotice({
+      title: 'Premium renewed',
+      message: `Your subscription renewed automatically. Next renewal: ${premiumDateTimeText(renewedUntil)}.`,
+      icon: 'crown',
+      buttonLabel: 'OK',
+    });
+  }
   db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value, updatedAt: now })
     .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now } }).run();
   bumpData(); // screens (Premium card, Subscription page) update now, not after the schedules below

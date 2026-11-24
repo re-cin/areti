@@ -48,15 +48,15 @@ export type SubscriptionChange = {
 };
 
 /**
- * Premium while active or trialing. A canceled subscription stays Premium until its due time
+ * Premium while active or trialing (they renew). A canceled subscription stays Premium until its due time
  * (same rule as the app and public.is_premium).
  */
 export function isPremium(u: Pick<AdminUser, 'plan' | 'subscription_status' | 'current_period_end'>) {
   if (u.plan !== 'premium') return false;
-  const end = u.current_period_end ? Date.parse(u.current_period_end) : null;
-  if (end !== null && end <= Date.now()) return false;
+  // Active and trial subscriptions renew at the due time (public.renew_due_subscriptions, every minute).
   if (u.subscription_status === 'active' || u.subscription_status === 'trialing') return true;
-  return u.subscription_status === 'canceled' && end !== null;
+  const end = u.current_period_end ? Date.parse(u.current_period_end) : null;
+  return u.subscription_status === 'canceled' && end !== null && end > Date.now();
 }
 
 /** Result of public.admin_user_detail(). */

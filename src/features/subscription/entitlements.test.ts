@@ -1,4 +1,4 @@
-import { FREE_MONTHLY_GENERATIONS, entitlementsFor, generationsAreLimited, parseSubscription, recordFromRow, resolveTier } from './entitlements';
+import { FREE_MONTHLY_GENERATIONS, entitlementsFor, generationsAreLimited, parseSubscription, recordFromRow, renewedTo, resolveTier } from './entitlements';
 
 describe('entitlements', () => {
   it('gives Free a monthly generation allowance and Premium automatic, adaptive planning', () => {
@@ -12,14 +12,18 @@ describe('entitlements', () => {
     expect(generationsAreLimited(entitlementsFor('premium'))).toBe(false);
   });
 
-  it('only trusts a well-formed, unexpired premium record', () => {
+  it('keeps active Premium past its due time and ends canceled Premium at it', () => {
     const now = 1_000;
     expect(resolveTier(null, now)).toBe('free');
     expect(resolveTier({ plan: 'free', expiresAt: null }, now)).toBe('free');
     expect(resolveTier({ plan: 'premium', expiresAt: null }, now)).toBe('premium');
     expect(resolveTier({ plan: 'premium', expiresAt: now + 1 }, now)).toBe('premium');
-    expect(resolveTier({ plan: 'premium', expiresAt: now }, now)).toBe('free');
-    expect(resolveTier({ plan: 'premium', expiresAt: now - 1 }, now)).toBe('free');
+    // Active subscriptions renew at the due time, so they stay Premium past it.
+    expect(resolveTier({ plan: 'premium', expiresAt: now - 1 }, now)).toBe('premium');
+    // A canceled one ends at its due time.
+    expect(resolveTier({ plan: 'premium', expiresAt: now + 1, canceled: true }, now)).toBe('premium');
+    expect(resolveTier({ plan: 'premium', expiresAt: now, canceled: true }, now)).toBe('free');
+    expect(resolveTier({ plan: 'premium', expiresAt: now - 1, canceled: true }, now)).toBe('free');
   });
 
   it('treats unreadable cached subscriptions as Free', () => {
@@ -51,5 +55,21 @@ describe('recordFromRow', () => {
     expect(recordFromRow({ plan: 'premium', status: 'expired', current_period_end: end }).plan).toBe('free');
     expect(recordFromRow({ plan: 'free', status: 'active', current_period_end: null }).plan).toBe('free');
     expect(recordFromRow(null)).toEqual({ plan: 'free', expiresAt: null });
+  });
+});
+
+describe('renewedTo', () => {
+  const now = 10_000;
+  const active = (expiresAt: number) => ({ plan: 'premium' as const, expiresAt });
+  it('spots an automatic renewal after the due time', () => {
+    expect(renewedTo(active(now - 1), active(now + 500), now)).toBe(now + 500);
+  });
+  it('ignores admin edits before the due time, cancels, new purchases and Free', () => {
+    expect(renewedTo(active(now + 100), active(now + 500), now)).toBeNull();
+    expect(renewedTo(active(now - 1), { ...active(now + 500), canceled: true }, now)).toBeNull();
+    expect(renewedTo({ ...active(now - 1), canceled: true }, active(now + 500), now)).toBeNull();
+    expect(renewedTo({ plan: 'free', expiresAt: null }, active(now + 500), now)).toBeNull();
+    expect(renewedTo(null, active(now + 500), now)).toBeNull();
+    expect(renewedTo(active(now - 1), { plan: 'free', expiresAt: null }, now)).toBeNull();
   });
 });

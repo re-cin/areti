@@ -8,12 +8,13 @@ import { useNow } from './timeLeft';
  * Live Premium status for the screen it is used on.
  * - Reloads the moment the phone's copy changes (an admin edit or a payment arrives through
  *   Supabase Realtime, see PremiumEndingReminders), because refreshSubscription bumps the data version.
- * - Ticks every second, so the countdown stays exact and Premium switches off right when it ends.
+ * - Ticks every second, so the countdown stays exact and a canceled Premium switches off right when it ends.
  */
 export function usePremium(): PremiumInfo & { now: number } {
   const cached = useDbQuery(loadPremium, NOT_PREMIUM);
   const now = useNow(1000);
-  const isPremium = cached.isPremium && (cached.expiresAt === null || cached.expiresAt > now);
+  // Active subscriptions renew on their own, so only a canceled one switches off at its due time.
+  const isPremium = cached.isPremium && (!cached.canceled || cached.expiresAt === null || cached.expiresAt > now);
   const justEnded = cached.isPremium && !isPremium;
 
   // Premium ran out while the screen was open: let the rest of the app (PRO badge, features) catch up.

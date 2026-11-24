@@ -50,8 +50,8 @@ const now = new Date(2026, 10, 23, 8);
 const day = startOfDay(now);
 const activeSessions = () => db.select().from(plannedSessions).where(isNull(plannedSessions.deletedAt)).all();
 const activeTasks = () => db.select().from(tasks).where(isNull(tasks.deletedAt)).all();
-const setTier = (plan: PlanTier, expiresAt: number | null = null) => {
-  const value = JSON.stringify({ plan, expiresAt });
+const setTier = (plan: PlanTier, expiresAt: number | null = null, canceled = false) => {
+  const value = JSON.stringify(canceled ? { plan, expiresAt, canceled: true } : { plan, expiresAt });
   db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value, updatedAt: Date.now() })
     .onConflictDoUpdate({ target: settings.key, set: { value } }).run();
 };
@@ -470,14 +470,17 @@ describe('Free vs Premium', () => {
   const addScience = () => db.insert(subjects).values({ id: 'sci', name: 'Science', color: '#eeeeee', updatedAt: now.getTime() }).run();
   const blocksFor = (planId: string) => activeSessions().filter(s => s.planId === planId).reduce((sum, s) => sum + s.blocks, 0);
 
-  it('treats a missing, unreadable or expired subscription as Free', async () => {
+  it('treats a missing, unreadable or ended (canceled) subscription as Free', async () => {
     db.delete(settings).run();
     expect((await getExamAccess('none')).entitlements.tier).toBe('free');
     db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value: '{not json', updatedAt: 1 }).run();
     expect((await getExamAccess('none')).entitlements.tier).toBe('free');
-    setTier('premium', now.getTime() - 1);
+    setTier('premium', now.getTime() - 1, true);
     expect((await getExamAccess('none')).entitlements.tier).toBe('free');
-    setTier('premium', now.getTime() + 86_400_000);
+    setTier('premium', now.getTime() + 86_400_000, true);
+    expect((await getExamAccess('none')).entitlements.tier).toBe('premium');
+    // An active subscription renews at its due time, so it stays Premium past it.
+    setTier('premium', now.getTime() - 1);
     expect((await getExamAccess('none')).entitlements.tier).toBe('premium');
   });
 

@@ -64,6 +64,17 @@ export function recordFromRow(row: SubscriptionRow | null): SubscriptionRecord {
   return { plan: 'free', expiresAt };
 }
 
+/**
+ * The new due time if the subscription just renewed on its own, else null.
+ * Renewed = still active (not canceled), the old due time has passed, and the server moved it later.
+ * An admin moving a future due time, a new purchase or a cancel is not a renewal.
+ */
+export function renewedTo(prev: SubscriptionRecord | null, next: SubscriptionRecord, now: number): number | null {
+  if (!prev || prev.plan !== 'premium' || prev.canceled || prev.expiresAt === null) return null;
+  if (next.plan !== 'premium' || next.canceled || next.expiresAt === null) return null;
+  return prev.expiresAt <= now && next.expiresAt > prev.expiresAt ? next.expiresAt : null;
+}
+
 /** Parses the cached JSON. Anything unreadable or unexpected is treated as Free. */
 export function parseSubscription(raw: string | null | undefined): SubscriptionRecord | null {
   if (!raw) return null;
@@ -77,9 +88,12 @@ export function parseSubscription(raw: string | null | undefined): SubscriptionR
   }
 }
 
-/** Premium only while it has not expired; missing, invalid or lapsed subscriptions are Free. */
+/** Premium until a canceled subscription reaches its due time; missing, invalid or Free records are Free. */
 export function resolveTier(record: SubscriptionRecord | null, now: number): PlanTier {
   if (!record || record.plan !== 'premium') return 'free';
+  // An active subscription renews at its due time (the server moves it to the next one),
+  // so only a canceled subscription runs out.
+  if (!record.canceled) return 'premium';
   return record.expiresAt === null || record.expiresAt > now ? 'premium' : 'free';
 }
 
