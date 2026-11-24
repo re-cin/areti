@@ -98,16 +98,12 @@ export default function SubscriptionScreen() {
     setPaying(false);
     if (result.kind === 'canceled') return; // back on the sheet, nothing charged
     setCheckoutOpen(false);
-    // Paid: go back to User Settings (now showing the black Premium card) and say thanks there.
-    if (result.kind === 'paid') {
-      if (router.canGoBack()) router.back();
-      else router.replace('/settings');
-    }
+    // Paid: stay here. The page has already switched to the subscriber view (You're Premium).
     setTimeout(() => {
       if (result.kind === 'paid') {
         showNotice({
           title: "You're Premium!",
-          message: `Thanks for supporting areti. Premium is on until ${dateText(result.currentPeriodEnd)}.`,
+          message: `Thanks for supporting areti. Your subscription auto-renews ${dateText(result.currentPeriodEnd)}.`,
           icon: 'crown',
           buttonLabel: 'Yay!',
         });

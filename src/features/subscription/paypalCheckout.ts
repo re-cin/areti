@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
-import { refreshSubscription } from './subscriptionRepo';
+import { refreshSubscription, saveSubscription } from './subscriptionRepo';
 
 /**
  * PayPal checkout for Premium (PayPal Sandbox while testing).
@@ -59,6 +59,9 @@ export async function payWithPayPal(plan: PaidPlan, student = false): Promise<Ch
     return { kind: 'error', code: captured.code ?? 'unknown', message: captured.message ?? 'Payment could not be confirmed.' };
   }
 
-  await refreshSubscription(); // pulls the new Premium row into the phone's cache
-  return { kind: 'paid', currentPeriodEnd: Date.parse(captured.data.currentPeriodEnd) };
+  const end = Date.parse(captured.data.currentPeriodEnd);
+  // Switch the app to Premium right away from the server's answer, then confirm with the real row.
+  await saveSubscription({ plan: 'premium', expiresAt: Number.isFinite(end) ? end : null, period: plan });
+  await refreshSubscription();
+  return { kind: 'paid', currentPeriodEnd: end };
 }

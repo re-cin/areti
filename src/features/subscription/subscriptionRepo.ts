@@ -20,7 +20,14 @@ export async function refreshSubscription(): Promise<void> {
   if (!userId) return;
   const { data, error } = await supabase.from('subscriptions').select('plan, status, current_period_end, billing_period').eq('user_id', userId).maybeSingle();
   if (error) return;
-  const next: SubscriptionRecord = recordFromRow(data);
+  await saveSubscription(recordFromRow(data));
+}
+
+/**
+ * Saves a subscription record in the phone's cache and updates every screen.
+ * Used by refreshSubscription, and right after a payment so the page switches at once.
+ */
+export async function saveSubscription(next: SubscriptionRecord): Promise<void> {
   const value = JSON.stringify(next);
   const current = db.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).get();
   const previous = current ? parseSubscription(current.value) : null;
