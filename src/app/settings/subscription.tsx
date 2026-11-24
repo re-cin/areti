@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
@@ -31,6 +31,7 @@ const BENEFITS: { label: string; free: boolean }[] = [
   { label: 'All Reti expressions', free: false },
 ];
 
+const MASCOT = require('../../../assets/images/areti-mascot.png');
 const ROW_HEIGHT = 52;
 const STAR = '#F4A61B';
 
@@ -58,6 +59,7 @@ export default function SubscriptionScreen() {
         <View style={[styles.hero, { paddingTop: insets.top + 30 }]}>
           <Wordmark width={127} backgroundColor={colors.welcomeTeal} />
           <OutlinedTitle text="Premium" />
+          <FloatingReti />
           <Pressable
             onPress={() => router.back()}
             hitSlop={8}
@@ -211,6 +213,36 @@ function OutlinedTitle({ text }: { text: string }) {
   );
 }
 
+/** Small Reti floating gently up and down (still when Reduce Motion is on). */
+function FloatingReti() {
+  const [float] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
+      if (reduce || cancelled) return;
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(float, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(float, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      );
+      loop.start();
+    });
+    return () => {
+      cancelled = true;
+      loop?.stop();
+    };
+  }, [float]);
+  return (
+    <Animated.Image
+      source={MASCOT}
+      accessibilityLabel="Reti the ghost"
+      style={[styles.reti, { transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] }]}
+    />
+  );
+}
+
 function Toggle({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) {
   const [x] = useState(() => new Animated.Value(value ? 1 : 0));
   useEffect(() => {
@@ -266,6 +298,7 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 4, paddingBottom: 30 },
   backWrap: { position: 'absolute', left: 20 },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
+  reti: { width: 64, height: 75, resizeMode: 'contain', marginTop: 10 },
   title: { fontFamily: fonts.semiBold, fontSize: 60, lineHeight: 72, letterSpacing: 1 },
   sheet: {
     flex: 1,
