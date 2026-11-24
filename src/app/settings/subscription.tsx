@@ -590,8 +590,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.splash,
     borderTopLeftRadius: 32,
     borderTopRightRadius: 32,
-    borderTopWidth: 2,
-    borderColor: colors.ink,
     paddingTop: 28,
     paddingHorizontal: 20,
     gap: 20,
