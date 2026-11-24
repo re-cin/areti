@@ -14,11 +14,13 @@ export function addDays(d: Date, days: number): Date {
   return x;
 }
 
-/** Monday of the week containing `d`. */
-export function startOfWeek(d: Date): Date {
+export function startOfWeek(
+  d: Date,
+  weekStartsOn: 0 | 1 = 1,
+): Date {
   const x = startOfDay(d);
-  const mondayOffset = (x.getDay() + 6) % 7; // Mon = 0 ... Sun = 6
-  return addDays(x, -mondayOffset);
+  const offset = (x.getDay() - weekStartsOn + 7) % 7;
+  return addDays(x, -offset);
 }
 
 export function startOfMonth(d: Date): Date {
@@ -46,9 +48,11 @@ export function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
 }
 
-/** 42 days (6 weeks, Monday first) covering the month of `d`. */
-export function monthGrid(d: Date): Date[] {
-  const first = startOfWeek(startOfMonth(d));
+export function monthGrid(
+  d: Date,
+  weekStartsOn: 0 | 1 = 1,
+): Date[] {
+  const first = startOfWeek(startOfMonth(d), weekStartsOn);
   return Array.from({ length: 42 }, (_, i) => addDays(first, i));
 }
 
@@ -59,12 +63,25 @@ export const MONTHS = [
 export const WEEKDAYS_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export const WEEKDAYS_LETTER = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
-/** Minutes from midnight -> '9:00 AM'. */
-export function formatClock(minuteOfDay: number): string {
+/**
+ * Minutes from midnight -> '9:00 AM' or '21:00'.
+ */
+export function formatClock(
+  minuteOfDay: number,
+  timeFormat: '12-Hour (AM/PM)' | '24-Hour' = '12-Hour (AM/PM)',
+): string {
   const h24 = Math.floor(minuteOfDay / 60) % 24;
   const m = minuteOfDay % 60;
+  const mm = String(m).padStart(2, '0');
+
+  if (timeFormat === '24-Hour') {
+    return `${String(h24).padStart(2, '0')}:${mm}`;
+  }
+
   const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-  return `${h12}:${String(m).padStart(2, '0')} ${h24 < 12 ? 'AM' : 'PM'}`;
+  const period = h24 < 12 ? 'AM' : 'PM';
+
+  return `${h12}:${mm} ${period}`;
 }
 
 /** Milliseconds -> '23:49' (or '1:02:03' past an hour). */

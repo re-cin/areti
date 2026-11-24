@@ -12,15 +12,36 @@ export type GenerationQuota = {
   resetsAt: number;
 };
 
-export const remainingGenerations = (quota: GenerationQuota): number => Math.max(0, quota.limit - quota.used);
+export type DateFormat = 'dd/mm/yy' | 'mm/dd/yy' | 'yyyy-mm-dd';
 
-export const resetLabel = (resetsAt: number): string =>
-  new Date(resetsAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+export const remainingGenerations = (quota: GenerationQuota): number =>
+  Math.max(0, quota.limit - quota.used);
+
+export const resetLabel = (
+  resetsAt: number,
+  dateFormat: DateFormat = 'dd/mm/yy',
+): string => {
+  const date = new Date(resetsAt);
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+
+  switch (dateFormat) {
+    case 'mm/dd/yy':
+      return `${month}/${day}/${String(year).slice(-2)}`;
+    case 'yyyy-mm-dd':
+      return `${year}-${month}-${day}`;
+    case 'dd/mm/yy':
+    default:
+      return `${day}/${month}/${String(year).slice(-2)}`;
+  }
+};
 
 /** The Free allowance is used up. Extends PremiumRequiredError so the UI shows the upgrade prompt. */
 export class GenerationLimitError extends PremiumRequiredError {
   readonly limit: number;
   readonly resetsAt: number;
+
   constructor(limit: number, resetsAt: number) {
     super('Unlimited schedule generation');
     this.name = 'GenerationLimitError';
@@ -32,15 +53,21 @@ export class GenerationLimitError extends PremiumRequiredError {
 
 /** The server could not confirm the allowance (offline, signed out or an error). Nothing is generated. */
 export class GenerationUnavailableError extends Error {
-  constructor(detail?: string, cause: 'connection' | 'server-schema' = 'connection') {
-    super(cause === 'server-schema'
-      ? 'Schedule generation is unavailable because the server database needs an update. Please try again after it is updated.'
-      : `Connect to the internet and sign in to generate a schedule on the Free plan.${detail ? ` (${detail})` : ''}`);
+  constructor(
+    detail?: string,
+    cause: 'connection' | 'server-schema' = 'connection',
+  ) {
+    super(
+      cause === 'server-schema'
+        ? 'Schedule generation is unavailable because the server database needs an update. Please try again after it is updated.'
+        : `Connect to the internet and sign in to generate a schedule on the Free plan.${detail ? ` (${detail})` : ''}`,
+    );
     this.name = 'GenerationUnavailableError';
   }
 }
 
-const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const finite = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
 
 function parseResetsAt(value: unknown): number | null {
   if (typeof value !== 'string') return null;
@@ -49,23 +76,52 @@ function parseResetsAt(value: unknown): number | null {
 }
 
 /** Reads the usage reply. Anything unexpected is null (shown as "unknown", never as a free pass). */
-export function parseQuota(raw: unknown): GenerationQuota | 'premium' | null {
+export function parseQuota(
+  raw: unknown,
+): GenerationQuota | 'premium' | null {
   if (!raw || typeof raw !== 'object') return null;
+
   const value = raw as Record<string, unknown>;
+
   if (value.premium === true) return 'premium';
+
   const resetsAt = parseResetsAt(value.resets_at);
-  if (!finite(value.limit) || !finite(value.used) || value.limit < 0 || value.used < 0 || resetsAt === null) return null;
-  return { limit: value.limit, used: value.used, resetsAt };
+
+  if (
+    !finite(value.limit) ||
+    !finite(value.used) ||
+    value.limit < 0 ||
+    value.used < 0 ||
+    resetsAt === null
+  ) {
+    return null;
+  }
+
+  return {
+    limit: value.limit,
+    used: value.used,
+    resetsAt,
+  };
 }
 
-export type ConsumeResult = { allowed: true } | { allowed: false; quota: GenerationQuota };
+export type ConsumeResult =
+  | { allowed: true }
+  | { allowed: false; quota: GenerationQuota };
 
 /** Reads the reply to "use one generation". Unknown shapes are null, which blocks generating. */
-export function parseConsumeResult(raw: unknown): ConsumeResult | null {
+export function parseConsumeResult(
+  raw: unknown,
+): ConsumeResult | null {
   if (!raw || typeof raw !== 'object') return null;
+
   const value = raw as Record<string, unknown>;
+
   if (value.allowed === true) return { allowed: true };
   if (value.allowed !== false) return null;
+
   const quota = parseQuota(value);
-  return quota && quota !== 'premium' ? { allowed: false, quota } : null;
+
+  return quota && quota !== 'premium'
+    ? { allowed: false, quota }
+    : null;
 }

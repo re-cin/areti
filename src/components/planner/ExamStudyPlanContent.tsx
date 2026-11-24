@@ -11,6 +11,7 @@ import { addDays, monthLabel, startOfDay, startOfWeek } from '@/lib/dates';
 import { formatDuration, formatTime } from '@/lib/format';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 
 const palette = colors.studyPlan;
 const difficultyOptions = [{ key: '1', label: 'Low' }, { key: '3', label: 'Medium' }, { key: '5', label: 'High' }];
@@ -40,9 +41,26 @@ export type ExamStudyPlanContentProps = {
   };
 };
 
+const formatDate = (ts: number, format: string) => {
+  const date = new Date(ts);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  switch (format) {
+    case 'mm/dd/yy':
+      return `${month}/${day}/${String(year).slice(-2)}`;
+    case 'yyyy-mm-dd':
+      return `${year}-${month}-${String(day).padStart(2, '0')}`;
+    default:
+      return `${day}/${month}/${String(year).slice(-2)}`;
+  }
+};
+
 /** Shared, controlled view: real data in the app and the same layout for visual verification. */
 export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
   const { prefs, actions } = p;
+  const dateFormat = usePreferences(s => s.preferences.dateFormat);
   const first = startOfWeek(p.selectedDate);
   const dates = Array.from({ length: 14 }, (_, i) => addDays(first, i));
   const daysLeft = Math.max(0, Math.round((p.examDate - p.today) / 86400000));
@@ -72,7 +90,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
           <Pressable style={styles.examDateControl} onPress={actions.examDate} accessibilityRole="button" accessibilityLabel="Change exam date">
             <NeoBox radius={radii.pill} offset={2} backgroundColor={palette.text} style={styles.examDatePill}>
               <Icon name="calendar" size={14} color={palette.surface} />
-              <Text variant="smallStrong" color={palette.surface}>{new Date(p.examDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</Text>
+              <Text variant="smallStrong" color={palette.surface}>{formatDate(p.examDate, dateFormat)}</Text>
             </NeoBox>
           </Pressable>
         </View>
@@ -124,7 +142,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
 
         <View style={styles.divider} />
         <View style={styles.summary}>
-          <Text variant="captionStrong" style={styles.summaryDate}>{new Date(p.selectedDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
+          <Text variant="captionStrong" style={styles.summaryDate}>{formatDate(p.selectedDate, dateFormat)}</Text>
           <Text variant="caption" color={colors.terracottaDark} style={styles.countdown}>{daysLeft === 0 ? 'Exam today' : `Exam in\n${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`}</Text>
         </View>
 

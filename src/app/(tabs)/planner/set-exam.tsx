@@ -15,9 +15,28 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { usePreferences } from '@/features/preferences/preferencesStore';
+
+function formatExamDate(ts: number, format: string) {
+  const date = new Date(ts);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  switch (format) {
+    case 'mm/dd/yy':
+      return `${month}/${day}/${String(year).slice(-2)}`;
+    case 'yyyy-mm-dd':
+      return `${year}-${month}-${day}`;
+    case 'dd/mm/yy':
+    default:
+      return `${day}/${month}/${String(year).slice(-2)}`;
+  }
+}
 
 export default function SetExamScreen() {
   const today = useToday();
+  const dateFormat = usePreferences(s => s.preferences.dateFormat);
   const { id: editingId } = useLocalSearchParams<{ id?: string }>();
   const { subjects } = useSubjects();
   const { openPicker, pickerElement } = useDateTimePicker();
@@ -90,7 +109,7 @@ export default function SetExamScreen() {
           <Pressable onPress={() => openPicker('date', new Date(date), d => setDate(startOfDay(d)))}
             style={styles.dateField} accessibilityRole="button" accessibilityLabel="Choose exam date">
             <Text variant="smallStrong" style={styles.grow}>
-              {new Date(date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              {formatExamDate(date, dateFormat)}
             </Text>
             <Ionicons name="calendar-outline" size={20} color={colors.ink} />
           </Pressable>

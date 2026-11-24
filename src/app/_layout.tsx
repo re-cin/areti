@@ -22,6 +22,8 @@ import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notif
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
 import { loadNotifications } from '@/lib/notificationPermission';
 import { router, usePathname } from 'expo-router';
+import { usePreferences } from '@/features/preferences/preferencesStore';
+
 
 SplashScreen.preventAutoHideAsync();
 
@@ -29,9 +31,19 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold });
   const { success: dbReady, error: dbError } = useMigrations(db, migrations);
 
-  // Restores a running Pomodoro and keeps it ticking on every screen.
-  useTimerDriver(dbReady);
-  useAutomaticSchedule(dbReady);
+// Restores a running Pomodoro and keeps it ticking on every screen.
+useTimerDriver(dbReady);
+
+// Load saved Preferences after the database is ready.
+const loadPreferences = usePreferences(s => s.loadPreferences);
+
+useEffect(() => {
+  if (!dbReady) return;
+  void loadPreferences();
+}, [dbReady, loadPreferences]);
+
+// Start automatic scheduling after Preferences have been loaded.
+useAutomaticSchedule(dbReady);
 
   const ready = Boolean((fontsLoaded || fontError) && (dbReady || dbError));
 

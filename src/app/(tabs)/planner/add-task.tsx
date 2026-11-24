@@ -14,6 +14,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { showNotice } from '@/stores/notice';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { getSetting, setSetting } from '@/features/settings/settingsRepo';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 
 /** Settings key: true once "Don't remind me again" was ticked on the Schedule Pomodoro warning. */
 const SCHEDULE_WARNING_OFF = 'hint.schedulePomodoroWarning.off';
@@ -32,8 +33,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Same list as Pomodoro settings (src/features/audio/sounds.ts), including Silent.
 
-const fmtDate = (ts: number) =>
-  new Date(ts).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+const fmtDate = (ts: number, format: string) => {
+  const date = new Date(ts);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+
+  switch (format) {
+    case 'mm/dd/yy':
+      return `${month}/${day}/${String(year).slice(-2)}`;
+    case 'yyyy-mm-dd':
+      return `${year}-${month}-${day}`;
+    case 'dd/mm/yy':
+    default:
+      return `${day}/${month}/${String(year).slice(-2)}`;
+  }
+};
 
 function fmtDuration(min: number) {
   if (min <= 0) return '--';
@@ -66,6 +81,7 @@ const minToDate = (min: number) => {
 
 export default function AddTaskScreen() {
   const soundNames = useNotificationSoundNames();
+  const dateFormat = usePreferences(s => s.preferences.dateFormat);
   const SOUND_OPTIONS = soundNames.map((s) => ({ key: s, label: s }));
   const insets = useSafeAreaInsets();
 
@@ -297,7 +313,7 @@ export default function AddTaskScreen() {
 
         <Text variant="smallStrong">Date</Text>
         <Pressable onPress={pickDate} style={styles.dateField}>
-          <Text variant="smallStrong" style={{ flex: 1 }}>{fmtDate(date)}</Text>
+          <Text variant="smallStrong" style={{ flex: 1 }}>{fmtDate(date, dateFormat)}</Text>
           <Ionicons name="calendar-outline" size={20} color={colors.ink} />
         </Pressable>
 

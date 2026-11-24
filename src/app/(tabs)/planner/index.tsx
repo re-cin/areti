@@ -43,6 +43,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { plannerColors as extra } from '@/components/planner/plannerColors';
+import { usePreferences } from '@/features/preferences/preferencesStore';
 
 // Calendar expand / collapse
 const STRIP_INNER_H = 60; // one row of day cells: 54 tall + 3 margin above and below
@@ -56,6 +57,9 @@ export default function PlannerScreen() {
   const today = startOfDay(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
 
+  const firstDay = usePreferences(s => s.preferences.firstDay);
+  const weekStartsOn = firstDay === 'Sunday' ? 0 : 1;
+
   const { date: dateParam, n } = useLocalSearchParams<{ date?: string; n?: string }>();
 
   const routeSelection = `${dateParam ?? ''}:${n ?? ''}`;
@@ -66,7 +70,7 @@ export default function PlannerScreen() {
     if (Number.isFinite(next)) setSelectedDate(next);
   }
 
-  const weekStart = startOfWeek(selectedDate); // TODO: follow the "first day of week" setting
+  const weekStart = startOfWeek(selectedDate, weekStartsOn);
   const days = weekDays(weekStart);
 
   const { byId } = useSubjects();
@@ -85,7 +89,7 @@ export default function PlannerScreen() {
 
   // Month view (opened from the calendar icon)
   const [expanded, setExpanded] = useState(false);
-  const weeks = monthWeeks(selectedDate); // TODO: follow the "first day of week" setting
+  const weeks = monthWeeks(selectedDate, weekStartsOn);
   const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
   const scrollRef = useRef<ScrollViewInstance>(null);
   const progress = useSharedValue(0); // 0 = week strip, 1 = full month

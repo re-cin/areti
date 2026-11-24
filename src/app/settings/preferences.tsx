@@ -10,6 +10,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { SettingsScaffold } from '@/components/settings/SettingsScaffold';
 import { Text } from '@/components/ui/Text';
 import { fonts } from '@/theme';
+import {
+  usePreferences,
+  DAYS,
+  type Day,
+  type StudySchedule,
+} from '@/features/preferences/preferencesStore';
 
 const C = {
   page: '#E8E1D9',
@@ -24,30 +30,7 @@ const C = {
   off: '#BDB8B1',
 };
 
-const DAYS = [
-  'Monday',
-  'Tuesday',
-  'Wednesday',
-  'Thursday',
-  'Friday',
-  'Saturday',
-  'Sunday',
-] as const;
-
-type Day = (typeof DAYS)[number];
-type Schedule = Record<Day, { start: string; end: string }>;
-
-const DEFAULT_SCHEDULE: Schedule = {
-  Monday: { start: '06:00', end: '20:00' },
-  Tuesday: { start: '06:00', end: '20:00' },
-  Wednesday: { start: '06:00', end: '20:00' },
-  Thursday: { start: '06:00', end: '20:00' },
-  Friday: { start: '06:00', end: '20:00' },
-  Saturday: { start: '06:00', end: '20:00' },
-  Sunday: { start: '06:00', end: '20:00' },
-};
-
-const CUSTOM_SCHEDULE: Schedule = {
+const CUSTOM_SCHEDULE: StudySchedule = {
   Monday: { start: '18:00', end: '20:30' },
   Tuesday: { start: '18:00', end: '20:30' },
   Wednesday: { start: '18:00', end: '20:30' },
@@ -499,71 +482,59 @@ function ScheduleRow({
 }
 
 export default function PreferencesScreen() {
-  const [backgroundWork, setBackgroundWork] = useState(true);
-  const [notifications, setNotifications] = useState(true);
+  const preferences = usePreferences(s => s.preferences);
+  const updatePreferences = usePreferences(s => s.updatePreferences);
 
-  const [sleepStart, setSleepStart] = useState('07:30');
-  const [sleepEnd, setSleepEnd] = useState('21:30');
-
-  const [chatter, setChatter] = useState('Balanced');
-  const [dailyGoal, setDailyGoal] = useState(3);
-
-  const [dateFormat, setDateFormat] = useState('dd/mm/yy');
-  const [firstDay, setFirstDay] = useState('Monday');
-  const [timeFormat, setTimeFormat] = useState('12-Hour (AM/PM)');
-
-  const [mode, setMode] = useState<'Default' | 'Custom'>('Default');
-  const [schedule, setSchedule] = useState<Schedule>(DEFAULT_SCHEDULE);
-
-  const [enabledDays, setEnabledDays] = useState<Day[]>([...DAYS]);
+  const {
+    backgroundWork,
+    notifications,
+    sleepStart,
+    sleepEnd,
+    chatter,
+    dailyGoal,
+    dateFormat,
+    firstDay,
+    timeFormat,
+    mode,
+    schedule,
+    enabledDays,
+  } = preferences;
 
   const format = timeFormat === '24-Hour' ? '24-Hour' : '12-Hour (AM/PM)';
 
-  const updateSchedule = (
-    day: Day,
-    field: 'start' | 'end',
-    value: string,
-  ) => {
-    setSchedule((current) => ({
-      ...current,
-      [day]: {
-        ...current[day],
-        [field]: value,
+  const updateSchedule = (day: Day, field: 'start' | 'end', value: string) => {
+    updatePreferences({
+      schedule: {
+        ...preferences.schedule,
+        [day]: { ...preferences.schedule[day], [field]: value },
       },
-    }));
-  };
-
-  const updateGroupSchedule = (
-    days: Day[],
-    field: 'start' | 'end',
-    value: string,
-  ) => {
-    setSchedule((current) => {
-      const updated = { ...current };
-      days.forEach((day) => {
-        updated[day] = { ...updated[day], [field]: value };
-      });
-      return updated;
     });
   };
 
+  const updateGroupSchedule = (days: Day[], field: 'start' | 'end', value: string) => {
+    const updated = { ...preferences.schedule };
+    days.forEach(day => {
+      updated[day] = { ...updated[day], [field]: value };
+    });
+    updatePreferences({ schedule: updated });
+  };
+
   const toggleDay = (day: Day) => {
-    setEnabledDays((current) =>
-      current.includes(day)
-        ? current.filter((item) => item !== day)
-        : [...current, day],
-    );
+    updatePreferences({
+      enabledDays: enabledDays.includes(day)
+        ? enabledDays.filter(item => item !== day)
+        : [...enabledDays, day],
+    });
   };
 
   const resetCustomSchedule = () => {
-    setSchedule(CUSTOM_SCHEDULE);
-    setEnabledDays([...DAYS]);
+    updatePreferences({ schedule: CUSTOM_SCHEDULE, enabledDays: [...DAYS] });
   };
 
   const changeDailyGoal = (direction: number) => {
-    setDailyGoal((current) =>
-      Math.max(1, Math.min(7, Math.round((current + direction) * 2) / 2)),
-    );
+    updatePreferences({
+      dailyGoal: Math.max(1, Math.min(7, Math.round((dailyGoal + direction) * 2) / 2)),
+    });
   };
 
   return (
@@ -606,7 +577,7 @@ export default function PreferencesScreen() {
                 <Label>Work in Background</Label>
                 <Description>Let areti running in the background</Description>
               </View>
-              <Toggle value={backgroundWork} onChange={setBackgroundWork} />
+              <Toggle value={backgroundWork} onChange={(value) => updatePreferences({ backgroundWork: value })} />
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -616,7 +587,7 @@ export default function PreferencesScreen() {
                   Push alerts for study reminders and daily streak warnings
                 </Description>
               </View>
-              <Toggle value={notifications} onChange={setNotifications} />
+              <Toggle value={notifications} onChange={(value) => updatePreferences({ notifications: value })} />
             </View>
           </View>
         </Card>
@@ -643,13 +614,13 @@ export default function PreferencesScreen() {
             >
               <TimeButton
                 value={sleepStart}
-                onSelect={setSleepStart}
+                onSelect={(value) => updatePreferences({ sleepStart: value })}
                 color={C.teal}
                 format={format}
               />
               <TimeButton
                 value={sleepEnd}
-                onSelect={setSleepEnd}
+                onSelect={(value) => updatePreferences({ sleepEnd: value })}
                 color={C.orange}
                 format={format}
               />
@@ -680,7 +651,7 @@ export default function PreferencesScreen() {
                     key={item}
                     label={item}
                     selected={chatter === item}
-                    onPress={() => setChatter(item)}
+                    onPress={() => updatePreferences({ chatter: item })}
                   />
                 ))}
               </View>
@@ -761,19 +732,19 @@ export default function PreferencesScreen() {
               label="Date Format"
               value={dateFormat}
               options={['dd/mm/yy', 'mm/dd/yy', 'yyyy-mm-dd']}
-              onSelect={setDateFormat}
+              onSelect={(value) => updatePreferences({ dateFormat: value })}
             />
             <DropdownRow
               label="First Day of Week"
               value={firstDay}
               options={['Monday', 'Sunday']}
-              onSelect={setFirstDay}
+              onSelect={(value) => updatePreferences({ firstDay: value as 'Monday' | 'Sunday' })}
             />
             <DropdownRow
               label="Time Format"
               value={timeFormat}
               options={['12-Hour (AM/PM)', '24-Hour']}
-              onSelect={setTimeFormat}
+              onSelect={(value) => updatePreferences({ timeFormat: value as '12-Hour (AM/PM)' | '24-Hour' })}
               last
             />
           </View>
@@ -804,7 +775,7 @@ export default function PreferencesScreen() {
               {(['Default', 'Custom'] as const).map((item) => (
                 <Pressable
                   key={item}
-                  onPress={() => setMode(item)}
+                  onPress={() => updatePreferences({ mode: item })}
                   style={{
                     borderRadius: 22,
                     paddingHorizontal: 14,
