@@ -11,8 +11,7 @@ import { PaymentSheet } from '@/components/settings/PaymentSheet';
 import { payWithPayPal } from '@/features/subscription/paypalCheckout';
 import { fetchPlanPrices, money, periodText, totalFor, type PlanPrice, type PlanType } from '@/features/subscription/planPrices';
 import { showComingSoon } from '@/features/account/accountAlerts';
-import { getSetting } from '@/features/settings/settingsRepo';
-import { parseSubscription, resolveTier, SUBSCRIPTION_SETTING_KEY } from '@/features/subscription/entitlements';
+import { loadPremium, NOT_PREMIUM, premiumDateText, type PremiumInfo } from '@/features/subscription/premiumInfo';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
@@ -279,17 +278,7 @@ export default function SubscriptionScreen() {
   );
 }
 
-type PremiumInfo = { isPremium: boolean; expiresAt: number | null };
-const NOT_PREMIUM: PremiumInfo = { isPremium: false, expiresAt: null };
-
-/** Reads the cached subscription (see src/features/subscription/subscriptionRepo.ts). */
-async function loadPremium(): Promise<PremiumInfo> {
-  const raw = await getSetting<unknown>(SUBSCRIPTION_SETTING_KEY, null);
-  const record = parseSubscription(raw === null ? null : JSON.stringify(raw));
-  return { isPremium: resolveTier(record, Date.now()) === 'premium', expiresAt: record?.expiresAt ?? null };
-}
-
-const dateText = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub }: { sub: PremiumInfo }) {
