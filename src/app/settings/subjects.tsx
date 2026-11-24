@@ -37,24 +37,12 @@ export default function SubjectsScreen() {
   const [renaming, setRenaming] = useState<SubjectRow | null>(null);
   const [coloring, setColoring] = useState<SubjectRow | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [difficultyFilter, setDifficultyFilter] = useState<
-    'all' | '1' | '3' | '5'
-  >('all');
+  const filteredSubjects = subjects.filter((subject) =>
+    subject.name.toLowerCase().includes(searchQuery.trim().toLowerCase()),
+  );
 
-  const filteredSubjects = subjects.filter((subject) => {
-    const matchesSearch = subject.name
-      .toLowerCase()
-      .includes(searchQuery.trim().toLowerCase());
-
-    const matchesDifficulty =
-      difficultyFilter === 'all' ||
-      subject.difficulty === Number(difficultyFilter);
-
-    return matchesSearch && matchesDifficulty;
-  });
-
-  const isFiltering =
-    searchQuery.trim().length > 0 || difficultyFilter !== 'all';
+  // Reordering is only allowed on the full list (not while searching).
+  const isFiltering = searchQuery.trim().length > 0;
 
   const remove = (s: SubjectRow) =>
     showNotice({
@@ -177,56 +165,6 @@ export default function SubjectsScreen() {
           </View>
         </View>
 
-        {/* Difficulty filters */}
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: spacing.sm,
-          }}
-        >
-          {[
-            { label: 'All', value: 'all' },
-            { label: 'Low', value: '1' },
-            { label: 'Medium', value: '3' },
-            { label: 'High', value: '5' },
-          ].map((option) => {
-            const selected =
-              difficultyFilter === option.value;
-
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() =>
-                  setDifficultyFilter(
-                    option.value as 'all' | '1' | '3' | '5',
-                  )
-                }
-                style={{
-                  flex: 1,
-                  paddingVertical: 9,
-                  alignItems: 'center',
-                  borderWidth: borders.thin,
-                  borderColor: colors.ink,
-                  borderRadius: 12,
-                  backgroundColor: selected
-                    ? colors.teal
-                    : colors.surface,
-                }}
-              >
-                <Text
-                  style={{
-                    fontFamily: fonts.semiBold,
-                    fontSize: 12,
-                  }}
-                  color={colors.ink}
-                >
-                  {option.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
         {subjects.length === 0 && (
           <Text color={colors.muted}>
             No subjects yet. Add your first one below.
@@ -236,7 +174,7 @@ export default function SubjectsScreen() {
         {subjects.length > 0 &&
           filteredSubjects.length === 0 && (
             <Text color={colors.muted}>
-              No subjects match your search or filter.
+              No subjects match your search.
             </Text>
           )}
 

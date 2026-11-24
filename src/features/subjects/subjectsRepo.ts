@@ -28,7 +28,9 @@ export async function listSubjects(): Promise<SubjectRow[]> {
 
 /** Includes deleted subjects, so old focus sessions still show their name and color. */
 export async function subjectLookup(): Promise<Map<string, SubjectRow>> {
-  const rows = await db.select({ id: subjects.id, name: subjects.name, color: subjects.color }).from(subjects);
+  const rows = await db
+    .select({ id: subjects.id, name: subjects.name, color: subjects.color, difficulty: subjects.difficulty })
+    .from(subjects);
   return new Map(rows.map((r) => [r.id, r]));
 }
 

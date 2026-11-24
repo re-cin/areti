@@ -21,7 +21,8 @@ import {
   View,
 } from 'react-native';
 
-const SUBJECT_COLORS = colors.subjectPalette;
+/** Quick picks in the sheet; the full set of presets opens with the last button. */
+const SUBJECT_COLORS = colors.subjectPalette.slice(0, 8);
 
 type Difficulty = 'low' | 'medium' | 'high';
 
@@ -53,7 +54,8 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
 
   useEffect(() => {
     if (visible) {
-      const unused = SUBJECT_COLORS.find(
+      // A new subject starts with the first preset no other subject uses.
+      const unused = colors.subjectPalette.find(
         (c) => !subjects.some((s) => s.color.toLowerCase() === c.toLowerCase()),
       );
 
@@ -240,10 +242,10 @@ export function NewSubjectSheet({ visible, onClose, onCreated }: Props) {
                   { backgroundColor: colors.white },
                 ]}
                 accessibilityRole="button"
-                accessibilityLabel="Choose custom color"
+                accessibilityLabel="More colors"
               >
                 <Ionicons
-                  name="color-palette-outline"
+                  name="ellipsis-horizontal"
                   size={18}
                   color={colors.ink}
                 />

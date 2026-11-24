@@ -10,10 +10,6 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import ColorPicker, {
-  Panel1,
-  HueSlider,
-} from 'reanimated-color-picker';
 
 import { DialogButton } from '@/components/ui/ConfirmDialog';
 import { NeoBox } from '@/components/ui/NeoBox';
@@ -131,7 +127,7 @@ export function SubjectColorModal({
                         {selected && (
                           <Ionicons
                             name="checkmark"
-                            size={22}
+                            size={18}
                             color={getContrastColor(c)}
                           />
                         )}
@@ -140,46 +136,14 @@ export function SubjectColorModal({
                   })}
                 </View>
 
-                {/* Custom color picker */}
-                <View style={styles.customSection}>
-                  <Text
-                    variant="smallStrong"
-                    style={styles.sectionTitle}
-                  >
-                    Custom Color
-                  </Text>
-
-                  <ColorPicker
-                    value={draftColor}
-                    onChangeJS={({ hex }) => setDraftColor(hex)}
-                  >
-                    <View style={styles.pickerTrack}>
-                      <Panel1 style={styles.colorPanel} />
-                    </View>
-
-                    <View style={styles.pickerTrack}>
-                      <HueSlider style={styles.hueSlider} />
-                    </View>
-                  </ColorPicker>
-
-                  {/* Selected color preview */}
-                  <View style={styles.preview}>
-                    <View
-                      style={[
-                        styles.previewSwatch,
-                        { backgroundColor: draftColor },
-                      ]}
-                    />
-
-                    <View style={{ flex: 1 }}>
-                      <Text variant="smallStrong">
-                        {draftColor.toUpperCase()}
-                      </Text>
-
-                      <Text variant="caption" color={colors.muted}>
-                        Selected color
-                      </Text>
-                    </View>
+                {/* Selected color preview */}
+                <View style={styles.preview}>
+                  <View style={[styles.previewSwatch, { backgroundColor: draftColor }]} />
+                  <View style={{ flex: 1 }}>
+                    <Text variant="smallStrong">{subjectName}</Text>
+                    <Text variant="caption" color={colors.muted}>
+                      Pick one of the {colors.subjectPalette.length} colors
+                    </Text>
                   </View>
                 </View>
               </ScrollView>
@@ -282,32 +246,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: spacing.md,
+    gap: 10,
   },
   swatch: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  customSection: {
-    gap: spacing.lg,
-  },
-  sectionTitle: {
-    textAlign: 'center',
-  },
-  colorPanel: {
-    width: '100%',
-    height: 125,
-    borderRadius: 12,
-  },
-  hueSlider: {
-    width: '100%',
-    height: 24,
-    borderRadius: 12,
-    marginTop: 14,
   },
   preview: {
     flexDirection: 'row',
@@ -335,10 +282,6 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flex: 1,
-  },
-  pickerTrack: {
-    paddingHorizontal: 16,
-    overflow: 'visible',
   },
   buttonContent: {
     minHeight: 52,

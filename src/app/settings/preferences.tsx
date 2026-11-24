@@ -206,12 +206,15 @@ function TimeButton({
   color = C.white,
   format,
   disabled = false,
+  compact = false,
 }: {
   value: string;
   onSelect: (value: string) => void;
   color?: string;
   format: string;
   disabled?: boolean;
+  /** Smaller box (Custom tab): the time can wrap onto two lines instead of overflowing. */
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -222,14 +225,15 @@ function TimeButton({
         onPress={() => setOpen(true)}
         style={{
           flex: 1,
-          minHeight: 49,
+          minHeight: compact ? 42 : 49,
           backgroundColor: disabled ? '#E4DED6' : color,
           borderWidth: 1.8,
           borderColor: disabled ? C.muted : C.black,
-          borderRadius: 18,
+          borderRadius: compact ? 14 : 18,
           justifyContent: 'center',
           alignItems: 'center',
-          paddingHorizontal: 6,
+          paddingHorizontal: compact ? 3 : 6,
+          paddingVertical: compact ? 4 : 0,
           opacity: disabled ? 0.5 : 1,
           shadowColor: C.black,
           shadowOffset: { width: 0, height: 3 },
@@ -238,9 +242,17 @@ function TimeButton({
           elevation: disabled ? 0 : 2,
         }}
       >
-        <Label size={16} color={disabled ? C.gray : C.black}>
+        <Text
+          style={{
+            color: disabled ? C.gray : C.black,
+            fontSize: compact ? 13 : 16,
+            lineHeight: compact ? 16 : undefined,
+            fontFamily: fonts.semiBold,
+            textAlign: 'center',
+          }}
+        >
           {formatTime(value, format)}
-        </Label>
+        </Text>
       </Pressable>
 
       <Modal
@@ -444,8 +456,8 @@ function ScheduleRow({
         accessibilityState={{ checked: enabled }}
         style={{
           flex: 1,
-          minHeight: 47,
-          borderRadius: 25,
+          minHeight: 42,
+          borderRadius: 21,
           borderWidth: 1.7,
           borderColor: C.black,
           backgroundColor: enabled ? C.black : C.card,
@@ -454,7 +466,7 @@ function ScheduleRow({
           paddingHorizontal: 4,
         }}
       >
-        <Label color={enabled ? C.card : C.black} size={14}>
+        <Label color={enabled ? C.card : C.black} size={13}>
           {day}
         </Label>
       </Pressable>
@@ -465,6 +477,7 @@ function ScheduleRow({
           onSelect={onStart}
           format={format}
           disabled={!enabled}
+          compact
         />
       </View>
 
@@ -478,6 +491,7 @@ function ScheduleRow({
           onSelect={onEnd}
           format={format}
           disabled={!enabled}
+          compact
         />
       </View>
     </View>
@@ -487,7 +501,6 @@ function ScheduleRow({
 export default function PreferencesScreen() {
   const [backgroundWork, setBackgroundWork] = useState(true);
   const [notifications, setNotifications] = useState(true);
-  const [petPhysics, setPetPhysics] = useState(true);
 
   const [sleepStart, setSleepStart] = useState('07:30');
   const [sleepEnd, setSleepEnd] = useState('21:30');
@@ -680,19 +693,6 @@ export default function PreferencesScreen() {
               <Divider />
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Label>Pet Physics</Label>
-                <Description>
-                  Turn off jelly physics when gliding your fingers on your pet.
-                </Description>
-              </View>
-              <Toggle value={petPhysics} onChange={setPetPhysics} />
-            </View>
-
-            <View style={{ marginVertical: 18 }}>
-              <Divider />
-            </View>
 
             <View
               style={{
@@ -727,9 +727,12 @@ export default function PreferencesScreen() {
                   />
                 </Pressable>
 
-                <Label size={19}>
-                  {Number.isInteger(dailyGoal) ? dailyGoal : dailyGoal.toFixed(1)} hrs
-                </Label>
+                {/* Fixed width: the arrows and the text beside them don't move when the goal is 2.5 hrs. */}
+                <View style={{ width: 84, alignItems: 'center' }}>
+                  <Label size={19}>
+                    {Number.isInteger(dailyGoal) ? dailyGoal : dailyGoal.toFixed(1)} hrs
+                  </Label>
+                </View>
 
                 <Pressable
                   onPress={() => changeDailyGoal(0.5)}
@@ -833,23 +836,7 @@ export default function PreferencesScreen() {
                     }}
                   >
                     <Label size={17}>WEEKDAYS:</Label>
-                    <View style={{ flexDirection: 'row', gap: 5 }}>
-                      {['M', 'T', 'W', 'T', 'F'].map((day, index) => (
-                        <View
-                          key={`${day}-${index}`}
-                          style={{
-                            width: 35,
-                            height: 35,
-                            borderRadius: 20,
-                            backgroundColor: C.black,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Label color={C.white} size={14}>{day}</Label>
-                        </View>
-                      ))}
-                    </View>
+                    <Label size={16} color={C.gray}>Mon – Fri</Label>
                   </View>
 
                   <View
@@ -905,25 +892,7 @@ export default function PreferencesScreen() {
                     }}
                   >
                     <Label size={17}>WEEKENDS:</Label>
-                    <View style={{ flexDirection: 'row', gap: 6 }}>
-                      {['S', 'S'].map((day, index) => (
-                        <View
-                          key={index}
-                          style={{
-                            width: 35,
-                            height: 35,
-                            borderRadius: 20,
-                            backgroundColor: C.card,
-                            borderWidth: 1.7,
-                            borderColor: C.black,
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <Label size={14}>{day}</Label>
-                        </View>
-                      ))}
-                    </View>
+                    <Label size={16} color={C.gray}>Sat – Sun</Label>
                   </View>
 
                   <View
