@@ -45,7 +45,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { plannerColors as extra } from '@/components/planner/plannerColors';
-import { usePreferences } from '@/features/preferences/preferencesStore';
+import { use24Hour, usePreferences } from '@/features/preferences/preferencesStore';
 
 // Calendar expand / collapse
 const STRIP_INNER_H = 60; // one row of day cells: 54 tall + 3 margin above and below
@@ -69,6 +69,7 @@ export default function PlannerScreen() {
   const [visibleMonth, setVisibleMonth] = useState(today);
 
   const firstDay = usePreferences(s => s.preferences.firstDay);
+  const use24h = use24Hour();
   const weekStartsOn = firstDay === 'Sunday' ? 0 : 1;
 
   const { date: dateParam, n } = useLocalSearchParams<{ date?: string; n?: string }>();
@@ -110,7 +111,7 @@ export default function PlannerScreen() {
       exam,
       card: examCardTask(exam, labels[exam.id] ?? `${byId.get(exam.subjectId)!.name} Exam`, doneExams.has(exam.id), byId),
     }));
-  const taskItem = (task: DbTask): Item => ({ key: `task:${task.id}`, task, card: toCardTask(task, byId) });
+  const taskItem = (task: DbTask): Item => ({ key: `task:${task.id}`, task, card: toCardTask(task, byId, use24h) });
   const todoItems = [...examItems.filter(i => !i.card.done), ...todo.map(taskItem)];
   const finishedItems = [...examItems.filter(i => i.card.done), ...finished.map(taskItem)];
 

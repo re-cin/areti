@@ -2,7 +2,6 @@ import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import type { ExpressionId } from '@/features/pet';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CustomizeSection } from '@/components/pet/CustomizeSection';
 import { ExpressionsGrid } from '@/components/pet/ExpressionsGrid';
@@ -15,7 +14,7 @@ import { HeaderGear, ScreenHeader } from '@/components/ui/ScreenHeader';
 import { pickLine } from '@/features/pet';
 import { refreshPetContent } from '@/features/pet/customContent';
 import { renamePet, usePetEvents, usePetView } from '@/hooks/usePetView';
-import { EXPRESSION_PREVIEW, PET_NAME_MAX, usePetStore } from '@/stores/petStore';
+import { PET_NAME_MAX, usePetStore } from '@/stores/petStore';
 import { colors, spacing } from '@/theme';
 
 /** The hero moves at this share of the scroll speed, so the sheet slides up over the ghost. */
@@ -36,13 +35,7 @@ export default function RetiScreen() {
   const pet = usePetView(rollSeed);
   usePetEvents(pet);
   const talk = usePetStore((s) => s.talk);
-  const togglePreview = usePetStore((s) => s.togglePreview);
   const scrollRef = useRef<Animated.ScrollView>(null);
-  // DEV preview: show the tapped expression and scroll up so the ghost is visible.
-  const preview = (id: ExpressionId) => {
-    togglePreview(id);
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-  };
 
   const [screenH, setScreenH] = useState(0);
   const [heroH, setHeroH] = useState(0);
@@ -102,13 +95,8 @@ export default function RetiScreen() {
             minutesToday={pet.minutesToday}
             goalMinutes={pet.goalMinutes}
           />
-          <ExpressionsGrid
-            level={pet.level.level}
-            current={pet.expression.id}
-            unlockedCount={pet.unlockedCount}
-            totalCount={pet.totalCount}
-            onPreview={EXPRESSION_PREVIEW ? preview : undefined}
-          />
+          {/* Display only: expressions are tried out on the admin site (Pet › Test Reti). */}
+          <ExpressionsGrid level={pet.level.level} unlockedCount={pet.unlockedCount} totalCount={pet.totalCount} />
           <CustomizeSection
             name={pet.name}
             maxLength={PET_NAME_MAX}

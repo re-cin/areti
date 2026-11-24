@@ -8,3 +8,4 @@ export * from './format';
 export * from './schedule';
 export * from './focusLog';
 export * from './slots';
+export * from './goal';

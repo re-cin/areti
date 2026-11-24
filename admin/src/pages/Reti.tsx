@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Dropdown } from '../components/Dropdown';
 import { Icon } from '../components/Icon';
 import { addTestFocus, fetchRetiDetail, fetchUsers, removeTestFocus } from '../lib/api';
+import { listPetExpressions } from '../lib/petContent';
+import { EXPRESSIONS } from '../../../src/features/pet/expressions';
 import { useAuth } from '../lib/auth';
 import { formatMinutes } from '../lib/format';
 import { minutesToGoal, minutesToNextLevel, retiView, streakBlocks, testBlock, type RetiDetail, type TestBlock } from '../lib/reti';
@@ -50,6 +52,10 @@ export function Reti() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const view = useMemo(() => (detail.data ? retiView(detail.data) : null), [detail.data]);
+  // Expressions to try out: the built-in ones and those added on the Pet page.
+  const added = useAsync(listPetExpressions);
+  // The tapped expression (built-in id, or "custom:<id>"). null = show the pet's real mood.
+  const [picked, setPicked] = useState<string | null>(null);
 
   // Only admin accounts are listed: the test tools work on admin accounts only (the database refuses others too).
   const options = (users.data ?? []).filter((u) => u.is_admin || u.id === myId)
@@ -109,7 +115,7 @@ export function Reti() {
               </button>
             </div>
             <div className="pet">
-              <img src="/areti-icon.png" alt="" width={56} height={56} />
+              <PetPreview picked={picked} mood={view.mood} added={added.data ?? []} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600 }}>Level {view.level}{view.maxLevel ? ' (max)' : ''}</div>
                 <div className="xp"><div style={{ width: `${Math.round(view.progress * 100)}%` }} /></div>
@@ -157,8 +163,64 @@ export function Reti() {
               reopened. The phone must be signed in to this account.
             </p>
           </div>
+
+          <div className="neo card" style={{ gridColumn: '1 / -1' }}>
+            <div className="card-head">
+              <div>
+                <h2>Expressions</h2>
+                <div className="sub">
+                  Click one to see it on the pet above; click it again to go back to the real mood
+                  ({EXPRESSIONS.find((e) => e.id === view.mood)?.label ?? view.mood}). Locked ones show the level they unlock at.
+                </div>
+              </div>
+              {picked && (
+                <button className="btn btn-sm btn-cream" onClick={() => setPicked(null)}>Show real mood</button>
+              )}
+            </div>
+            <div className="expr-grid">
+              {EXPRESSIONS.map((e) => {
+                const locked = view.level < e.unlockLevel;
+                const on = picked === e.id || (picked === null && view.mood === e.id);
+                return (
+                  <button key={e.id} type="button" className={`expr-tile${on ? ' on' : ''}${locked ? ' locked' : ''}`}
+                    aria-pressed={picked === e.id} onClick={() => setPicked(picked === e.id ? null : e.id)}>
+                    <img src={`/pet/thumbs/${e.id}.svg`} alt="" />
+                    <span className="expr-name">{e.label}</span>
+                    <span className="expr-meta">{locked ? `Locked · Lv ${e.unlockLevel}` : picked === null && view.mood === e.id ? 'Showing now' : `Lv ${e.unlockLevel}`}</span>
+                  </button>
+                );
+              })}
+              {(added.data ?? []).filter((r) => r.enabled).map((r) => {
+                const key = `custom:${r.id}`;
+                const locked = view.level < r.unlock_level;
+                return (
+                  <button key={key} type="button" className={`expr-tile${picked === key ? ' on' : ''}${locked ? ' locked' : ''}`}
+                    aria-pressed={picked === key} onClick={() => setPicked(picked === key ? null : key)}>
+                    <img src={r.url} alt="" />
+                    <span className="expr-name">{r.label}</span>
+                    <span className="expr-meta">
+                      Added · {EXPRESSIONS.find((e) => e.id === r.slot)?.label ?? r.slot}{locked ? ` · Lv ${r.unlock_level}` : ''}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </>
+  );
+}
+
+/** The pet's picture: the tapped expression, or its real mood. Added expressions play (animated WebP). */
+function PetPreview({ picked, mood, added }: { picked: string | null; mood: string; added: { id: string; url: string; label: string }[] }) {
+  const custom = picked?.startsWith('custom:') ? added.find((r) => `custom:${r.id}` === picked) : undefined;
+  const src = custom ? custom.url : `/pet/thumbs/${picked ?? mood}.svg`;
+  const label = custom ? custom.label : EXPRESSIONS.find((e) => e.id === (picked ?? mood))?.label ?? '';
+  return (
+    <div className="pet-preview" title={picked ? `Previewing ${label}` : `Real mood: ${label}`}>
+      <img src={src} alt={label} />
+      <span>{picked ? 'Preview' : 'Mood'}: {label}</span>
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { Dropdown } from '@/components/ui/Dropdown';
+import { MONTHS } from '@/lib/dateHelpers';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { TextField } from '@/components/ui/TextField';
@@ -40,6 +41,8 @@ const fmtDate = (ts: number, format: string) => {
   const year = date.getFullYear();
 
   switch (format) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':

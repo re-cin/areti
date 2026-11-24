@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { Icon, type IconName } from '@/components/ui/Icon';
 import { colors, fonts } from '@/theme';
+import { DailyGoalPrompt } from '@/components/pet/DailyGoalPrompt';
 
 function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
   return (
@@ -25,6 +26,7 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
 
 export default function TabsLayout() {
   return (
+    <>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -47,5 +49,8 @@ export default function TabsLayout() {
       <Tabs.Screen name="statistics" options={{ title: 'Statistics', tabBarIcon: ({ focused }) => <TabIcon name="stats" focused={focused} /> }} />
       <Tabs.Screen name="reti" options={{ title: 'Reti', tabBarIcon: ({ focused }) => <TabIcon name="ghost" focused={focused} /> }} />
     </Tabs>
+    {/* First open of the day: Reti asks for today's study goal. */}
+    <DailyGoalPrompt />
+    </>
   );
 }

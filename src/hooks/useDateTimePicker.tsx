@@ -3,6 +3,7 @@ import { colors, spacing } from '@/theme';
 import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet } from 'react-native';
+import { use24Hour } from '@/features/preferences/preferencesStore';
 
 type PickerState = { mode: 'date' | 'time'; value: Date; onPick: (d: Date) => void; minimumDate?: Date } | null;
 
@@ -12,6 +13,7 @@ type PickerState = { mode: 'date' | 'time'; value: Date; onPick: (d: Date) => vo
  * Render `pickerElement` once anywhere in your screen, then call `openPicker(...)`.
  */
 export function useDateTimePicker() {
+  const use24h = use24Hour();
   const [picker, setPicker] = useState<PickerState>(null); // iOS only
 
   /** `minimumDate` greys out earlier dates/times (iOS spinner and Android date dialog; Android's time dialog can't, so callers still check). */
@@ -21,7 +23,7 @@ export function useDateTimePicker() {
         value: minimumDate && value < minimumDate ? minimumDate : value,
         mode,
         minimumDate: mode === 'date' ? minimumDate : undefined,
-        is24Hour: false,
+        is24Hour: use24h,
         onChange: (e, d) => {
           if (e.type === 'set' && d) onPick(d);
         },
@@ -41,6 +43,8 @@ export function useDateTimePicker() {
               mode={picker.mode}
               minimumDate={picker.minimumDate}
               display="spinner"
+              // iOS follows the locale for 12/24-hour; en_GB shows 24-hour, en_US shows AM/PM.
+              locale={picker.mode === 'time' ? (use24h ? 'en_GB' : 'en_US') : undefined}
               themeVariant="light"
               onChange={(_, d) => d && setPicker({ ...picker, value: d })}
             />
@@ -71,4 +75,4 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     gap: spacing.md,
   },
-});
+});

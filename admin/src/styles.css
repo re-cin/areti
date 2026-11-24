@@ -618,3 +618,17 @@ a.btn { text-decoration: none; color: inherit; }
 .level-input.sm { width: 72px; padding: 4px 8px; font-size: 13px; }
 .level-input.invalid { border-color: var(--dangerDark); }
 .row-level { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* Test pet: expression preview and the clickable expression list */
+.pet .pet-preview { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 104px; flex-shrink: 0; }
+.pet .pet-preview img { width: 96px; height: 96px; object-fit: contain; }
+.pet-preview span { font-size: 11px; font-weight: 600; text-align: center; }
+.expr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.expr-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px; background: var(--surface);
+  border: 1.5px solid var(--ink); border-radius: 16px; cursor: pointer; font: inherit; color: var(--ink); }
+.expr-tile:hover { background: var(--tealSoft); }
+.expr-tile.on { background: var(--teal); box-shadow: 3px 3px 0 var(--ink); }
+.expr-tile.locked img { opacity: 0.45; }
+.expr-tile img { width: 64px; height: 64px; object-fit: contain; }
+.expr-name { font-size: 12px; font-weight: 600; }
+.expr-meta { font-size: 10px; color: var(--muted); text-align: center; }

@@ -8,6 +8,11 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { SettingsScaffold } from '@/components/settings/SettingsScaffold';
+import { DailyGoalDialog } from '@/components/pet/DailyGoalDialog';
+import { loadGoalState, saveTodayGoal, type GoalState } from '@/db/queries/pet';
+import { goalHoursText, goalLockText } from '@/features/pet/goal';
+import { useDbQuery } from '@/lib/useDbQuery';
+import { showNotice } from '@/stores/notice';
 import { Text } from '@/components/ui/Text';
 import { fonts } from '@/theme';
 import {
@@ -311,12 +316,15 @@ function DropdownRow({
   options,
   onSelect,
   last = false,
+  optionLabel = (option: string) => option,
 }: {
   label: string;
   value: string;
   options: string[];
   onSelect: (value: string) => void;
   last?: boolean;
+  /** Text shown for an option (defaults to the option itself). */
+  optionLabel?: (option: string) => string;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -340,7 +348,7 @@ function DropdownRow({
       >
         <Label color={C.gray} size={16}>{label}</Label>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Label size={15}>{value}</Label>
+          <Label size={15}>{optionLabel(value)}</Label>
           <Ionicons
             name={open ? 'chevron-up' : 'chevron-down'}
             size={17}
@@ -363,7 +371,7 @@ function DropdownRow({
               backgroundColor: option === value ? C.teal : '#EEE8E0',
             }}
           >
-            <Label size={14}>{option}</Label>
+            <Label size={14}>{optionLabel(option)}</Label>
           </Pressable>
         ))}
     </View>
@@ -481,6 +489,8 @@ function ScheduleRow({
   );
 }
 
+const loadGoalStateNow = () => loadGoalState();
+
 export default function PreferencesScreen() {
   const preferences = usePreferences(s => s.preferences);
   const updatePreferences = usePreferences(s => s.updatePreferences);
@@ -498,6 +508,7 @@ export default function PreferencesScreen() {
     mode,
     schedule,
     enabledDays,
+    defaultSlots,
   } = preferences;
 
   const format = timeFormat === '24-Hour' ? '24-Hour' : '12-Hour (AM/PM)';
@@ -511,12 +522,11 @@ export default function PreferencesScreen() {
     });
   };
 
-  const updateGroupSchedule = (days: Day[], field: 'start' | 'end', value: string) => {
-    const updated = { ...preferences.schedule };
-    days.forEach(day => {
-      updated[day] = { ...updated[day], [field]: value };
+  // Default tab: its own Weekdays / Weekends slots, so editing it never changes the Custom tab's days.
+  const updateDefaultSlot = (group: 'weekdays' | 'weekends', field: 'start' | 'end', value: string) => {
+    updatePreferences({
+      defaultSlots: { ...defaultSlots, [group]: { ...defaultSlots[group], [field]: value } },
     });
-    updatePreferences({ schedule: updated });
   };
 
   const toggleDay = (day: Day) => {
@@ -531,11 +541,10 @@ export default function PreferencesScreen() {
     updatePreferences({ schedule: CUSTOM_SCHEDULE, enabledDays: [...DAYS] });
   };
 
-  const changeDailyGoal = (direction: number) => {
-    updatePreferences({
-      dailyGoal: Math.max(1, Math.min(7, Math.round((dailyGoal + direction) * 2) / 2)),
-    });
-  };
+  // Today's study goal (shared with Reti and the daily question).
+  const goalState = useDbQuery(loadGoalStateNow, null as GoalState | null);
+  const goalMinutes = goalState?.goalMinutes ?? Math.round(dailyGoal * 60);
+  const [goalOpen, setGoalOpen] = useState(false);
 
   return (
     <SettingsScaffold title="Preferences">
@@ -661,7 +670,12 @@ export default function PreferencesScreen() {
               <Divider />
             </View>
 
-            <View
+            {/* Daily goal: asked each morning; changeable here until study starts (at most twice a day). */}
+            <Pressable
+              onPress={() => (goalState && !goalState.lock ? setGoalOpen(true) : undefined)}
+              disabled={!goalState || Boolean(goalState.lock)}
+              accessibilityRole="button"
+              accessibilityLabel={`Daily goal ${goalHoursText(goalMinutes)}${goalLockText(goalState?.lock ?? null) ? '. ' + goalLockText(goalState?.lock ?? null) : '. Change'}`}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -672,47 +686,19 @@ export default function PreferencesScreen() {
               <View style={{ flex: 1, gap: 3 }}>
                 <Label>Daily Goal</Label>
                 <Description>
-                  Set how many hours to study for in a day affecting Reti&apos;s reactions
+                  {goalLockText(goalState?.lock ?? null) ??
+                    'How many hours to study today. Reti reacts to it. You can change it until you start studying (twice a day at most).'}
                 </Description>
               </View>
 
-              <View
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 13,
-                }}
-              >
-                <Pressable
-                  onPress={() => changeDailyGoal(-0.5)}
-                  disabled={dailyGoal <= 1}
-                >
-                  <Ionicons
-                    name="chevron-back"
-                    size={21}
-                    color={dailyGoal <= 1 ? C.muted : C.black}
-                  />
-                </Pressable>
-
-                {/* Fixed width: the arrows and the text beside them don't move when the goal is 2.5 hrs. */}
-                <View style={{ width: 84, alignItems: 'center' }}>
-                  <Label size={19}>
-                    {Number.isInteger(dailyGoal) ? dailyGoal : dailyGoal.toFixed(1)} hrs
-                  </Label>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                {goalState?.lock && <Ionicons name="lock-closed" size={16} color={C.gray} />}
+                <View style={{ minWidth: 70, alignItems: 'flex-end' }}>
+                  <Label size={19} color={goalState?.lock ? C.gray : C.black}>{goalHoursText(goalMinutes)}</Label>
                 </View>
-
-                <Pressable
-                  onPress={() => changeDailyGoal(0.5)}
-                  disabled={dailyGoal >= 7}
-                >
-                  <Ionicons
-                    name="chevron-forward"
-                    size={21}
-                    color={dailyGoal >= 7 ? C.muted : C.black}
-                  />
-                </Pressable>
+                {!goalState?.lock && <Ionicons name="chevron-forward" size={21} color={C.black} />}
               </View>
-            </View>
+            </Pressable>
           </Card>
         </View>
 
@@ -731,7 +717,8 @@ export default function PreferencesScreen() {
             <DropdownRow
               label="Date Format"
               value={dateFormat}
-              options={['dd/mm/yy', 'mm/dd/yy', 'yyyy-mm-dd']}
+              options={['Month d', 'dd/mm/yy', 'mm/dd/yy', 'yyyy-mm-dd']}
+              optionLabel={(option) => (option === 'Month d' ? 'Month Day (November 29)' : option)}
               onSelect={(value) => updatePreferences({ dateFormat: value })}
             />
             <DropdownRow
@@ -818,28 +805,16 @@ export default function PreferencesScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <TimeButton
-                        value={schedule.Monday.start}
-                        onSelect={(value) =>
-                          updateGroupSchedule(
-                            DAYS.slice(0, 5),
-                            'start',
-                            value,
-                          )
-                        }
+                        value={defaultSlots.weekdays.start}
+                        onSelect={(value) => updateDefaultSlot('weekdays', 'start', value)}
                         format={format}
                       />
                     </View>
                     <Text style={{ color: C.gray, fontWeight: '500' }}>to</Text>
                     <View style={{ flex: 1 }}>
                       <TimeButton
-                        value={schedule.Monday.end}
-                        onSelect={(value) =>
-                          updateGroupSchedule(
-                            DAYS.slice(0, 5),
-                            'end',
-                            value,
-                          )
-                        }
+                        value={defaultSlots.weekdays.end}
+                        onSelect={(value) => updateDefaultSlot('weekdays', 'end', value)}
                         format={format}
                       />
                     </View>
@@ -874,28 +849,16 @@ export default function PreferencesScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <TimeButton
-                        value={schedule.Saturday.start}
-                        onSelect={(value) =>
-                          updateGroupSchedule(
-                            DAYS.slice(5),
-                            'start',
-                            value,
-                          )
-                        }
+                        value={defaultSlots.weekends.start}
+                        onSelect={(value) => updateDefaultSlot('weekends', 'start', value)}
                         format={format}
                       />
                     </View>
                     <Text style={{ color: C.gray, fontWeight: '500' }}>to</Text>
                     <View style={{ flex: 1 }}>
                       <TimeButton
-                        value={schedule.Saturday.end}
-                        onSelect={(value) =>
-                          updateGroupSchedule(
-                            DAYS.slice(5),
-                            'end',
-                            value,
-                          )
-                        }
+                        value={defaultSlots.weekends.end}
+                        onSelect={(value) => updateDefaultSlot('weekends', 'end', value)}
                         format={format}
                       />
                     </View>
@@ -966,6 +929,23 @@ export default function PreferencesScreen() {
           </Card>
         </View>
       </View>
+      <DailyGoalDialog
+        visible={goalOpen}
+        initialMinutes={goalMinutes}
+        title="Change today's goal"
+        message="You can't change it again today after this, or once you start studying."
+        onCancel={() => setGoalOpen(false)}
+        onSave={async (minutes) => {
+          try {
+            await saveTodayGoal(minutes);
+            updatePreferences({ dailyGoal: minutes / 60 });
+            setGoalOpen(false);
+          } catch (e) {
+            setGoalOpen(false);
+            setTimeout(() => showNotice({ title: "Couldn't change the goal", message: e instanceof Error ? e.message : String(e) }), 400);
+          }
+        }}
+      />
     </SettingsScaffold>
   );
 }

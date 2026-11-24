@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { use24Hour } from '@/features/preferences/preferencesStore';
 import { timeLeftText } from '@/features/subscription/timeLeft';
 import { colors, fonts, spacing } from '@/theme';
 
@@ -14,13 +15,14 @@ const MASCOT = require('../../../assets/images/areti-mascot.png');
  * Tapping it opens the Subscription page, which shows the full status.
  */
 export function PremiumCard({ info, now }: { info: PremiumInfo; now: number }) {
+  const use24h = use24Hour();
   // A subscription renews, so the end date only matters once it's canceled.
   const ending = info.canceled && info.expiresAt ? info.expiresAt : null;
   const left = ending ? timeLeftText(ending, now) : 'Active';
   const until = ending
-    ? `Canceled · ends ${premiumDateTimeText(ending)}`
+    ? `Canceled · ends ${premiumDateTimeText(ending, use24h)}`
     : info.expiresAt
-      ? `Auto-renews ${premiumDateTimeText(info.expiresAt)}`
+      ? `Auto-renews ${premiumDateTimeText(info.expiresAt, use24h)}`
       : 'Thanks for supporting areti!';
   return (
     <Pressable

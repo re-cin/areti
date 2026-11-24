@@ -621,6 +621,21 @@ describe('Planner Study Slots from Settings › Preferences', () => {
     expect(activeSessions().length).toBeGreaterThan(0);
   });
 
+  it('uses only the active tab: Default ignores the Custom days, Custom ignores the Default slots', async () => {
+    const custom = Object.fromEntries(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => [d, { start: '13:00', end: '15:00' }]));
+    const defaultSlots = { weekdays: { start: '06:00', end: '08:00' }, weekends: { start: '06:00', end: '08:00' } };
+    const save = (mode: 'Default' | 'Custom') => db.update(settings)
+      .set({ value: JSON.stringify({ mode, schedule: custom, defaultSlots, enabledDays: Object.keys(custom) }) })
+      .where(eq(settings.key, 'user.preferences')).run();
+    save('Default');
+    await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });
+    expect(activeSessions().length).toBeGreaterThan(0);
+    expect(activeSessions().every(s => s.startMinute === 6 * 60)).toBe(true);
+    save('Custom');
+    await regenerateSchedules();
+    expect(activeSessions().every(s => s.startMinute === 13 * 60)).toBe(true);
+  });
+
   it('moves sessions when the slots change', async () => {
     setSlots('06:00', '08:00');
     await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });

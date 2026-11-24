@@ -1,4 +1,5 @@
 import { NewSubjectSheet } from '@/components/planner/NewSubjectSheet';
+import { MONTHS } from '@/lib/dateHelpers';
 import { Dropdown } from '@/components/ui/Dropdown';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { Segmented } from '@/components/ui/Segmented';
@@ -24,6 +25,8 @@ function formatExamDate(ts: number, format: string) {
   const year = date.getFullYear();
 
   switch (format) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':

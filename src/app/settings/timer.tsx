@@ -21,7 +21,7 @@ import {
 } from '@/features/timer/pomodoroSettings';
 import { useTimer } from '@/features/timer/timerStore';
 import { getTaskSummary, scheduleTaskPomodoro, type TaskSummary } from '@/features/timer/timerRepo';
-import { formatClock, startOfDay } from '@/lib/dateHelpers';
+import { formatClock, startOfDay, MONTHS } from '@/lib/dateHelpers';
 import { Pill } from '@/components/ui/Pill';
 import { backgroundSource, notificationSource, useBackgroundSoundNames, useNotificationSoundNames } from '@/features/audio/sounds';
 import { refreshRemoteSounds } from '@/features/audio/remoteSounds';
@@ -37,6 +37,8 @@ const formatDate = (ts: number, format: string) => {
   const year = date.getFullYear();
 
   switch (format) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':

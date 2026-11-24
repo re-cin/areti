@@ -1,25 +1,24 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
 import { Text } from '@/components/ui/Text';
-import { EXPRESSIONS, type ExpressionId, type ExpressionInfo } from '@/features/pet';
+import { EXPRESSIONS, type ExpressionInfo } from '@/features/pet';
 import { colors, fonts, spacing } from '@/theme';
 import { MiniGhost } from './MiniGhost';
 
 type Props = {
   level: number;
-  /** Expression on screen right now; its tile is highlighted. */
-  current: ExpressionId;
   unlockedCount: number;
   totalCount: number;
-  /** TEMPORARY dev preview: when set, every tile (locked too) can be tapped. */
-  onPreview?: (id: ExpressionId) => void;
 };
 
 const COLUMNS = 4;
 const GAP = 10;
 
-/** "Expressions · 5 of 8" card with a 4-column grid of tiles. */
-export function ExpressionsGrid({ level, current, unlockedCount, totalCount, onPreview }: Props) {
+/**
+ * "Expressions · 5 of 8" card with a 4-column grid of tiles. Display only: tiles can't be tapped and
+ * none is highlighted (admins try expressions out on the admin site's Test Reti page).
+ */
+export function ExpressionsGrid({ level, unlockedCount, totalCount }: Props) {
   // Pad the last row so tiles keep their width.
   const filler = (COLUMNS - (EXPRESSIONS.length % COLUMNS)) % COLUMNS;
   return (
@@ -32,13 +31,9 @@ export function ExpressionsGrid({ level, current, unlockedCount, totalCount, onP
       </View>
       <View style={styles.grid}>
         {EXPRESSIONS.map((e) => (
-          <Pressable
-            key={e.id}
-            disabled={!onPreview}
-            onPress={() => onPreview?.(e.id)}
-            style={({ pressed }) => [styles.cell, pressed && { opacity: 0.6 }]}>
-            <Tile info={e} locked={level < e.unlockLevel} current={e.id === current} />
-          </Pressable>
+          <View key={e.id} style={styles.cell}>
+            <Tile info={e} locked={level < e.unlockLevel} />
+          </View>
         ))}
         {Array.from({ length: filler }, (_, i) => (
           <View key={`f${i}`} style={styles.cell} />
@@ -48,13 +43,13 @@ export function ExpressionsGrid({ level, current, unlockedCount, totalCount, onP
   );
 }
 
-function Tile({ info, locked, current }: { info: ExpressionInfo; locked: boolean; current: boolean }) {
+function Tile({ info, locked }: { info: ExpressionInfo; locked: boolean }) {
   if (locked) {
     return (
       <View
-        style={[styles.fill, styles.tile, styles.locked, current && styles.lockedPreviewing]}
+        style={[styles.fill, styles.tile, styles.locked]}
         accessible
-        accessibilityLabel={`${info.label}, locked, unlocks at level ${info.unlockLevel}${current ? ', previewing' : ''}`}>
+        accessibilityLabel={`${info.label}, locked, unlocks at level ${info.unlockLevel}`}>
         <View style={{ opacity: 0.7 }}>
           <MiniGhost expression={info.id} bodyColor={colors.pet.lockedGhost} blank width={40} />
         </View>
@@ -70,12 +65,8 @@ function Tile({ info, locked, current }: { info: ExpressionInfo; locked: boolean
       </View>
     );
   }
-  const bg = current ? colors.pet.current : colors.pet.sheet;
   return (
-    <View
-      style={[styles.fill, styles.tile, { backgroundColor: bg }]}
-      accessible
-      accessibilityLabel={`${info.label}${current ? ', showing now' : ''}`}>
+    <View style={[styles.fill, styles.tile, { backgroundColor: colors.pet.sheet }]} accessible accessibilityLabel={info.label}>
       <MiniGhost expression={info.id} width={40} />
       <Text numberOfLines={1} adjustsFontSizeToFit style={styles.name}>
         {info.label}
@@ -107,8 +98,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   locked: { backgroundColor: colors.pet.lockedBg, borderColor: colors.pet.lockedBorder, paddingTop: 6, paddingBottom: 7 },
-  // A locked tile that's being previewed (dev preview only).
-  lockedPreviewing: { borderColor: colors.pet.outline, borderWidth: 2.5 },
   lockIcon: { position: 'absolute', top: 13, alignSelf: 'center' },
   name: { fontFamily: fonts.semiBold, fontSize: 11, lineHeight: 16.5, color: colors.ink },
   lockLevel: { fontFamily: fonts.medium, fontSize: 9, lineHeight: 11.25, color: colors.pet.lockedLevel },

@@ -1,4 +1,5 @@
 import { Icon } from '@/components/ui/Icon';
+import { MONTHS } from '@/lib/dateHelpers';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { PlanAccessCard, type StudyPlanAccess } from '@/components/planner/PlanAccessCard';
@@ -11,7 +12,7 @@ import { addDays, monthLabel, startOfDay, startOfWeek } from '@/lib/dates';
 import { formatDuration, formatTime } from '@/lib/format';
 import { borders, colors, fonts, radii, spacing } from '@/theme';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { usePreferences } from '@/features/preferences/preferencesStore';
+import { usePreferences, use24Hour } from '@/features/preferences/preferencesStore';
 
 const palette = colors.studyPlan;
 const difficultyOptions = [{ key: '1', label: 'Low' }, { key: '3', label: 'Medium' }, { key: '5', label: 'High' }];
@@ -48,6 +49,8 @@ const formatDate = (ts: number, format: string) => {
   const year = date.getFullYear();
 
   switch (format) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':
@@ -59,6 +62,7 @@ const formatDate = (ts: number, format: string) => {
 
 /** Shared, controlled view: real data in the app and the same layout for visual verification. */
 export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
+  const use24h = use24Hour();
   const { prefs, actions } = p;
   const dateFormat = usePreferences(s => s.preferences.dateFormat);
   const first = startOfWeek(p.selectedDate);
@@ -148,7 +152,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
 
         {!p.editingDates && prefs.scope === 'all' && <View style={styles.sessionList}>
           {p.loadingPreview ? <Text variant="caption" style={styles.empty}>Updating schedule…</Text> : p.sessions.length ? p.sessions.map(session => <NeoBox key={session.key} shadow={false} offset={0} radius={12} backgroundColor={palette.surface} style={styles.session}>
-            <View style={styles.sessionTime}><Text variant="captionStrong" style={styles.timeText}>{formatTime(session.startMinute)}</Text><Text variant="caption" style={styles.durationText}>{formatDuration(session.endMinute - session.startMinute)}</Text></View>
+            <View style={styles.sessionTime}><Text variant="captionStrong" style={styles.timeText}>{formatTime(session.startMinute, use24h)}</Text><Text variant="caption" style={styles.durationText}>{formatDuration(session.endMinute - session.startMinute)}</Text></View>
             <View style={[styles.sessionDetails, { borderLeftColor: session.color }]}>
               <Text variant="smallStrong" numberOfLines={2} style={styles.sessionTitle}>{session.title}</Text>
               <View style={styles.row}><View style={[styles.sessionSubject, { backgroundColor: session.color }]}><Text variant="label" color={colors.white} style={styles.sessionSubjectText}>{session.subject}</Text></View>

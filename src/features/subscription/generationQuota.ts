@@ -3,6 +3,7 @@
 // describes its replies and turns them into errors and display text.
 
 import { PremiumRequiredError } from './entitlements';
+import { MONTHS } from '@/lib/dateHelpers';
 
 /** What the server reports about this month's generations for a Free student. */
 export type GenerationQuota = {
@@ -12,7 +13,7 @@ export type GenerationQuota = {
   resetsAt: number;
 };
 
-export type DateFormat = 'dd/mm/yy' | 'mm/dd/yy' | 'yyyy-mm-dd';
+export type DateFormat = 'Month d' | 'dd/mm/yy' | 'mm/dd/yy' | 'yyyy-mm-dd';
 
 export const remainingGenerations = (quota: GenerationQuota): number =>
   Math.max(0, quota.limit - quota.used);
@@ -27,6 +28,8 @@ export const resetLabel = (
   const year = date.getUTCFullYear();
 
   switch (dateFormat) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':
@@ -124,4 +127,4 @@ export function parseConsumeResult(
   return quota && quota !== 'premium'
     ? { allowed: false, quota }
     : null;
-}
+}

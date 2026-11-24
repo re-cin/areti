@@ -124,19 +124,33 @@ const hhmm = (value: unknown): number | null => {
   return h >= 0 && h < 24 && m >= 0 && m < 60 ? h * 60 + m : null;
 };
 
+type SavedSlot = { start?: string; end?: string };
+const toSlot = (slot: SavedSlot | undefined): WeeklySlot | null => {
+  const start = hhmm(slot?.start);
+  const end = hhmm(slot?.end);
+  return start === null || end === null ? null : { start, end };
+};
+
 /**
- * Planner Study Slots from Settings › Preferences, by weekday (index = Date.getDay()). Custom mode leaves
- * switched-off days empty (null); Default mode studies every day. These are the only hours study plans use.
+ * Planner Study Slots from Settings › Preferences, by weekday (index = Date.getDay()). Only the tab that is
+ * active counts, and each tab keeps its own times:
+ *  - Default: the Weekdays slot (Mon–Fri) and the Weekends slot (Sat–Sun), every day on (`defaultSlots`).
+ *  - Custom: each day's own slot (`schedule`); switched-off days are empty (null).
+ * These are the only hours study plans use.
  */
 export function weeklyStudySlots(raw: string | undefined): (WeeklySlot | null)[] {
-  const prefs = readJson<{ mode?: string; schedule?: Record<string, { start?: string; end?: string }>; enabledDays?: string[] } | null>(raw ?? 'null', null);
-  return WEEKDAY_NAMES.map(day => {
-    if (prefs?.mode === 'Custom' && Array.isArray(prefs.enabledDays) && !prefs.enabledDays.includes(day)) return null;
-    const slot = prefs?.schedule?.[day];
-    const start = hhmm(slot?.start);
-    const end = hhmm(slot?.end);
-    return start === null || end === null ? DEFAULT_SLOT : { start, end };
-  });
+  const prefs = readJson<{ mode?: string; schedule?: Record<string, SavedSlot>; enabledDays?: string[];
+    defaultSlots?: { weekdays?: SavedSlot; weekends?: SavedSlot } } | null>(raw ?? 'null', null);
+  if (prefs?.mode === 'Custom') {
+    return WEEKDAY_NAMES.map(day => {
+      if (Array.isArray(prefs.enabledDays) && !prefs.enabledDays.includes(day)) return null;
+      return toSlot(prefs.schedule?.[day]) ?? DEFAULT_SLOT;
+    });
+  }
+  // Default tab. Older saves had no defaultSlots: Monday's and Saturday's times were the Default tab's.
+  const weekdays = toSlot(prefs?.defaultSlots?.weekdays) ?? toSlot(prefs?.schedule?.Monday) ?? DEFAULT_SLOT;
+  const weekends = toSlot(prefs?.defaultSlots?.weekends) ?? toSlot(prefs?.schedule?.Saturday) ?? DEFAULT_SLOT;
+  return WEEKDAY_NAMES.map(day => (day === 'Saturday' || day === 'Sunday' ? weekends : weekdays));
 }
 
 export const DEFAULT_EXAM_PREFERENCES: ExamPreferences = {

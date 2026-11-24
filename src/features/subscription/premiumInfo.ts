@@ -19,5 +19,5 @@ export const premiumDateText = (ms: number) =>
   new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
 /** "December 24, 2026, 6:40 PM" (the exact moment Premium ends, in the phone's time zone). */
-export const premiumDateTimeText = (ms: number) =>
-  `${premiumDateText(ms)}, ${new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+export const premiumDateTimeText = (ms: number, use24h = false) =>
+  `${premiumDateText(ms)}, ${new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: !use24h })}`;

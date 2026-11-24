@@ -116,7 +116,10 @@ export default function StatisticsScreen() {
               <View style={{ backgroundColor: colors.ink, borderRadius: radii.pill, paddingHorizontal: 12, paddingVertical: 3 }}>
                 <Text color={colors.white} style={{ fontFamily: fonts.semiBold, fontSize: 13 }}>LVL {ghost.level}</Text>
               </View>
-              <PetGhost expression={pet.expression.id} overlay={pet.overlay} customUrl={pet.custom?.url} width={72} />
+              {/* A little lower, so Reti sits beside the speech bubble */}
+              <View style={{ marginTop: spacing.lg }}>
+                <PetGhost expression={pet.expression.id} overlay={pet.overlay} customUrl={pet.custom?.url} width={72} />
+              </View>
             </View>
             <View style={{ flex: 1, gap: 4 }}>
               {/* XP on top, the speech bubble under it */}

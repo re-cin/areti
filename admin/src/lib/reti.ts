@@ -4,6 +4,9 @@ import { focusStats, momentumNow, type FocusRecord } from '../../../src/features
 import { DAILY_CREDIT_CEILING } from '../../../src/features/pet/credit';
 import { LEVEL_THRESHOLDS, levelForExp, levelProgress, MAX_LEVEL } from '../../../src/features/pet/levels';
 import { EXPRESSIONS } from '../../../src/features/pet/expressions';
+import { resolveExpression } from '../../../src/features/pet/mood';
+import { DEFAULT_SLEEP, inWindow } from '../../../src/features/pet/schedule';
+import type { ExpressionId } from '../../../src/features/pet/types';
 
 export const DEFAULT_DAILY_GOAL = 120;
 const DAY = 86_400_000;
@@ -35,6 +38,8 @@ export type RetiView = {
   unlocked: string[];
   nextUnlock: { level: number; labels: string[] } | null;
   testBlocks: number;
+  /** What the phone's ghost shows right now with no timer running (its mood), as the app picks it. */
+  mood: ExpressionId;
 };
 
 const records = (sessions: RetiSession[]): FocusRecord[] =>
@@ -71,6 +76,11 @@ export function retiView(detail: RetiDetail, now = Date.now()): RetiView {
     unlocked: EXPRESSIONS.filter((e) => e.unlockLevel <= p.level).map((e) => e.label),
     nextUnlock: p.level >= MAX_LEVEL ? null : { level: p.level + 1, labels: next.map((e) => e.label) },
     testBlocks: detail.sessions.filter((s) => s.test).length,
+    // Exams aren't loaded here, so Nervous (exam in 3 days) isn't considered.
+    mood: resolveExpression({
+      level: p.level, momentum: momentumNow(log, now), minutesToday: stats.minutesToday, goalMinutes: goalOf(detail),
+      session: 'idle', examInDays: null, isSleepPeriod: inWindow(now, DEFAULT_SLEEP), brief: null,
+    }).id,
   };
 }
 

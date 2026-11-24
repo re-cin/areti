@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react';
+import { MONTHS } from '@/lib/dateHelpers';
 import type { User } from '@supabase/supabase-js';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { profileQuery } from '@/db/queries/profile';
@@ -26,6 +27,8 @@ const formatJoinedDate = (dateString: string, format: string): string => {
   const year = date.getFullYear();
 
   switch (format) {
+    case 'Month d': // November 29
+      return `${MONTHS[date.getMonth()]} ${date.getDate()}`;
     case 'mm/dd/yy':
       return `${month}/${day}/${String(year).slice(-2)}`;
     case 'yyyy-mm-dd':

@@ -2,6 +2,9 @@ import { and, asc, desc, eq, gte, inArray, isNull } from 'drizzle-orm';
 import { db } from '../client';
 import { newId } from '../id';
 import { focusSessions, ghostState, settings, studyPlans } from '../schema';
+import { clampGoal, focusStats, goalLock, goalLockText, needsGoalPrompt, nextGoalDay, type GoalDay, type GoalLock } from '@/features/pet';
+import { startOfDay } from '@/lib/dates';
+import { bumpData } from '@/stores/dataVersion';
 
 // ---------------------------------------------------------------------------
 // Reads (pass these to useLiveQuery)
@@ -36,6 +39,8 @@ export const PET_SETTINGS = {
   lastLevelSeen: 'pet.lastLevelSeen',
   /** Local-midnight epoch ms of the last day the goal celebration played. */
   lastCelebrationDay: 'pet.lastCelebrationDay',
+  /** Today's goal record ({ day, minutes, sets }): when it was asked for and how often it was set. */
+  goalDay: 'pet.goalDay',
 } as const;
 
 export const petSettingsQuery = () =>
@@ -65,6 +70,48 @@ export async function setPetSetting(key: (typeof PET_SETTINGS)[keyof typeof PET_
 
 /** Spec 3.2: 1 to 7 hours in 30-minute steps. Today's progress recomputes automatically. */
 export async function setDailyGoal(minutes: number) {
-  const clamped = Math.min(420, Math.max(60, Math.round(minutes / 30) * 30));
-  await setPetSetting(PET_SETTINGS.dailyGoal, clamped);
+  await setPetSetting(PET_SETTINGS.dailyGoal, clampGoal(minutes));
+}
+
+export type GoalState = {
+  /** Local midnight of today (epoch ms). */
+  today: number;
+  /** The current goal in minutes. */
+  goalMinutes: number;
+  /** Credited study minutes logged today. */
+  minutesToday: number;
+  /** Today's goal hasn't been asked for yet. */
+  needsPrompt: boolean;
+  /** Why Settings can't change it now (null = it can). */
+  lock: GoalLock;
+};
+
+async function readSetting<T>(key: string, fallback: T): Promise<T> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+  if (!row) return fallback;
+  try { return JSON.parse(row.value) as T; } catch { return fallback; }
+}
+
+/** The daily goal and whether it can be changed (see features/pet/goal.ts). */
+export async function loadGoalState(now = Date.now()): Promise<GoalState> {
+  const today = startOfDay(now);
+  const saved = await readSetting<GoalDay | null>(PET_SETTINGS.goalDay, null);
+  const goalMinutes = clampGoal(await readSetting<number>(PET_SETTINGS.dailyGoal, DEFAULT_DAILY_GOAL));
+  const log = await focusLogQuery();
+  const { minutesToday } = focusStats(log, now);
+  return { today, goalMinutes, minutesToday, needsPrompt: needsGoalPrompt(saved, today), lock: goalLock(saved, today, minutesToday) };
+}
+
+/**
+ * Sets today's goal: the daily question, or a change from Settings. Refused (with the reason) when
+ * Settings tries to change it after study time was logged today or after the second set today.
+ */
+export async function saveTodayGoal(minutes: number, now = Date.now()): Promise<void> {
+  const state = await loadGoalState(now);
+  if (!state.needsPrompt && state.lock) throw new Error(goalLockText(state.lock) ?? 'The goal is locked today.');
+  const saved = await readSetting<GoalDay | null>(PET_SETTINGS.goalDay, null);
+  const next = nextGoalDay(saved, state.today, minutes);
+  await setPetSetting(PET_SETTINGS.dailyGoal, next.minutes);
+  await setPetSetting(PET_SETTINGS.goalDay, next);
+  bumpData();
 }

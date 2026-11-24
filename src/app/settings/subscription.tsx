@@ -13,6 +13,7 @@ import { fetchPlanPrices, money, periodText, totalFor, type PlanPrice, type Plan
 import { showComingSoon } from '@/features/account/accountAlerts';
 import { usePremium } from '@/features/subscription/usePremium';
 import { premiumDateText, premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { use24Hour } from '@/features/preferences/preferencesStore';
 import { timeLeftText } from '@/features/subscription/timeLeft';
 import { cancelSubscription, resumeSubscription } from '@/features/subscription/subscriptionRepo';
 import { useDbQuery } from '@/lib/useDbQuery';
@@ -304,6 +305,7 @@ const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub, now, planName }: { sub: PremiumInfo; now: number; planName: string | null }) {
+  const use24h = use24Hour();
   const [busy, setBusy] = useState(false);
   // Flips the button right away after Cancel / Resume, until the saved status catches up.
   const [override, setOverride] = useState<boolean | null>(null);
@@ -312,11 +314,11 @@ function PremiumStatus({ sub, now, planName }: { sub: PremiumInfo; now: number; 
   // A subscription renews, so the end date and countdown only show once it's canceled.
   const ending = canceled && sub.expiresAt ? sub.expiresAt : null;
   const line = ending
-    ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(ending)}.`
+    ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(ending, use24h)}.`
     : canceled
       ? 'Your subscription was canceled.'
       : sub.expiresAt
-        ? `Your subscription is active. It auto-renews ${premiumDateTimeText(sub.expiresAt)}.`
+        ? `Your subscription is active. It auto-renews ${premiumDateTimeText(sub.expiresAt, use24h)}.`
         : 'Your subscription is active.';
 
   const run = async (change: () => Promise<boolean>, nextCanceled: boolean, done: { title: string; message: string }) => {
@@ -333,7 +335,7 @@ function PremiumStatus({ sub, now, planName }: { sub: PremiumInfo; now: number; 
   };
 
   const askCancel = () => {
-    const until = sub.expiresAt ? premiumDateTimeText(sub.expiresAt) : null;
+    const until = sub.expiresAt ? premiumDateTimeText(sub.expiresAt, use24h) : null;
     showNotice({
       title: 'Cancel subscription?',
       message: until

@@ -38,7 +38,7 @@ export const usePetStore = create<PetLiveState>((set) => ({
 }));
 
 /**
- * TEMPORARY: lets the Expressions grid be tapped to preview any expression (locked ones too).
- * Only in development builds. Set to false (or delete) once the art is checked.
+ * Was: the Expressions grid could be tapped to preview any expression. Off now: expressions are
+ * tried out on the admin site (Pet › Test Reti) instead, so the app always shows the real mood.
  */
-export const EXPRESSION_PREVIEW = __DEV__;
+export const EXPRESSION_PREVIEW = false;

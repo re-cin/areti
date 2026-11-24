@@ -22,6 +22,9 @@ export type StudySlot = {
 
 export type StudySchedule = Record<Day, StudySlot>;
 
+/** The Default tab's two slots. Kept apart from the Custom tab's per-day `schedule`. */
+export type DefaultSlots = { weekdays: StudySlot; weekends: StudySlot };
+
 export type Preferences = {
   backgroundWork: boolean;
   notifications: boolean;
@@ -32,7 +35,11 @@ export type Preferences = {
   dateFormat: string;
   firstDay: 'Monday' | 'Sunday';
   timeFormat: '12-Hour (AM/PM)' | '24-Hour';
+  /** Which Planner Study Slots tab is active. Only that tab's times are used by the scheduler. */
   mode: 'Default' | 'Custom';
+  /** Default tab: Mon–Fri and Sat–Sun. */
+  defaultSlots: DefaultSlots;
+  /** Custom tab: one slot per day (with enabledDays). */
   schedule: StudySchedule;
   enabledDays: Day[];
 };
@@ -54,10 +61,14 @@ export const DEFAULT_PREFERENCES: Preferences = {
   sleepEnd: '21:30',
   chatter: 'Balanced',
   dailyGoal: 3,
-  dateFormat: 'dd/mm/yy',
+  dateFormat: 'Month d', // "November 29"
   firstDay: 'Monday',
   timeFormat: '12-Hour (AM/PM)',
   mode: 'Default',
+  defaultSlots: {
+    weekdays: { start: '06:00', end: '20:00' },
+    weekends: { start: '06:00', end: '20:00' },
+  },
   schedule: Object.fromEntries(
     DAYS.map(day => [
       day,
@@ -75,6 +86,9 @@ type PreferencesStore = {
 };
 
 let loadPromise: Promise<void> | null = null;
+
+/** True when Settings › Preferences › Time Format is 24-Hour. Use for every time shown in the app. */
+export const use24Hour = () => usePreferences(s => s.preferences.timeFormat === '24-Hour');
 
 export const usePreferences = create<PreferencesStore>((set, get) => ({
   preferences: DEFAULT_PREFERENCES,
@@ -102,6 +116,11 @@ export const usePreferences = create<PreferencesStore>((set, get) => ({
               schedule: {
                 ...DEFAULT_PREFERENCES.schedule,
                 ...saved.schedule,
+              },
+              // Older saves shared one schedule between the tabs; the Default tab showed Monday and Saturday.
+              defaultSlots: saved.defaultSlots ?? {
+                weekdays: saved.schedule?.Monday ?? DEFAULT_PREFERENCES.defaultSlots.weekdays,
+                weekends: saved.schedule?.Saturday ?? DEFAULT_PREFERENCES.defaultSlots.weekends,
               },
             },
             hydrated: true,
@@ -142,7 +161,7 @@ export const usePreferences = create<PreferencesStore>((set, get) => ({
       set({ preferences: next, hydrated: true });
       // Study plans use the Planner Study Slots: re-plan as soon as they change (loaded lazily to avoid an
       // import cycle with the planner).
-      if ('schedule' in patch || 'enabledDays' in patch || 'mode' in patch) {
+      if ('schedule' in patch || 'enabledDays' in patch || 'mode' in patch || 'defaultSlots' in patch) {
         void import('@/features/planner/examsRepo')
           .then(m => m.regenerateSchedules())
           .catch(e => console.warn('[preferences] Could not reschedule study plans', e));
