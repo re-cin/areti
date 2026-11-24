@@ -30,11 +30,14 @@ describe('generation quota', () => {
   });
 
   it('names the reset day in UTC and shows the upgrade prompt through PremiumRequiredError', () => {
-    expect(resetLabel(resets)).toBe('December 1');
+    // The reset day follows the user's date format (default dd/mm/yy), in UTC.
+    expect(resetLabel(resets)).toBe('01/12/26');
+    expect(resetLabel(resets, 'mm/dd/yy')).toBe('12/01/26');
+    expect(resetLabel(resets, 'yyyy-mm-dd')).toBe('2026-12-01');
     const error = new GenerationLimitError(3, resets);
     expect(error).toBeInstanceOf(PremiumRequiredError);
     expect(error.message).toContain('3 free schedule generations');
-    expect(error.message).toContain('December 1');
+    expect(error.message).toContain('01/12/26');
     expect(new GenerationUnavailableError().message).toContain('Connect to the internet');
     expect(new GenerationUnavailableError(undefined, 'server-schema').message).toContain('server database needs an update');
   });
