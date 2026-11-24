@@ -22,13 +22,19 @@ import { colors, fonts } from '@/theme';
  * Prices come from the Supabase plan_prices table; "Go Premium!" opens the PayPal checkout sheet.
  */
 
-/** What a plan card shows, worked out from its plan_prices row. */
-function planCard(p: PlanPrice, all: PlanPrice[]) {
+/**
+ * What a plan card shows, worked out from its plan_prices row. With `student` on, the card uses
+ * the plan's student price (when it has one) and keeps the regular price to show crossed out.
+ */
+function planCard(p: PlanPrice, all: PlanPrice[], student: boolean) {
+  const amount = totalFor(p, student);
   const monthly = all.find((x) => x.periodMonths === 1);
-  const perMonth = p.price / p.periodMonths;
-  const savePct = monthly && p.periodMonths > 1 ? Math.round((1 - perMonth / monthly.price) * 100) : 0;
+  const monthlyAmount = monthly ? totalFor(monthly, student) : 0;
+  const perMonth = amount / p.periodMonths;
+  const savePct = monthly && p.periodMonths > 1 ? Math.round((1 - perMonth / monthlyAmount) * 100) : 0;
   return {
-    detail: `${periodText(p.periodMonths)} · ${money(p.price, p.currency)}`,
+    detail: `${periodText(p.periodMonths)} · ${money(amount, p.currency)}`,
+    was: amount < p.price ? money(p.price, p.currency) : null,
     perMonth: `${p.periodMonths > 1 ? '≈ ' : ''}${money(perMonth, p.currency)} / month`,
     badge: savePct > 0 ? `Save ${savePct}%` : null,
   };
@@ -54,8 +60,9 @@ export default function SubscriptionScreen() {
   const [studentDiscount, setStudentDiscount] = useState(false);
   const prices = useDbQuery(fetchPlanPrices, NO_PRICES);
   const selected = prices.find((p) => p.plan === plan) ?? prices[0] ?? null;
-  const studentPrice = selected?.studentPrice ?? null;
-  const useStudent = studentDiscount && studentPrice !== null;
+  // The switch shows when any plan has a student price; it turns every card to its student price.
+  const hasStudentPrices = prices.some((p) => p.studentPrice !== null);
+  const useStudent = studentDiscount && selected?.studentPrice != null;
   const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
   const sub = useDbQuery(loadPremium, NOT_PREMIUM);
@@ -175,7 +182,7 @@ export default function SubscriptionScreen() {
           <View style={styles.plans} accessibilityRole="radiogroup">
             {prices.length === 0 && <Text style={styles.renews}>Loading prices…</Text>}
             {prices.map((row) => {
-              const p = { ...row, ...planCard(row, prices) };
+              const p = { ...row, ...planCard(row, prices, studentDiscount) };
               const on = selected?.plan === p.plan;
               return (
                 <Pressable
@@ -191,7 +198,10 @@ export default function SubscriptionScreen() {
                     style={[styles.plan, on && styles.planOn]}>
                     <View style={{ flex: 1, gap: 4 }}>
                       <Text style={styles.planName}>{p.label}</Text>
-                      <Text style={styles.planDetail}>{p.detail}</Text>
+                      <Text style={styles.planDetail}>
+                        {p.detail}
+                        {p.was && <Text style={styles.planWas}>  {p.was}</Text>}
+                      </Text>
                     </View>
                     <Text style={styles.planPer}>{p.perMonth}</Text>
                   </NeoBox>
@@ -205,15 +215,11 @@ export default function SubscriptionScreen() {
             })}
           </View>
 
-          {/* Student price (only when the selected plan has one in plan_prices) */}
-          {selected && studentPrice !== null && (
+          {/* Student discount: switches the plan cards to their student prices (from plan_prices) */}
+          {hasStudentPrices && (
             <NeoBox style={styles.discount}>
-              <Text style={styles.discountText}>Student · {money(studentPrice, selected.currency)}</Text>
-              <Toggle
-                value={studentDiscount}
-                onChange={setStudentDiscount}
-                label={`Student price, ${money(studentPrice, selected.currency)}`}
-              />
+              <Text style={styles.discountText}>Student discount</Text>
+              <Toggle value={studentDiscount} onChange={setStudentDiscount} label="Student discount" />
             </NeoBox>
           )}
 
@@ -499,6 +505,7 @@ const styles = StyleSheet.create({
   planOn: { borderColor: colors.tealDark, borderWidth: 3 },
   planName: { fontFamily: fonts.semiBold, fontSize: 17, color: colors.ink },
   planDetail: { fontFamily: fonts.semiBold, fontSize: 16, color: colors.ink },
+  planWas: { fontFamily: fonts.regular, fontSize: 14, color: colors.muted, textDecorationLine: 'line-through' },
   planPer: { fontFamily: fonts.regular, fontSize: 15, color: colors.muted },
   badge: {
     position: 'absolute',
