@@ -2,7 +2,8 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
-import { premiumDateText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { timeLeftText, useNow } from '@/features/subscription/timeLeft';
 import { colors, fonts, spacing } from '@/theme';
 
 const MASCOT = require('../../../assets/images/areti-mascot.png');
@@ -13,12 +14,14 @@ const MASCOT = require('../../../assets/images/areti-mascot.png');
  * Tapping it opens the Subscription page, which shows the full status.
  */
 export function PremiumCard({ info }: { info: PremiumInfo }) {
-  const until = info.expiresAt ? `Active until ${premiumDateText(info.expiresAt)}` : 'Active';
+  const now = useNow(); // keeps the countdown current while User Settings is open
+  const left = info.expiresAt ? timeLeftText(info.expiresAt, now) : 'Active';
+  const until = info.expiresAt ? `Until ${premiumDateTimeText(info.expiresAt)}` : 'Thanks for supporting areti!';
   return (
     <Pressable
       onPress={() => router.push('/settings/subscription')}
       accessibilityRole="button"
-      accessibilityLabel={`areti Premium. ${until}. Open subscription`}>
+      accessibilityLabel={`areti Premium. ${left}. ${until}. Open subscription`}>
       <NeoBox backgroundColor={colors.wordmark} shadowColor={colors.tealDark} offset={3} style={styles.card}>
         {/* Reti in a teal bubble (he is dark, so he needs a light background on the black card) */}
         <View style={styles.bubble}>
@@ -30,8 +33,8 @@ export function PremiumCard({ info }: { info: PremiumInfo }) {
 
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.title}>areti Premium</Text>
-          <Text style={styles.line}>{until}</Text>
-          <Text style={styles.thanks}>Thanks for supporting areti!</Text>
+          <Text style={styles.line}>{left}</Text>
+          <Text style={styles.thanks}>{until}</Text>
         </View>
 
         <View style={styles.arrow}>

@@ -599,3 +599,6 @@ thead th.actions-col { text-align: right; }
 @media (max-width: 1000px) { .controls-grid { grid-template-columns: 1fr; } }
 .sound-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 1300px) { .sound-cols { grid-template-columns: 1fr; } }
+
+/* Edit subscription: read-only "Time left" preview next to the due time */
+.time-left { display: flex; align-items: center; height: 44px; box-shadow: 2px 2px 0 var(--ink); font-weight: 600; color: var(--muted); background: var(--surface); }

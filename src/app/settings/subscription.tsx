@@ -11,7 +11,8 @@ import { PaymentSheet } from '@/components/settings/PaymentSheet';
 import { payWithPayPal } from '@/features/subscription/paypalCheckout';
 import { fetchPlanPrices, money, periodText, totalFor, type PlanPrice, type PlanType } from '@/features/subscription/planPrices';
 import { showComingSoon } from '@/features/account/accountAlerts';
-import { loadPremium, NOT_PREMIUM, premiumDateText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { loadPremium, NOT_PREMIUM, premiumDateText, premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
+import { timeLeftText, useNow } from '@/features/subscription/timeLeft';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
@@ -282,13 +283,15 @@ const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub }: { sub: PremiumInfo }) {
-  const line = sub.expiresAt ? `Premium is on until ${dateText(sub.expiresAt)}.` : 'Premium is active.';
+  const now = useNow(); // keeps the countdown current while the page is open
+  const line = sub.expiresAt ? `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.` : 'Premium is active.';
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
       <View style={styles.statusHead}>
         <Icon name="crown" size={22} color={colors.ink} fill={colors.gold} strokeWidth={1.4} />
         <Text style={styles.statusTitle}>You&apos;re Premium</Text>
       </View>
+      {sub.expiresAt ? <Text style={styles.statusLeft}>{timeLeftText(sub.expiresAt, now)}</Text> : null}
       <Text style={styles.statusLine}>{line}</Text>
     </NeoBox>
   );
@@ -522,6 +525,7 @@ const styles = StyleSheet.create({
   status: { padding: 20, gap: 6, borderColor: colors.tealDark, borderWidth: 3 },
   statusHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusTitle: { fontFamily: fonts.semiBold, fontSize: 20, color: colors.ink },
+  statusLeft: { fontFamily: fonts.semiBold, fontSize: 22, color: colors.tealDark },
   statusLine: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
   renews: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8 },
