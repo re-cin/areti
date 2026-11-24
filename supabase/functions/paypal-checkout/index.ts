@@ -204,6 +204,7 @@ Deno.serve(async (req) => {
         user_id: user.id,
         plan: 'premium',
         status: 'active',
+        billing_period: plan, // weekly / monthly / yearly, shown on the admin site
         current_period_end: periodEnd.toISOString(),
         updated_at: now.toISOString(),
         ...(stillPremium && existing?.started_at ? {} : { started_at: now.toISOString() }),
