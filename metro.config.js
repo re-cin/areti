@@ -12,4 +12,13 @@ config.server.enhanceMiddleware = (middleware) => (req, res, next) => {
   middleware(req, res, next);
 };
 
+// The admin website (admin/) is a separate web app with its own node_modules (another copy of
+// React). Keep Metro from crawling it so the phone app never picks any of it up.
+const path = require('path');
+const adminDir = path.resolve(__dirname, 'admin').replace(/[/\\]/g, '[/\\\\]');
+config.resolver.blockList = [
+  ...[].concat(config.resolver.blockList ?? []),
+  new RegExp(`^${adminDir}([/\\\\].*)?$`),
+];
+
 module.exports = config;

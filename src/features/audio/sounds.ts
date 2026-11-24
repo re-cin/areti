@@ -1,4 +1,5 @@
 import type { AudioSource } from 'expo-audio';
+import { remoteBackgroundUrl, remoteNotificationUrl, useRemoteSounds } from './remoteSounds';
 
 // Sound files live in assets/sounds/. To use your own audio, replace a file with one of the
 // SAME NAME (any length; .m4a or .mp3 work on both iOS and Android). If you change a file name
@@ -33,9 +34,28 @@ export const NOTIFICATION_SOUNDS = Object.keys(NOTIFICATION_SOUND_FILES);
 const RENAMED: Record<string, string> = { 'White Noise': 'Velvet Espresso' };
 export const currentSoundName = (name: string) => RENAMED[name] ?? name;
 
-export const backgroundSource = (name: string): AudioSource | null => BACKGROUND_SOUND_FILES[currentSoundName(name)] ?? null;
+/** Built-in file, or the streamed link of music an admin added (Controls → Music on the admin site). */
+export const backgroundSource = (name: string): AudioSource | null => {
+  const n = currentSoundName(name);
+  if (n in BACKGROUND_SOUND_FILES) return BACKGROUND_SOUND_FILES[n];
+  const url = remoteBackgroundUrl(n);
+  return url ? { uri: url } : null;
+};
 /** The chime file for a sound name, or null for Silent. Unknown names fall back to the first real sound. */
-export const notificationSource = (name: string): AudioSource | null =>
-  name in NOTIFICATION_SOUND_FILES ? NOTIFICATION_SOUND_FILES[name] : NOTIFICATION_SOUND_FILES['Singing Tibetan Bowl'];
+export const notificationSource = (name: string): AudioSource | null => {
+  if (name in NOTIFICATION_SOUND_FILES) return NOTIFICATION_SOUND_FILES[name];
+  const url = remoteNotificationUrl(name);
+  return url ? { uri: url } : NOTIFICATION_SOUND_FILES['Singing Tibetan Bowl'];
+};
+
+/** Built-in names first, then admin-added ones. Re-renders when the admin list arrives. */
+export function useBackgroundSoundNames() {
+  const extra = useRemoteSounds((s) => s.background);
+  return [...BACKGROUND_SOUNDS, ...extra.map((x) => x.title).filter((t) => !BACKGROUND_SOUNDS.includes(t))];
+}
+export function useNotificationSoundNames() {
+  const extra = useRemoteSounds((s) => s.notification);
+  return [...NOTIFICATION_SOUNDS, ...extra.map((x) => x.title).filter((t) => !NOTIFICATION_SOUNDS.includes(t))];
+}
 
 export const isSilent = (name: string | null | undefined) => name === 'Silent';

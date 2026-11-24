@@ -4,7 +4,7 @@ import type { PlannerInput, PlannerResult } from './types';
 
 export type SchedulePlan = {
   id: string; subjectId: string; examDate: number; remainingBlocks: number;
-  difficulty: number; urgency: number; start: number; end: number;
+  difficulty: number; start: number; end: number;
   focusMin: number; focusCount: number; breakMin: number; longBreakMin: number;
   excluded: number[]; studyDays?: number[]; planStartDate?: number;
 };
@@ -100,7 +100,7 @@ export function generateSchedule(input: { now: Date; plans: SchedulePlan[]; busy
       }).sort((a, b) => Number(lastStudyDates.get(b.plan.id) === date) - Number(lastStudyDates.get(a.plan.id) === date)
         || a.start - b.start
         || (servedMinutes.get(a.plan.id) ?? 0) / shares.get(a.plan.id)! - (servedMinutes.get(b.plan.id) ?? 0) / shares.get(b.plan.id)!
-        || a.plan.examDate - b.plan.examDate || (b.plan.difficulty + b.plan.urgency) - (a.plan.difficulty + a.plan.urgency)
+        || a.plan.examDate - b.plan.examDate
         || a.plan.id.localeCompare(b.plan.id));
       if (!candidates.length) break;
       const { plan, start, longBreak, gap } = candidates[0];

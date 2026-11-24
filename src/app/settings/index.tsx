@@ -8,7 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { FREE_SUBSCRIPTION, getSubscription } from '@/features/account/subscriptionRepo';
+import { useEntitlements } from '@/features/subscription/useEntitlements';
 import { showComingSoon, showSignOutInfo } from '@/features/account/accountAlerts';
 import { getProfile, type Profile } from '@/features/account/accountRepo';
 import { colors, fonts, spacing } from '@/theme';
@@ -18,13 +18,13 @@ const comingSoon = showComingSoon;
 
 export default function UserSettingsScreen() {
   const profile = useDbQuery(getProfile, EMPTY_PROFILE);
-  // Re-reads Premium from Supabase; it updates profile.plan, which the screen shows.
-  useDbQuery(getSubscription, FREE_SUBSCRIPTION);
+  // Free / Premium from the Supabase subscriptions table (cached on the phone, refreshed after each sync).
+  const isPremium = useEntitlements().tier === 'premium';
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   const rows: { icon: IconName; label: string; href?: Href; onPress?: () => void }[] = [
     { icon: 'book', label: 'Subjects', href: '/settings/subjects' },
-    { icon: 'sliders', label: 'Preferences', onPress: () => comingSoon('Preferences') }, // page not built yet
+    { icon: 'sliders', label: 'Preferences', href: '/settings/preferences' },
     { icon: 'shield', label: 'Data & Privacy', href: '/settings/privacy' },
     { icon: 'help', label: 'Help & Support', onPress: () => comingSoon('Help & Support') },
     { icon: 'info', label: 'Terms & Policies', onPress: () => comingSoon('Terms & Policies') },
@@ -55,7 +55,7 @@ export default function UserSettingsScreen() {
       </Pressable>
 
       {/* Upgrade banner */}
-      {profile.plan !== 'pro' && (
+      {!isPremium && (
         <Pressable onPress={() => router.push('/settings/subscription')} accessibilityRole="button" accessibilityLabel="Upgrade to Premium">
           <NeoBox backgroundColor={colors.terracotta} style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md }}>
             <View style={{ flex: 1, gap: 2 }}>

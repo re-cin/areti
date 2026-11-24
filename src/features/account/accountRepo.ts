@@ -1,11 +1,10 @@
+import { getEntitlements } from '@/features/planner/examsRepo';
 import { eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
-import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects, tasks } from '@/db/schema';
-import { refreshSessionReminders } from '@/features/timer/reminders';
+import { focusSessions, ghostState, plannedSessions, profile as profileTable, settings, studyPlans, subjects } from '@/db/schema';
 import { saveDisplayName } from '@/db/queries/profile';
 import { AuthError } from '@/lib/auth';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
-import { getSetting, SETTING_KEYS, setSetting } from '@/features/settings/settingsRepo';
 import { bumpData } from '@/stores/dataVersion';
 
 export type Profile = {
@@ -37,15 +36,13 @@ export function nameFromEmail(email: string): string {
     .join(' ');
 }
 
-type SavedPlan = { plan?: Profile['plan'] };
-
 /**
  * The signed-in user's profile. Email and join date come from their Supabase account;
  * name and picture from the synced `profile` row (id = user id, see src/db/queries/profile.ts).
  */
 export async function getProfile(): Promise<Profile> {
-  const saved = await getSetting<SavedPlan>(SETTING_KEYS.profile, {});
-  const plan = saved.plan ?? 'free';
+  // The plan comes from the server-owned subscription cache, never from a value the student can edit.
+  const plan: Profile['plan'] = (await getEntitlements()).tier === 'premium' ? 'pro' : 'free';
   const user = supabaseConfigured ? (await supabase.auth.getSession()).data.session?.user : undefined;
   if (!user) return { id: '', name: '', email: '', pictureUri: null, plan, joinedAt: Date.now() };
 
@@ -67,11 +64,10 @@ export async function getProfile(): Promise<Profile> {
  * which emails a confirmation link; it only changes once confirmed (returns 'confirm-email').
  * Throws EmailTakenError if another account already has it.
  */
-export async function updateProfile(patch: Partial<Pick<Profile, 'name' | 'email' | 'plan'>>): Promise<'saved' | 'confirm-email'> {
+export async function updateProfile(patch: Partial<Pick<Profile, 'name' | 'email'>>): Promise<'saved' | 'confirm-email'> {
   let result: 'saved' | 'confirm-email' = 'saved';
   const current = await getProfile();
   if (patch.name !== undefined && current.id) await saveDisplayName(current.id, patch.name);
-  if (patch.plan !== undefined) await setSetting(SETTING_KEYS.profile, { plan: patch.plan });
   if (patch.email !== undefined) {
     const email = patch.email.trim().toLowerCase();
     if (email && email !== current.email.toLowerCase()) {
@@ -93,10 +89,7 @@ export async function exportAllData(): Promise<string> {
   const data = {
     app: 'areti',
     exportedAt: new Date().toISOString(),
-    note: 'Times are milliseconds since 1970-01-01 (UTC). Dates are the start of the day.',
-    profile: await db.select().from(profileTable).where(isNull(profileTable.deletedAt)),
     subjects: await db.select().from(subjects).where(isNull(subjects.deletedAt)),
-    tasks: await db.select().from(tasks).where(isNull(tasks.deletedAt)),
     studyPlans: await db.select().from(studyPlans).where(isNull(studyPlans.deletedAt)),
     plannedSessions: await db.select().from(plannedSessions).where(isNull(plannedSessions.deletedAt)),
     focusSessions: await db.select().from(focusSessions).where(isNull(focusSessions.deletedAt)),
@@ -106,18 +99,9 @@ export async function exportAllData(): Promise<string> {
   return JSON.stringify(data, null, 2);
 }
 
-/**
- * "Clear study history": soft-deletes (so it syncs to every phone) all focus logs (statistics and streak),
- * scheduled Pomodoro sessions and Planner tasks, and resets Reti to level 1 with 0 XP (XP comes from that
- * focus time). Subjects and settings stay.
- */
+/** "Clear study history": soft-deletes focus logs only. Subjects, plans, XP and settings stay. */
 export async function clearStudyHistory(): Promise<void> {
   const now = Date.now();
-  const gone = { deletedAt: now, updatedAt: now };
-  await db.update(focusSessions).set(gone).where(isNull(focusSessions.deletedAt));
-  await db.update(plannedSessions).set(gone).where(isNull(plannedSessions.deletedAt));
-  await db.update(tasks).set(gone).where(isNull(tasks.deletedAt));
-  await db.update(ghostState).set({ level: 1, xp: 0, updatedAt: now }).where(isNull(ghostState.deletedAt));
+  await db.update(focusSessions).set({ deletedAt: now, updatedAt: now }).where(isNull(focusSessions.deletedAt));
   bumpData();
-  void refreshSessionReminders(); // no more reminders for the cleared tasks and sessions
 }

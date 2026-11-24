@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing } from 'react-native';
 
 const IN_MS = 160;
@@ -11,11 +11,11 @@ const OUT_MS = 110;
  */
 export function useQuickFade(visible: boolean) {
   const [mounted, setMounted] = useState(visible);
-  const progress = useRef(new Animated.Value(visible ? 1 : 0)).current;
+  const [progress] = useState(() => new Animated.Value(visible ? 1 : 0));
 
   useEffect(() => {
     if (visible) {
-      setMounted(true);
+      requestAnimationFrame(() => setMounted(true));
       Animated.timing(progress, { toValue: 1, duration: IN_MS, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
     } else {
       Animated.timing(progress, { toValue: 0, duration: OUT_MS, easing: Easing.in(Easing.quad), useNativeDriver: true }).start(

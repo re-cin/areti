@@ -16,6 +16,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import migrations from '../../drizzle/migrations';
 import { startAutoSync } from '@/sync/sync';
+import { loadCachedRemoteSounds, refreshRemoteSounds } from '@/features/audio/remoteSounds';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notifications';
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
@@ -40,10 +41,16 @@ export default function RootLayout() {
     return startAutoSync();
   }, [dbReady]);
 
+  // Music added by admins (admin site → Controls → Music): cached list first, then a fresh copy.
+  useEffect(() => {
+    if (!dbReady) return;
+    void loadCachedRemoteSounds().then(() => refreshRemoteSounds()).catch(() => {});
+  }, [dbReady]);
+
   // Which page is showing, read by the reminder popup below.
   const pathname = usePathname();
   const pathRef = useRef(pathname);
-  pathRef.current = pathname;
+  useEffect(() => { pathRef.current = pathname; }, [pathname]);
 
   // "Pomodoro in 5 minutes" reminders: schedule them, show areti's popup when one fires while the
   // app is open, and open the Pomodoro tab when one is tapped from the phone's notifications.

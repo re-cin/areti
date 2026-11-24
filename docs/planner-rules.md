@@ -4,9 +4,9 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 `generatePlan(input) -> { sessions, shortfallBlocks }`. No UI, database or Expo imports.
 
 ## Agreed rules
-1. A subject must exist before a plan can be made. Each exam has its own **difficulty**; the subject supplies its name, color and existing urgency value.
+1. A subject must exist before a plan can be made. Each exam has its own **difficulty** and exam date; the subject supplies its name and color.
 2. With no exam, subjects use default values. With an exam, the exam date adjusts how often sessions are scheduled and how they are split.
-3. Exams share free time and one daily focus goal. First protect subjects on their last available study day. Then use earlier free windows and allocate focus minutes by difficulty-weighted fair sharing; earlier deadlines, then urgency + difficulty, break ties.
+3. Exams share free time and one daily focus goal. First protect subjects on their last available study day. Then use earlier free windows and allocate focus minutes by difficulty-weighted fair sharing; earlier deadlines break remaining ties.
 4. Pending session times can move when plans compete. Preserve each exam's original total focus-block target: unfinished blocks remain outstanding, with a visible shortfall if they cannot fit before the exam.
 5. Sessions must fit inside the user's **time availability window** and **study days**.
 6. **Never exceed the daily goal.** If there is not enough room before the exam, return `shortfallBlocks` and let the UI warn. Do not overload days.
@@ -15,7 +15,7 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 9. **Break rule:** at most **2 hours of focus before a long break of at least 30 minutes** (`rules.ts`, `splitIntoRuns`).
 
 ## Workload and availability
-- Difficulty belongs to the exam/study plan (default Medium = 3, scale 1-5). Two exams for the same subject can have different difficulty. Urgency still uses the existing subject value.
+- Difficulty belongs to the exam/study plan (default Medium = 3, scale 1-5). Two exams for the same subject can have different difficulty. Time pressure comes from each exam's date and remaining work; the legacy subject urgency column is ignored.
 - Low/Medium/High difficulty (stored 1/3/5) has study-time weights 1/2/3. With comparable deadlines, pending workloads and block lengths, six available blocks split approximately 1/2/3. The share also accounts for remaining focus minutes per eligible day, so nearer deadlines and fewer study days matter.
 - Fairness carries across generated days, so a one-block daily goal can still give easier subjects time. Difficulty changes redistribute unfinished study and preserve existing total targets, completed work and fixed sessions. A completed hard target releases its share to other subjects.
 - Set difficulty in Set/Edit Exam or Exam Study Plan. Changing it rebalances pending study automatically and preserves every other exam's difficulty, including exams for the same subject. All Exams preference saves do not copy difficulty between exams. Subjects have no difficulty field or control.
@@ -30,7 +30,7 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 ## Automatic regeneration and persistence
 - New exams receive a schedule immediately. Existing exams are scheduled on the next app launch/foreground refresh.
 - Refresh after task, subject, exam or session changes, and once per minute while the app is active. On foreground, catch up the timer before moving missed work. A closed app catches up when reopened; no background execution service is required.
-- Missed unfinished blocks move to the next eligible free slots. Partially completed missed sessions retain completed blocks as history; only the unfinished blocks move.
+- Missed unfinished blocks move to the next eligible free slots (Premium; Free students trigger this by spending a generation, see Free vs Premium). Partially completed missed sessions retain completed blocks as history; only the unfinished blocks move.
 - Preferences and sessions are saved with matching generated Daily Tasks, frozen timer settings and per-exam shortfalls in one synchronous SQLite transaction.
 - SQLite migration `0004_exam_difficulty` copies legacy subject difficulty to linked exams before removing the subject column, preserving existing choices and study history. Apply Supabase migration `20261123090000_exam_difficulty.sql` before syncing the updated app; it makes the matching cloud schema change.
 - Repeated refreshes preserve unchanged session IDs and timestamps. Preview uses the same engine without writing. Generate/Regenerate and Save persist the schedule; All Exams applies preferences to upcoming exams while all plans continue to share capacity.
@@ -44,7 +44,28 @@ Source of truth for the scheduling engine (`src/features/planner`). The engine i
 - Generated tasks reuse their existing Pomodoro and frozen settings; timer configuration changes belong in Exam Study Plan. Deleting a manual task removes its task-linked Pomodoro.
 - Changing an exam's subject creates fresh pending sessions for the new subject. A plan with completed study or an active timer must use a separate new exam to change subjects, keeping study history correctly attributed.
 
+## Free vs Premium
+One scheduling engine serves everyone; the subscription tier (`src/features/subscription/entitlements.ts`) only switches capabilities on. Deadline and difficulty are measured identically in both tiers.
+
+| | Free | Premium |
+|---|---|---|
+| Subjects and exams | Unlimited | Unlimited |
+| Own (manual) study sessions | Unlimited | Unlimited |
+| Automatic scheduling | Off. A schedule is built only when the student generates one | On: schedules refresh by themselves |
+| Generate / Regenerate / Save study plan | 3 per calendar month (UTC), counted on the server | Unlimited |
+| Missed sessions | Marked missed and left in place. They move when the student spends a generation (Regenerate, Save or Reschedule missed sessions) or moves their own sessions by hand | Moved automatically to the next free slots |
+| Insights | Progress and missed count | Plus time left, scheduled blocks, workload fit and missed-session patterns |
+
+- **Free generation allowance.** Every `saveStudySchedule` call (Generate/Save study plan, Regenerate, Save Changes on study dates, Reschedule missed sessions) uses one of 3 generations per calendar month, whichever exam it is for. One generation schedules all active exams together, like Premium. The count resets at 00:00 UTC on the 1st. Previewing never uses a generation. Sessions already generated stay in place when the allowance is spent.
+- **Counted on the server.** `public.schedule_generations` (students can read, never write) and the functions `consume_schedule_generation()` / `schedule_generation_usage()` from migration `20261123110000_schedule_generations.sql`. Premium is never counted. The phone calls `reserveGeneration` (`generationQuotaRepo.ts`) before generating. When the server can't confirm the allowance (offline or signed out), a Free student can't generate: `GenerationUnavailableError`, nothing is used. When it's spent: `GenerationLimitError` (a `PremiumRequiredError`, so the screen shows the upgrade prompt). The limit `3` lives in `entitlements.ts` and in that migration and must match.
+- **No automatic scheduling on Free.** Automatic refreshes (new exam, edits, foreground, midnight) do nothing for Free except cleaning up work whose exam or subject is gone, so creating exams never uses a generation. A lapsed Premium subscription stops automatic changes; existing sessions stay.
+- **Free missed work.** Automatic refreshes never run for Free, so a missed unfinished session stays where it is. An explicit generation is a manual reschedule and moves it, for every tier.
+- **Subscription source of truth.** Supabase table `public.subscriptions` (students can read, never write). The phone caches it in local-only setting `subscription.plan` (`subscriptionRepo.refreshSubscription`, run after each sync). A failed or offline refresh keeps the last cache. Missing, unreadable or expired subscriptions are Free. Migration `20261123100000_subscriptions.sql` refuses any upload of `subscription.plan`; its legacy `exam-priority:*` guard remains harmless for existing installations.
+- **Not built yet:** review-and-accept before Premium recovery is applied, advanced side-by-side schedule comparison, and payments (the upgrade button is a placeholder). Scheduling runs on the device, so a modified app could still build a schedule locally without reserving a generation; the server protects the subscription record, the monthly count and Premium-only synced data.
+
 ## Verification
 `engine.test.ts`: capacity, competing exams, fixed commitments, breaks, study days, exclusions, missed work, exam today, multiple availability windows and ordinary study without an exam.
+
+`insights.test.ts`, `entitlements.test.ts` and `generationQuota.test.ts`: Free/Premium rules, the monthly allowance, insight maths and subscription parsing/expiry.
 
 `examsRepo.test.ts`: real Drizzle queries and migrations against in-memory SQLite, automatic creation, duplicate prevention, retained progress/history/locks, manual conflicts, running/paused timers, partial completion, date changes, shared preferences, preview without writes and transaction rollback.

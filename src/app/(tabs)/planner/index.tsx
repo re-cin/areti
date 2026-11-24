@@ -10,10 +10,12 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { setTaskDone } from '@/db/queries/tasks';
 import { toCardTask } from '@/features/planner/cardTask';
+import { examsQuery } from '@/features/planner/examsRepo';
 import { useSubjects } from '@/hooks/useSubjects';
 import { useTaskDays } from '@/hooks/useTaskDays';
 import { useTasksByDay } from '@/hooks/useTasksByDay';
 import { useTasksForDate } from '@/hooks/useTasksForDate';
+import { useDbQuery } from '@/lib/useDbQuery';
 import {
   addDays,
   addMonths,
@@ -47,6 +49,7 @@ const STRIP_INNER_H = 60; // one row of day cells: 54 tall + 3 margin above and 
 const CARD_CHROME = 11; // outline (1.5 x 2) + teal padding (4 x 2) around the calendar's cream track
 const BUTTONS_H = 100; // the Add Task / Set Exam bar drawn over the bottom of the screen
 const EXPAND_MS = 380;
+const loadExams = async () => examsQuery();
 
 
 export default function PlannerScreen() {
@@ -67,6 +70,15 @@ export default function PlannerScreen() {
   const days = weekDays(weekStart);
 
   const { byId } = useSubjects();
+  const exams = useDbQuery(loadExams, [] as Awaited<ReturnType<typeof loadExams>>);
+  const examsByDay = new Map<number, { id: string; subject: string; color: string }[]>();
+  for (const exam of exams) {
+    const subject = byId.get(exam.subjectId);
+    if (!subject) continue;
+    const onDay = examsByDay.get(exam.examDate) ?? [];
+    onDay.push({ id: exam.id, subject: subject.name, color: subject.color });
+    examsByDay.set(exam.examDate, onDay);
+  }
   const { todo, finished } = useTasksForDate(selectedDate);
   const { todo: todayTodo } = useTasksForDate(today);
   const markedDays = useTaskDays(days[0], days[6]);
@@ -76,6 +88,7 @@ export default function PlannerScreen() {
   const weeks = monthWeeks(selectedDate); // TODO: follow the "first day of week" setting
   const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const progress = useSharedValue(0); // 0 = week strip, 1 = full month
 
   // Leaving the tab resets the page (scrolled to the top, week view), so it looks fresh when you come back.
   useFocusEffect(
@@ -89,7 +102,6 @@ export default function PlannerScreen() {
       [],
     ),
   );
-  const progress = useSharedValue(0); // 0 = week strip, 1 = full month
 
   useEffect(() => {
     progress.set(withTiming(expanded ? 1 : 0, { duration: EXPAND_MS, easing: Easing.out(Easing.cubic) }));
@@ -157,7 +169,7 @@ export default function PlannerScreen() {
           <View style={styles.dayStrip}>
             <Animated.View style={[styles.dayStripInner, trackStyle]}>
               <Animated.View style={weekRowStyle} pointerEvents={expanded ? 'none' : 'auto'}>
-                <DayRow days={days} selectedDate={selectedDate} markedDays={markedDays} onSelect={setSelectedDate} />
+                <DayRow days={days} selectedDate={selectedDate} markedDays={markedDays} examDays={new Set(examsByDay.keys())} onSelect={setSelectedDate} />
               </Animated.View>
               <Animated.View
                 style={[styles.monthLayer, { height: monthInnerH }, monthStyle]}
@@ -166,6 +178,7 @@ export default function PlannerScreen() {
                   weeks={weeks}
                   selectedDate={selectedDate}
                   tasksByDay={tasksByDay}
+                  examsByDay={examsByDay}
                   subjectsById={byId}
                   onSelect={(day) => {
                     setSelectedDate(day);

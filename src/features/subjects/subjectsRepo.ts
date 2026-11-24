@@ -41,13 +41,6 @@ export async function renameSubject(id: string, name: string): Promise<void> {
   bumpData();
 }
 
-export async function updateSubjectUrgency(id: string, urgency: number): Promise<void> {
-  if (!Number.isInteger(urgency) || urgency < 1 || urgency > 5) throw new Error('Choose an urgency from 1 to 5.');
-  await db.update(subjects).set({ urgency, updatedAt: Date.now() })
-    .where(and(eq(subjects.id, id), isNull(subjects.deletedAt)));
-  bumpData();
-}
-
 /**
  * Soft delete (sync-ready). Its exam plans, upcoming planned sessions and unfinished tasks go with it.
  * Finished tasks and past focus time stay in statistics.

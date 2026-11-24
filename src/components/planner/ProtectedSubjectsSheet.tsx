@@ -15,7 +15,7 @@ export function ProtectedSubjectsSheet({ visible, subjects, selected, saving, on
         <Pressable onPress={onClose} disabled={saving} accessibilityLabel="Save protected subjects and return" style={styles.header}>
           <Icon name="chevronLeft" size={20} /><Text variant="heading">{saving ? 'Saving…' : 'Subjects'}</Text>
         </Pressable>
-        <Text variant="small" style={styles.hint}>Selected subjects keep their scheduled sessions when this study schedule regenerates.</Text>
+        <Text variant="small" style={styles.hint}>Selected subjects keep their upcoming sessions at the same dates and times when you regenerate All Exams. Other sessions fit around them.</Text>
         <ScrollView>{subjects.map(subject => {
           const checked = selected.includes(subject.id);
           return <Pressable key={subject.id} onPress={() => onToggle(subject.id)} disabled={saving} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`Keep ${subject.name} sessions in place`} style={styles.subjectRow}>

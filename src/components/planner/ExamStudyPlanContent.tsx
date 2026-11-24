@@ -1,7 +1,9 @@
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
+import { PlanAccessCard, type StudyPlanAccess } from '@/components/planner/PlanAccessCard';
 import { Segmented } from '@/components/ui/Segmented';
+import { AudioAmbienceSettings } from '@/components/planner/AudioAmbienceSettings';
 import { Text } from '@/components/ui/Text';
 import type { ExamPreferences } from '@/features/planner/examsRepo';
 import { studyWindows } from '@/features/planner/engine';
@@ -19,20 +21,22 @@ export type StudyPlanCard = {
 type SettingKey = 'focusCount' | 'focusMin' | 'breakMin' | 'longBreakMin' | 'dailyGoalMin';
 export type ExamStudyPlanContentProps = {
   title: string; subjectName: string; subjectColor: string; difficulty: number;
-  urgency: 'default' | 'exam'; examDate: number; today: number; selectedDate: number;
+  examDate: number; today: number; selectedDate: number;
   prefs: ExamPreferences; excluded: number[]; editingDates: boolean; extraOpen: boolean;
   sessions: StudyPlanCard[]; shortfall: number; error: string; status: string;
   saving: boolean; loadingPreview: boolean; protectedCount: number;
   deleting?: boolean;
+  access: StudyPlanAccess;
   actions: {
     back: () => void; settings: () => void; subject: () => void;
-    difficulty: (value: number) => void; defaultUrgency: () => void; examDate: () => void;
+    difficulty: (value: number) => void; examDate: () => void; preferences: () => void;
     scope: (scope: 'this' | 'all') => void; changeCalendar: (direction: number) => void;
     selectDate: (date: number) => void; editDates: () => void; cancelDates: () => void; saveDates: () => void;
     pickStart: () => void; pickEnd: () => void; adjust: (key: SettingKey, direction: number) => void;
     toggleExtra: () => void; toggleWeekday: (day: number) => void;
     protectSubjects: () => void; regenerate: () => void; save: () => void;
     deletePlan: () => void;
+    upgrade: () => void; rescheduleMissed: () => void;
   };
 };
 
@@ -42,10 +46,6 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
   const first = startOfWeek(p.selectedDate);
   const dates = Array.from({ length: 14 }, (_, i) => addDays(first, i));
   const daysLeft = Math.max(0, Math.round((p.examDate - p.today) / 86400000));
-  const time = (value: number) => {
-    const h = Math.floor(value / 60) % 24;
-    return `${h % 12 || 12}:${String(value % 60).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
-  };
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <View pointerEvents="none" style={styles.hero} />
@@ -67,22 +67,19 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
       <View style={styles.configuration}>
         <Text variant="small" style={styles.label}>Difficulty</Text>
         <Segmented options={difficultyOptions} value={String(p.difficulty <= 2 ? 1 : p.difficulty >= 4 ? 5 : 3)} onChange={value => actions.difficulty(Number(value))} />
-        <Text variant="small" style={styles.label}>Urgency</Text>
-        <View style={styles.urgencyRow}>
-          <Pressable style={styles.defaultUrgency} onPress={actions.defaultUrgency} accessibilityRole="button" accessibilityState={{ selected: p.urgency === 'default' }}>
-            <NeoBox radius={radii.pill} offset={2} backgroundColor={p.urgency === 'default' ? palette.text : palette.surface} style={styles.urgencyPill}>
-              <Text variant="smallStrong" color={p.urgency === 'default' ? palette.surface : palette.text}>Default</Text>
-            </NeoBox>
-          </Pressable>
-          <Pressable style={styles.examUrgency} onPress={actions.examDate} accessibilityRole="button" accessibilityLabel="Change exam date" accessibilityState={{ selected: p.urgency === 'exam' }}>
-            <NeoBox radius={radii.pill} offset={2} backgroundColor={p.urgency === 'exam' ? palette.text : palette.surface} style={styles.urgencyPill}>
-              <Icon name="calendar" size={14} color={p.urgency === 'exam' ? palette.surface : palette.text} />
-              <Text variant="smallStrong" color={p.urgency === 'exam' ? palette.surface : palette.text}>{new Date(p.examDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</Text>
+        <Text variant="small" style={styles.label}>Exam date</Text>
+        <View style={styles.examDateRow}>
+          <Pressable style={styles.examDateControl} onPress={actions.examDate} accessibilityRole="button" accessibilityLabel="Change exam date">
+            <NeoBox radius={radii.pill} offset={2} backgroundColor={palette.text} style={styles.examDatePill}>
+              <Icon name="calendar" size={14} color={palette.surface} />
+              <Text variant="smallStrong" color={palette.surface}>{new Date(p.examDate).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' })}</Text>
             </NeoBox>
           </Pressable>
         </View>
         {!!p.status && <Text accessibilityLiveRegion="polite" variant="caption" style={styles.status}>{p.status}</Text>}
       </View>
+
+      <PlanAccessCard access={p.access} busy={p.saving} onUpgrade={actions.upgrade} onReschedule={actions.rescheduleMissed} />
 
       <NeoBox radius={18} offset={1} shadowColor={colors.divider} backgroundColor={palette.surface} style={styles.card}>
         <View style={styles.between}>
@@ -142,22 +139,14 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
             </View>
           </NeoBox>) : <Text variant="caption" style={styles.empty}>{p.selectedDate === p.examDate ? 'Exam day. Your study sessions are scheduled before this date.' : 'No study sessions on this day. Select a purple date to view your plan.'}</Text>}
           {prefs.scope === 'all' && <Pressable onPress={actions.protectSubjects} style={styles.protectedRow} accessibilityRole="button">
-            <Text variant="caption" style={[styles.quiet, styles.grow]}>Select subjects that shouldn’t be moved{p.protectedCount ? ` (${p.protectedCount})` : ''}</Text><Icon name="chevronRight" size={15} color={palette.muted} />
+            <Text variant="caption" style={[styles.quiet, styles.grow]}>Keep existing sessions in place{p.protectedCount ? ` (${p.protectedCount} subjects)` : ''}</Text><Icon name="chevronRight" size={15} color={palette.muted} />
           </Pressable>}
         </View>}
 
-        <View style={styles.range}>
-          <Text variant="caption" style={styles.quiet}>Study range</Text>
-          <View style={styles.row}>
-            <Pressable onPress={actions.pickStart} accessibilityLabel="Study start time"><NeoBox radius={12} offset={1} backgroundColor={colors.welcomeTeal} style={styles.timePill}><Text variant="smallStrong">{time(prefs.start)}</Text></NeoBox></Pressable>
-            <Text variant="caption" style={styles.quiet}>to</Text>
-            <Pressable onPress={actions.pickEnd} accessibilityLabel={`Study end time${prefs.end < prefs.start ? ', next day' : ''}`}><NeoBox radius={12} offset={1} backgroundColor={colors.buttonPeach} style={styles.timePill}><Text variant="smallStrong">{time(prefs.end)}</Text>{prefs.end < prefs.start && <Text variant="caption">Next day</Text>}</NeoBox></Pressable>
-          </View>
-        </View>
-        <Text variant="caption" style={styles.scopeHint}>{prefs.end < prefs.start
-          ? 'Ends the next morning. Study days refer to the day you start; after-midnight sessions appear on the next date. Excluded dates and exam day stay free.'
-          : 'Your plan adjusts automatically within this range, including time for breaks.'}</Text>
-        {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.shortfall} focus blocks won’t fit before the exam. Adjust your study range or daily goal.</Text>}
+        <Pressable onPress={actions.preferences} style={styles.protectedRow} accessibilityRole="button" accessibilityLabel="Change planner study slots in Preferences">
+          <Text variant="caption" style={[styles.quiet, styles.grow]}>Change your study times in Preferences</Text><Icon name="chevronRight" size={15} color={palette.muted} />
+        </Pressable>
+        {!!p.shortfall && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.shortfall} focus blocks won’t fit before the exam. Free up study time or adjust the plan, then regenerate.</Text>}
         {!!p.error && <Text variant="caption" accessibilityLiveRegion="polite" style={styles.warning}>{p.error}</Text>}
         <View style={styles.divider} />
         {!p.editingDates && prefs.scope === 'all' && <><NeoButton label={p.saving ? 'Updating schedule…' : 'Regenerate Schedule'} backgroundColor={colors.inkSoft} textColor={palette.surface} style={styles.regenerate} contentStyle={styles.buttonFace} icon={<Icon name="sync" size={18} color={palette.surface} />} disabled={p.saving || p.loadingPreview || !!p.error} onPress={actions.regenerate} /><View style={styles.divider} /></>}
@@ -168,16 +157,7 @@ export function ExamStudyPlanContent(p: ExamStudyPlanContentProps) {
         <SettingRow label="Break time" value={`${prefs.breakMin} min`} onMinus={() => actions.adjust('breakMin', -1)} onPlus={() => actions.adjust('breakMin', 1)} />
         <SettingRow label="Long break time" value={`${prefs.longBreakMin} min`} onMinus={() => actions.adjust('longBreakMin', -1)} onPlus={() => actions.adjust('longBreakMin', 1)} />
         <Pressable onPress={actions.toggleExtra} style={styles.additional} accessibilityRole="button" accessibilityState={{ expanded: p.extraOpen }}><Text variant="caption" style={styles.quiet}>Additional settings</Text><Icon name={p.extraOpen ? 'chevronUp' : 'chevronDown'} size={15} color={palette.muted} /></Pressable>
-        {p.extraOpen && <>
-          <SettingRow label="Daily focus goal" value={`${prefs.dailyGoalMin ?? prefs.focusCount * prefs.focusMin} min`} onMinus={() => actions.adjust('dailyGoalMin', -1)} onPlus={() => actions.adjust('dailyGoalMin', 1)} />
-          <Text variant="caption" style={styles.quiet}>Study days</Text>
-          <View style={styles.weekRow}>{['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((label, i) => {
-            const day = (i + 1) % 7;
-            const selected = !prefs.studyDays || prefs.studyDays.includes(day);
-            return <Pressable key={i} onPress={() => actions.toggleWeekday(day)} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} accessibilityLabel={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]} style={[styles.studyDay, selected && styles.toggleSelected]}><Text variant="caption">{label}</Text></Pressable>;
-          })}</View>
-            <Text variant="caption" style={styles.scopeHint}>The focus goal is shared across exams each calendar day. Harder exams receive a larger share of available study time. Difficulty applies only to the current exam.</Text>
-        </>}
+        {p.extraOpen && <AudioAmbienceSettings />}
       </NeoBox>
       <View style={styles.save}><NeoButton label={p.saving ? 'Saving…' : 'Save study plan'} backgroundColor={palette.button} textColor={palette.surface} icon={<Icon name="download" size={19} color={palette.surface} />} contentStyle={styles.saveButtonFace} disabled={p.saving || p.loadingPreview || p.editingDates || !!p.error} onPress={actions.save} /></View>
       <Pressable onPress={actions.deletePlan} disabled={p.saving || p.deleting} accessibilityRole="button" accessibilityLabel="Delete this study plan" style={styles.deletePlan}>
@@ -204,7 +184,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs + 2 }, between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm }, grow: { flex: 1 },
   examRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: borders.thin, borderColor: palette.border }, examTitle: { flex: 1, fontSize: 17, lineHeight: 24 },
   subject: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, maxWidth: '44%', borderWidth: borders.thin, borderColor: palette.border, borderRadius: radii.pill, paddingHorizontal: spacing.sm + 2, paddingVertical: spacing.xs }, subjectText: { flexShrink: 1, fontSize: 10, letterSpacing: 0.3 },
-  configuration: { gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.md }, label: { fontSize: 13, lineHeight: 17 }, urgencyRow: { flexDirection: 'row', gap: spacing.sm }, defaultUrgency: { flex: 1 }, examUrgency: { flex: 1.4 }, urgencyPill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.sm }, status: { fontFamily: fonts.medium, textAlign: 'center', color: palette.muted, marginTop: spacing.xs },
+  configuration: { gap: spacing.sm, paddingHorizontal: spacing.xs, paddingBottom: spacing.md }, label: { fontSize: 13, lineHeight: 17 }, examDateRow: { flexDirection: 'row', gap: spacing.sm }, examDateControl: { flex: 1 }, examDatePill: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.sm }, status: { fontFamily: fonts.medium, textAlign: 'center', color: palette.muted, marginTop: spacing.xs },
   card: { padding: spacing.lg, gap: spacing.sm, borderColor: palette.border },
   toggle: { flexDirection: 'row', borderWidth: borders.thin, borderColor: palette.border, borderRadius: radii.pill, backgroundColor: palette.toggle, padding: 3 }, toggleSlot: { flex: 1 }, togglePill: { borderWidth: borders.thin, borderColor: 'transparent', borderRadius: radii.pill, alignItems: 'center', paddingVertical: spacing.xs }, toggleSelected: { borderColor: palette.border, backgroundColor: colors.welcomeTeal },
   scopeHint: { fontFamily: fonts.medium, fontSize: 11, lineHeight: 15, textAlign: 'center', color: palette.muted, paddingHorizontal: spacing.xs }, quiet: { color: palette.muted, fontFamily: fonts.medium }, divider: { backgroundColor: palette.divider, height: 1, marginVertical: spacing.xs },

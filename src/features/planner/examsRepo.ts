@@ -7,6 +7,12 @@ import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
 import { bumpData } from '@/stores/dataVersion';
 import { generateSchedule, sessionMinutes, type BusyTime, type SchedulePlan } from './engine';
 import { cancelStudyPlanWork } from './studyPlanLifecycle';
+import { buildInsights, type PlanInsights } from './insights';
+import {
+  SUBSCRIPTION_SETTING_KEY, entitlementsFor, generationsAreLimited,
+  parseSubscription, resolveTier, type Entitlements,
+} from '@/features/subscription/entitlements';
+import { reserveGeneration } from '@/features/subscription/generationQuotaRepo';
 import type { Run, TimerConfig } from '@/features/timer/session';
 
 export const examsQuery = () => db.select().from(studyPlans)
@@ -75,7 +81,7 @@ function validateDifficulty(difficulty: number) {
   if (!Number.isInteger(difficulty) || difficulty < 1 || difficulty > 5) throw new Error('Choose an exam difficulty from 1 to 5.');
 }
 
-/** Only this exam's priority changes, even when other exams have the same subject. */
+/** Only this exam's difficulty changes, even when other exams have the same subject. */
 export async function updateExamDifficulty(id: string, difficulty: number): Promise<void> {
   validateDifficulty(difficulty);
   const changed = db.update(studyPlans).set({ difficulty, updatedAt: Date.now() })
@@ -142,10 +148,16 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
   const activeSubjects = db.select().from(subjects).where(isNull(subjects.deletedAt)).all();
   const allPlans = db.select().from(studyPlans).all();
   const knownPlanIds = new Set(allPlans.map(plan => plan.id));
-  const exams = allPlans.filter(e => e.deletedAt === null && e.status === 'active' && e.examDate >= today
+  const allExams = allPlans.filter(e => e.deletedAt === null && e.status === 'active' && e.examDate >= today
     && activeSubjects.some(s => s.id === e.subjectId));
   const allSettings = db.select().from(settings).all();
   const stored = new Map(allSettings.map(s => [s.key, s.value]));
+  // One engine for everyone: the tier only decides which capabilities are switched on.
+  const entitlements = entitlementsAt(stored.get(SUBSCRIPTION_SETTING_KEY), now.getTime());
+  // Every active exam is scheduled together; Free students reach this only by asking for a generation.
+  const exams = allExams;
+  // Free students recover missed sessions themselves (Regenerate); Premium recovers them automatically.
+  const autoRecovery = entitlements.autoMissedRecovery || !!override;
   const protectedSubjectIds = readJson<string[]>(stored.get('planner.protectedSubjects') ?? '[]', []);
   const old = db.select().from(plannedSessions).where(isNull(plannedSessions.deletedAt)).all();
   const allTasks = db.select().from(tasks).where(isNull(tasks.deletedAt)).all();
@@ -189,13 +201,15 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
       const frozen = { ...DEFAULT_POMODORO, ...p, ...readJson(stored.get(`session.settings:${row.id}`) ?? '{}', {}) };
       const end = start + sessionMinutes(row.blocks, frozen);
       const running = timer.status !== 'idle' && timer.plannedSessionId === row.id;
-      const keep = row.completedBlocks >= row.blocks || running || ((row.locked || protectedSubjectIds.includes(row.subjectId)) && row.date >= today)
+      const heldMissed = !autoRecovery && !row.excluded && row.completedBlocks < row.blocks
+        && (row.date < today || (row.date === today && end <= currentMinute));
+      const keep = row.completedBlocks >= row.blocks || running || heldMissed || ((row.locked || protectedSubjectIds.includes(row.subjectId)) && row.date >= today)
         || (row.completedBlocks > 0 && (row.date > today || (row.date === today && end > currentMinute)))
         || (!editing && row.date === today && start <= currentMinute && end > currentMinute && !row.excluded);
       credited += keep ? row.blocks : row.completedBlocks;
       if (keep) fixed.add(row.id);
       if (keep || row.completedBlocks > 0) retained.add(row.id);
-      if (keep && (row.date >= today || running) && !row.excluded) {
+      if (keep && !heldMissed && (row.date >= today || running) && !row.excluded) {
         reservedSessions.add(row.id);
         busy.push({ date: Math.max(row.date, today), startMinute: running && row.date < today ? currentMinute : start,
         endMinute: running ? Math.max(end, currentMinute + sessionMinutes(Math.max(1, row.blocks - row.completedBlocks), frozen)) : end,
@@ -206,9 +220,8 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
           endMinute: start + sessionMinutes(row.completedBlocks, frozen), focusMinutes: row.completedBlocks * frozen.focusMin });
       }
     }
-    const subject = activeSubjects.find(s => s.id === exam.subjectId)!;
     plans.push({ ...p, id: exam.id, subjectId: exam.subjectId, examDate: exam.examDate,
-      difficulty: exam.difficulty, urgency: subject.urgency, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
+      difficulty: exam.difficulty, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
   }
   const externalTasks = allTasks.filter(t => !(t.source === 'generated' && knownPlanIds.has(t.planId ?? '')));
   for (const task of externalTasks) busy.push({ date: task.date, startMinute: task.startMinute, endMinute: task.endMinute });
@@ -248,7 +261,12 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
     : readJson(stored.get('planner.dailyGoalMin') ?? 'null', null as number | null)
       ?? Math.max(0, ...[...prefs.values()].map(p => p.dailyGoalMin ?? p.focusCount * p.focusMin));
   const result = generateSchedule({ now, plans, busy, dailyGoalMin });
-  return { ...result, prefs, old, allTasks, stored, retained, fixed, managedIds, exams, protectedSubjectIds };
+  return { ...result, prefs, old, allTasks, stored, retained, fixed, managedIds, exams, protectedSubjectIds, entitlements, autoRecovery };
+}
+
+/** The tier's capabilities from the locally cached subscription (Free when missing, unreadable or expired). */
+function entitlementsAt(raw: string | undefined, now: number): Entitlements {
+  return entitlementsFor(resolveTier(parseSubscription(raw), now));
 }
 
 export async function previewStudySchedule(id: string, prefs: ExamPreferences) {
@@ -280,6 +298,11 @@ function persistSchedule(now: Date, override?: { id: string; prefs: ExamPreferen
       || !liveSubjects.has(plan.subjectId) || plan.examDate < startOfDay(now)).map(plan => plan.id);
     const cleanup = cancelStudyPlanWork(tx, inactiveIds, now.getTime(), false);
     if (cleanup.changed) changed = true;
+    // Free students keep their exams and sessions as they are; a schedule is only built when they ask for one.
+    const plan = tx.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).get();
+    if (!override && !entitlementsAt(plan?.value, now.getTime()).autoScheduling) {
+      return { sessions: [] as ReturnType<typeof calculate>['sessions'], shortfallBlocks: 0, shortfallByPlan: {} as Record<string, number> };
+    }
     const snapshot = calculate(now, override);
     const stamp = now.getTime();
     const putSetting = (key: string, value: unknown) => {
@@ -330,7 +353,7 @@ function persistSchedule(now: Date, override?: { id: string; prefs: ExamPreferen
         // A partially finished missed run keeps its completed work; only its remaining blocks move.
         const timer = readJson<{ status?: string; plannedSessionId?: string }>(snapshot.stored.get('timer.state') ?? '{}', {});
         const running = timer.status !== 'idle' && timer.plannedSessionId === row.id;
-        const expired = !running && row.completedBlocks > 0 && row.completedBlocks < row.blocks && !row.locked && !snapshot.protectedSubjectIds.includes(row.subjectId)
+        const expired = snapshot.autoRecovery && !running && row.completedBlocks > 0 && row.completedBlocks < row.blocks && !row.locked && !snapshot.protectedSubjectIds.includes(row.subjectId)
           && (row.date < startOfDay(now) || (row.date === startOfDay(now) && (row.startMinute ?? p.start) + sessionMinutes(row.blocks, frozen) <= now.getHours() * 60 + now.getMinutes()));
         if (expired) {
           tx.update(plannedSessions).set({ blocks: row.completedBlocks, updatedAt: stamp }).where(eq(plannedSessions.id, row.id)).run();
@@ -349,9 +372,14 @@ function persistSchedule(now: Date, override?: { id: string; prefs: ExamPreferen
 /** Idempotent: unchanged schedules keep their IDs and don't trigger another database write. */
 export async function regenerateSchedules(now = new Date()) { return persistSchedule(now); }
 
+/**
+ * Generates and saves the schedule. Premium is unlimited; a Free student uses one of their monthly
+ * generations, which the server counts per account (GenerationLimitError / GenerationUnavailableError).
+ */
 export async function saveStudySchedule(id: string, prefs: ExamPreferences) {
   validate(prefs);
   if (!await getExam(id)) throw new Error('This exam no longer exists.');
+  if (generationsAreLimited(await getEntitlements())) await reserveGeneration();
   return persistSchedule(new Date(), { id, prefs });
 }
 
@@ -372,4 +400,43 @@ export async function saveProtectedSubjectIds(ids: string[]) {
     .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: Date.now() } });
   await regenerateSchedules();
   bumpData();
+}
+
+// ---------------------------------------------------------------------------
+// Free vs Premium
+// ---------------------------------------------------------------------------
+
+/** The student's current capabilities, from the locally cached subscription (Free when unknown/expired). */
+export async function getEntitlements(now = Date.now()): Promise<Entitlements> {
+  const rows = await db.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).limit(1);
+  return entitlementsFor(resolveTier(parseSubscription(rows[0]?.value), now));
+}
+
+export type ExamAccess = {
+  entitlements: Entitlements;
+};
+
+export async function getExamAccess(_id: string, now = Date.now()): Promise<ExamAccess> {
+  const entitlements = await getEntitlements(now);
+  return { entitlements };
+}
+
+/** Basic progress for everyone; missed-session, time-left and workload-fit analysis for Premium. */
+export async function getPlanInsights(id: string, now = new Date()): Promise<PlanInsights> {
+  const [entitlements, sessions, prefs, shortfallRow] = await Promise.all([
+    getEntitlements(now.getTime()), listPlanSessions(id), getExamPreferences(id),
+    db.select().from(settings).where(eq(settings.key, `exam-shortfall:${id}`)).limit(1),
+  ]);
+  const exam = await getExam(id);
+  if (!exam) throw new Error('This exam no longer exists.');
+  const p = { ...DEFAULT_EXAM_PREFERENCES, ...prefs };
+  const frozen = { ...DEFAULT_POMODORO, ...p };
+  return buildInsights({
+    tier: entitlements.tier, examDate: exam.examDate, today: startOfDay(now),
+    currentMinute: now.getHours() * 60 + now.getMinutes(),
+    totalBlocks: prefs?.totalBlocks ?? sessions.reduce((sum, s) => sum + s.blocks, 0),
+    shortfallBlocks: shortfallRow.length ? readJson(shortfallRow[0].value, 0) : 0,
+    sessions: sessions.map(s => ({ date: s.date, blocks: s.blocks, completedBlocks: s.completedBlocks,
+      endMinute: (s.startMinute ?? p.start) + sessionMinutes(s.blocks, frozen) })),
+  });
 }

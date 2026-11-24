@@ -5,10 +5,9 @@ const today = new Date(2026, 10, 23, 8);
 const day = startOfDay(today);
 const plan = (changes: Partial<SchedulePlan> = {}): SchedulePlan => ({
   id: 'math', subjectId: 'math', examDate: addDays(day, 3), remainingBlocks: 12,
-  difficulty: 3, urgency: 3, start: 19 * 60, end: 21 * 60,
+  difficulty: 3, start: 19 * 60, end: 21 * 60,
   focusMin: 25, focusCount: 4, breakMin: 5, longBreakMin: 30, excluded: [], ...changes,
 });
-
 describe('student scheduling', () => {
   it('uses both sides of midnight, with recovery carried into the next date', () => {
     const result = generateSchedule({ now: today, plans: [plan({ start: 22 * 60, end: 2 * 60, remainingBlocks: 8,
@@ -87,7 +86,6 @@ describe('student scheduling', () => {
       expect(new Set(sessions.map(s => s.subjectId)).size).toBe(2);
       for (let i = 1; i < sessions.length; i++) expect(sessions[i].startMinute).toBeGreaterThanOrEqual(sessions[i - 1].endMinute + 5);
     }
-    expect(result.sessions[0].subjectId).toBe('science');
     expect(result.shortfallBlocks).toBe(12);
   });
 
@@ -133,7 +131,7 @@ describe('student scheduling', () => {
     expect(sessionMinutes(3, plan({ focusMin: 60, focusCount: 8 }))).toBe(215);
   });
 
-  it('uses an earlier availability window even if a later window has a higher priority', () => {
+  it('uses an earlier availability window even if a later window has a harder exam', () => {
     const result = generateSchedule({ now: today, dailyGoalMin: 100, busy: [], plans: [
       plan({ id: 'late', start: 19 * 60, end: 21 * 60, remainingBlocks: 2, difficulty: 5 }),
       plan({ id: 'early', start: 9 * 60, end: 11 * 60, remainingBlocks: 2, difficulty: 1 }),
@@ -144,7 +142,7 @@ describe('student scheduling', () => {
 
   it('generates ordinary study without an exam and keeps locked blocks intact', () => {
     const locked = { date: '2026-11-23', subjectId: 'math', blocks: 1, locked: true };
-    const result = generatePlan({ today, subjects: [{ id: 'math', name: 'Math', urgency: 3 }],
+    const result = generatePlan({ today, subjects: [{ id: 'math', name: 'Math' }],
       window: { startMinute: 19 * 60, endMinute: 21 * 60 }, studyDays: [1, 2, 3, 4, 5], dailyGoalMin: 50,
       excludedDates: [], existing: [locked] });
     expect(result.sessions).toContainEqual(locked);

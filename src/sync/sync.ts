@@ -17,7 +17,7 @@ import {
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
 import { refreshSessionReminders } from '@/features/timer/reminders';
-import { getSubscription } from '@/features/account/subscriptionRepo';
+import { refreshSubscription } from '@/features/subscription/subscriptionRepo';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -56,7 +56,7 @@ const TABLES: SyncedTable[] = [
 ];
 
 /** Settings that belong to this phone only and are never uploaded. */
-const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state']); // timer.state = the Pomodoro running on this phone
+const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state', 'subscription.plan']); // timer.state = the Pomodoro running on this phone
 
 const PAGE = 500;
 
@@ -91,6 +91,7 @@ export function syncNow(): Promise<SyncResult> {
       again = false;
       try {
         result = await syncOnce();
+        if (result === 'ok') await refreshSubscription();
       } catch (e) {
         result = isNetworkError(e) ? 'offline' : 'error';
         if (__DEV__) console.warn(`[sync] failed (${result}, will retry later):`, e);
@@ -190,7 +191,6 @@ async function syncOnce(): Promise<SyncResult> {
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
   void refreshSessionReminders();
-  void getSubscription().catch(() => {}); // Premium status from the cloud subscriptions table
   return 'ok';
 }
 

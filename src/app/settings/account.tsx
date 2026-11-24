@@ -11,7 +11,7 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { MONTHS } from '@/lib/dateHelpers';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { FREE_SUBSCRIPTION, getSubscription } from '@/features/account/subscriptionRepo';
+import { useEntitlements } from '@/features/subscription/useEntitlements';
 import { showSignOutInfo } from '@/features/account/accountAlerts';
 import { EmailTakenError, getProfile, updateProfile, type Profile } from '@/features/account/accountRepo';
 import { AuthError, deleteAccount } from '@/lib/auth';
@@ -25,8 +25,8 @@ const EMPTY_PROFILE: Profile = { id: '', name: '', email: '', pictureUri: null, 
 
 export default function AccountSettingsScreen() {
   const profile = useDbQuery(getProfile, EMPTY_PROFILE);
-  // Re-reads Premium from Supabase; it updates profile.plan, which the screen shows.
-  useDbQuery(getSubscription, FREE_SUBSCRIPTION);
+  // Free / Premium from the Supabase subscriptions table (cached on the phone, refreshed after each sync).
+  const isPremium = useEntitlements().tier === 'premium';
   const [editingName, setEditingName] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [name, setName] = useState('');
@@ -209,9 +209,9 @@ export default function AccountSettingsScreen() {
             paddingHorizontal: 10,
             paddingVertical: 2,
           }}>
-          {profile.plan === 'pro' && <Icon name="crown" size={12} color={colors.gold} strokeWidth={1} />}
+          {isPremium && <Icon name="crown" size={12} color={colors.gold} strokeWidth={1} />}
           <Text variant="label" color={colors.white}>
-            {profile.plan === 'pro' ? 'PRO' : 'FREE'}
+            {isPremium ? 'PRO' : 'FREE'}
           </Text>
         </View>
         <Text variant="caption" color={colors.muted} style={{ fontSize: 13 }}>

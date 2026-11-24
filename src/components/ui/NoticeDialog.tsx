@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { Animated, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useQuickFade } from './useQuickFade';
 import { useNotice } from '@/stores/notice';
@@ -15,9 +15,9 @@ export function NoticeDialog() {
   const current = useNotice((s) => s.notice);
   const hide = useNotice((s) => s.hide);
   // Keep showing the last notice while it fades out (the store clears it right away).
-  const last = useRef(current);
-  if (current) last.current = current;
-  const notice = current ?? last.current;
+  const [last, setLast] = useState(current);
+  if (current && current !== last) setLast(current);
+  const notice = current ?? last;
   const visible = current !== null;
   const fade = useQuickFade(visible && Boolean(notice?.actions));
 

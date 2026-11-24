@@ -9,11 +9,13 @@ export function DayRow({
   days,
   selectedDate,
   markedDays,
+  examDays,
   onSelect,
 }: {
   days: number[];
   selectedDate: number;
   markedDays: Set<number>;
+  examDays: Set<number>;
   onSelect: (day: number) => void;
 }) {
   return (
@@ -23,11 +25,14 @@ export function DayRow({
           const fg = active ? colors.white : colors.ink;
           const date = new Date(day);
           return (
-            <Pressable key={day} onPress={() => onSelect(day)} style={[styles.day, active && styles.dayActive]}>
+            <Pressable key={day} onPress={() => onSelect(day)} accessibilityRole="button"
+              accessibilityLabel={`${date.toDateString()}${examDays.has(day) ? ', exam' : ''}`}
+              style={[styles.day, active && styles.dayActive]}>
               <Text variant="captionStrong" color={fg}>{DAY_NAMES[date.getDay()]}</Text>
               <Text variant="smallStrong" color={fg}>{date.getDate()}</Text>
-              {active && <View style={[styles.dot, { backgroundColor: colors.white }]} />}
-              {!active && markedDays.has(day) && <View style={[styles.dot, { backgroundColor: dotColor }]} />}
+              {examDays.has(day) ? <Text variant="label" color={active ? colors.white : colors.terracottaDark} style={styles.examLabel}>EXAM</Text>
+                : active ? <View style={[styles.dot, { backgroundColor: colors.white }]} />
+                  : markedDays.has(day) && <View style={[styles.dot, { backgroundColor: dotColor }]} />}
             </Pressable>
           );
         })}
@@ -42,4 +47,5 @@ const styles = StyleSheet.create({
   day: { width: 42, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   dayActive: { backgroundColor: colors.ink },
   dot: { width: 5, height: 5, borderRadius: 3, position: 'absolute', bottom: 4 },
+  examLabel: { fontSize: 8, lineHeight: 10, letterSpacing: 0 },
 });

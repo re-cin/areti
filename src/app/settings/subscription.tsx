@@ -8,7 +8,8 @@ import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { showComingSoon } from '@/features/account/accountAlerts';
-import { FREE_SUBSCRIPTION, getSubscription, type Subscription } from '@/features/account/subscriptionRepo';
+import { getSetting } from '@/features/settings/settingsRepo';
+import { parseSubscription, resolveTier, SUBSCRIPTION_SETTING_KEY } from '@/features/subscription/entitlements';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
@@ -43,8 +44,8 @@ export default function SubscriptionScreen() {
   const [plan, setPlan] = useState<PlanId>('yearly');
   const [studentDiscount, setStudentDiscount] = useState(false);
   const selected = PLANS.find((p) => p.id === plan) ?? PLANS[0];
-  // Premium status comes from the Supabase subscriptions table (saved on the phone for offline).
-  const sub = useDbQuery(getSubscription, FREE_SUBSCRIPTION);
+  // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
+  const sub = useDbQuery(loadPremium, NOT_PREMIUM);
 
   const goPremium = () =>
     showNotice({
@@ -198,14 +199,21 @@ export default function SubscriptionScreen() {
   );
 }
 
+type PremiumInfo = { isPremium: boolean; expiresAt: number | null };
+const NOT_PREMIUM: PremiumInfo = { isPremium: false, expiresAt: null };
+
+/** Reads the cached subscription (see src/features/subscription/subscriptionRepo.ts). */
+async function loadPremium(): Promise<PremiumInfo> {
+  const raw = await getSetting<unknown>(SUBSCRIPTION_SETTING_KEY, null);
+  const record = parseSubscription(raw === null ? null : JSON.stringify(raw));
+  return { isPremium: resolveTier(record, Date.now()) === 'premium', expiresAt: record?.expiresAt ?? null };
+}
+
 const dateText = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
-function PremiumStatus({ sub }: { sub: Subscription }) {
-  const end = sub.periodEnd ? dateText(sub.periodEnd) : null;
-  let line = end ? `Renews on ${end}.` : 'Active.';
-  if (sub.status === 'trialing') line = end ? `Your free trial ends on ${end}.` : 'You are on a free trial.';
-  if (sub.status === 'canceled') line = end ? `Canceled. Premium stays on until ${end}.` : 'Canceled.';
+function PremiumStatus({ sub }: { sub: PremiumInfo }) {
+  const line = sub.expiresAt ? `Premium is on until ${dateText(sub.expiresAt)}.` : 'Premium is active.';
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
       <View style={styles.statusHead}>
@@ -213,7 +221,6 @@ function PremiumStatus({ sub }: { sub: Subscription }) {
         <Text style={styles.statusTitle}>You&apos;re Premium</Text>
       </View>
       <Text style={styles.statusLine}>{line}</Text>
-      {sub.startedAt ? <Text style={styles.statusSince}>Member since {dateText(sub.startedAt)}</Text> : null}
     </NeoBox>
   );
 }
@@ -446,7 +453,6 @@ const styles = StyleSheet.create({
   statusHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusTitle: { fontFamily: fonts.semiBold, fontSize: 20, color: colors.ink },
   statusLine: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
-  statusSince: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
   renews: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   link: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.ink, textDecorationLine: 'underline' },
