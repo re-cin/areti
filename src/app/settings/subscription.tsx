@@ -14,6 +14,7 @@ import { showComingSoon } from '@/features/account/accountAlerts';
 import { usePremium } from '@/features/subscription/usePremium';
 import { premiumDateText, premiumDateTimeText, type PremiumInfo } from '@/features/subscription/premiumInfo';
 import { timeLeftText } from '@/features/subscription/timeLeft';
+import { cancelSubscription, resumeSubscription } from '@/features/subscription/subscriptionRepo';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
@@ -284,11 +285,46 @@ const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
+  const [busy, setBusy] = useState(false);
   const line = !sub.expiresAt
     ? 'Premium is active.'
     : sub.canceled
       ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(sub.expiresAt)}.`
       : `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.`;
+
+  const run = async (change: () => Promise<boolean>, done: { title: string; message: string }) => {
+    setBusy(true);
+    try {
+      const changed = await change();
+      showNotice(changed ? { ...done, icon: 'crown' } : { title: 'Nothing to change', message: 'Your subscription is already up to date.' });
+    } catch {
+      showNotice({ title: 'Could not update your subscription', message: 'Check your internet connection and try again.' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const askCancel = () => {
+    const until = sub.expiresAt ? premiumDateTimeText(sub.expiresAt) : null;
+    showNotice({
+      title: 'Cancel subscription?',
+      message: until
+        ? `You keep Premium until ${until}. After that you're back on Free. Your exams and plans stay.`
+        : "You'll go back to Free. Your exams and plans stay.",
+      icon: 'crown',
+      buttonLabel: 'Cancel subscription',
+      cancelLabel: 'Keep Premium',
+      onPress: () =>
+        void run(cancelSubscription, {
+          title: 'Subscription canceled',
+          message: until ? `Premium stays on until ${until}.` : 'You are back on Free.',
+        }),
+    });
+  };
+
+  const resume = () =>
+    void run(resumeSubscription, { title: 'Welcome back!', message: 'Your subscription is active again.' });
+
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
       <View style={styles.statusHead}>
@@ -297,6 +333,26 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
       </View>
       {sub.expiresAt ? <Text style={styles.statusLeft}>{timeLeftText(sub.expiresAt, now)}</Text> : null}
       <Text style={styles.statusLine}>{line}</Text>
+      <View style={styles.statusAction}>
+        {sub.canceled ? (
+          <NeoButton
+            label={busy ? 'Please wait…' : 'Resume subscription'}
+            onPress={resume}
+            disabled={busy}
+            backgroundColor={colors.wordmark}
+            textColor={colors.white}
+            shadowColor={colors.tealDark}
+          />
+        ) : (
+          <NeoButton
+            label={busy ? 'Please wait…' : 'Cancel subscription'}
+            onPress={askCancel}
+            disabled={busy}
+            backgroundColor={colors.white}
+            textColor={colors.dangerDark}
+          />
+        )}
+      </View>
     </NeoBox>
   );
 }
@@ -531,6 +587,7 @@ const styles = StyleSheet.create({
   statusTitle: { fontFamily: fonts.semiBold, fontSize: 20, color: colors.ink },
   statusLeft: { fontFamily: fonts.semiBold, fontSize: 22, color: colors.tealDark },
   statusLine: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
+  statusAction: { marginTop: 10 },
   renews: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   link: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.ink, textDecorationLine: 'underline' },

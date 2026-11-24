@@ -29,3 +29,24 @@ export async function refreshSubscription(): Promise<void> {
   await regenerateSchedules().catch(error => console.warn('[subscription] Could not refresh schedules', error));
   bumpData();
 }
+
+/**
+ * Cancels the signed-in student's Premium (public.cancel_my_subscription). Premium stays until its
+ * due time, then ends. Returns false if there was nothing to cancel. Throws when offline or on error.
+ */
+export async function cancelSubscription(): Promise<boolean> {
+  return changeSubscription('cancel_my_subscription');
+}
+
+/** Undoes a cancel before the due time (public.resume_my_subscription). */
+export async function resumeSubscription(): Promise<boolean> {
+  return changeSubscription('resume_my_subscription');
+}
+
+async function changeSubscription(fn: 'cancel_my_subscription' | 'resume_my_subscription'): Promise<boolean> {
+  if (!supabaseConfigured) throw new Error('Not connected to the cloud.');
+  const { data, error } = await supabase.rpc(fn);
+  if (error) throw new Error(error.message);
+  await refreshSubscription(); // Realtime also brings it, this just makes it instant
+  return data === true;
+}
