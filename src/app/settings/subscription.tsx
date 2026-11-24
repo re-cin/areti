@@ -57,13 +57,13 @@ export default function SubscriptionScreen() {
         contentContainerStyle={{ flexGrow: 1 }}>
         {/* Teal hero: back button, wordmark, outlined "Premium" */}
         <View style={[styles.hero, { paddingTop: insets.top + 84 }]}>
-          {/* Reti on the left, wordmark + title stacked on the right */}
+          {/* Wordmark + title stacked on the left, Reti on the right */}
           <View style={styles.heroRow}>
-            <FloatingReti />
             <View style={styles.heroText}>
               <Wordmark width={110} backgroundColor={colors.welcomeTeal} />
               <OutlinedTitle text="Premium" />
             </View>
+            <FloatingReti />
           </View>
           <Pressable
             onPress={() => router.back()}
