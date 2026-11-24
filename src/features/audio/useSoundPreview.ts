@@ -25,6 +25,8 @@ export function useSoundPreview() {
     playingBackground.current = null;
     try {
       player.current?.pause();
+      // Unload a looping preview so it cannot resume after the settings panel closes.
+      player.current?.replace(null);
     } catch {}
   }, []);
 
