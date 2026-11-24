@@ -140,7 +140,7 @@ export default function SubscriptionScreen() {
         <View style={[styles.sheet, { paddingBottom: insets.bottom + 36 }]}>
           <Text style={styles.headline}>Premium members get more out of every study session</Text>
 
-          {/* Benefits: Free vs Premium, Premium column highlighted */}
+          {/* Benefits: Free vs Premium. The user's current plan column is highlighted. */}
           <NeoBox style={styles.table}>
             <View style={styles.colBenefit}>
               <View style={styles.cell}>
@@ -152,9 +152,9 @@ export default function SubscriptionScreen() {
                 </View>
               ))}
             </View>
-            <View style={styles.colFree}>
+            <View style={[styles.colFree, !sub.isPremium && styles.colCurrent]}>
               <View style={[styles.cell, styles.center]}>
-                <Text style={styles.colHead}>Free</Text>
+                <Text style={[styles.colHead, !sub.isPremium && styles.colHeadCurrent]}>Free</Text>
               </View>
               {BENEFITS.map((b) => (
                 <View
@@ -166,9 +166,9 @@ export default function SubscriptionScreen() {
                 </View>
               ))}
             </View>
-            <View style={styles.colPremium}>
+            <View style={[styles.colPremium, sub.isPremium && styles.colCurrent]}>
               <View style={[styles.cell, styles.center]}>
-                <Text style={[styles.colHead, { color: colors.tealDark }]}>Premium</Text>
+                <Text style={[styles.colHead, sub.isPremium && styles.colHeadCurrent]}>Premium</Text>
               </View>
               {BENEFITS.map((b) => (
                 <View
@@ -560,8 +560,11 @@ const styles = StyleSheet.create({
   headline: { fontFamily: fonts.semiBold, fontSize: 20, lineHeight: 26, color: colors.ink, textAlign: 'center' },
   table: { flexDirection: 'row', gap: 4, paddingVertical: 12, paddingLeft: 16, paddingRight: 12 },
   colBenefit: { flex: 1 },
-  colFree: { width: 60 },
-  colPremium: { width: 92, backgroundColor: colors.tealSoft, borderRadius: 16 },
+  colFree: { width: 72, borderRadius: 16 },
+  colPremium: { width: 92, borderRadius: 16 },
+  /** The plan the user is on now (Free or Premium). */
+  colCurrent: { backgroundColor: colors.tealSoft },
+  colHeadCurrent: { color: colors.tealDark },
   cell: { height: ROW_HEIGHT, justifyContent: 'center' },
   center: { alignItems: 'center' },
   colHead: { fontFamily: fonts.semiBold, fontSize: 14, color: colors.muted },
