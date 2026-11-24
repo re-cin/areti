@@ -9,7 +9,7 @@
 // that the order belongs to the signed-in user and was paid in full, and only then writes the user's
 // row in public.subscriptions (with the service role, since users can only read that table).
 //
-// Prices, plan length and student discount come from the public.plan_prices table.
+// Prices, plan length and the student price come from the public.plan_prices table.
 //
 // Secrets (Supabase > Edge Functions > Secrets):
 //   PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET   from developer.paypal.com > Apps & Credentials (Sandbox)
@@ -19,7 +19,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 type Plan = 'monthly' | 'yearly';
 
-type PriceRow = { plan: Plan; label: string; period_months: number; price: string | number; currency: string; student_discount_percent: string | number };
+type PriceRow = { plan: Plan; label: string; period_months: number; price: string | number; currency: string; student_price: string | number | null };
 
 const PAYPAL_BASE =
   (Deno.env.get('PAYPAL_ENV') ?? 'sandbox') === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -73,7 +73,7 @@ function addMonths(from: Date, months: number): Date {
 async function loadPrice(admin: ReturnType<typeof createClient>, plan: Plan): Promise<PriceRow | null> {
   const { data, error } = await admin
     .from('plan_prices')
-    .select('plan, label, period_months, price, currency, student_discount_percent')
+    .select('plan, label, period_months, price, currency, student_price')
     .eq('plan', plan)
     .eq('active', true)
     .maybeSingle();
@@ -81,11 +81,10 @@ async function loadPrice(admin: ReturnType<typeof createClient>, plan: Plan): Pr
   return data as PriceRow | null;
 }
 
-/** Amount to charge, as PayPal's "1234.50" string. Student discount applied when asked for. */
+/** Amount to charge, as PayPal's "1234.50" string: the student price when asked for and set. */
 function amountFor(row: PriceRow, student: boolean): string {
-  const price = Number(row.price);
-  const pct = student ? Number(row.student_discount_percent) : 0;
-  return (Math.round(price * (1 - pct / 100) * 100) / 100).toFixed(2);
+  const amount = student && row.student_price !== null ? Number(row.student_price) : Number(row.price);
+  return amount.toFixed(2);
 }
 
 Deno.serve(async (req) => {
@@ -109,8 +108,8 @@ Deno.serve(async (req) => {
 
       const price = await loadPrice(admin, plan);
       if (!price) return fail(404, 'plan_unavailable', 'That plan is not available right now.');
-      // NOTE: the student discount is not verified yet; anyone who switches it on gets it.
-      const student = body.student === true && Number(price.student_discount_percent) > 0;
+      // NOTE: student status is not verified yet; anyone who switches it on gets the student price.
+      const student = body.student === true && price.student_price !== null;
       const value = amountFor(price, student);
 
       const back = (result: 'success' | 'cancel') =>

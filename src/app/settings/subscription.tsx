@@ -54,8 +54,8 @@ export default function SubscriptionScreen() {
   const [studentDiscount, setStudentDiscount] = useState(false);
   const prices = useDbQuery(fetchPlanPrices, NO_PRICES);
   const selected = prices.find((p) => p.plan === plan) ?? prices[0] ?? null;
-  const studentPct = selected?.studentDiscountPercent ?? 0;
-  const useStudent = studentDiscount && studentPct > 0;
+  const studentPrice = selected?.studentPrice ?? null;
+  const useStudent = studentDiscount && studentPrice !== null;
   const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
   const sub = useDbQuery(loadPremium, NOT_PREMIUM);
@@ -205,11 +205,15 @@ export default function SubscriptionScreen() {
             })}
           </View>
 
-          {/* Student discount (only when the selected plan has one in plan_prices) */}
-          {studentPct > 0 && (
+          {/* Student price (only when the selected plan has one in plan_prices) */}
+          {selected && studentPrice !== null && (
             <NeoBox style={styles.discount}>
-              <Text style={styles.discountText}>Student discount · {studentPct}% off</Text>
-              <Toggle value={studentDiscount} onChange={setStudentDiscount} label={`Student discount, ${studentPct}% off`} />
+              <Text style={styles.discountText}>Student · {money(studentPrice, selected.currency)}</Text>
+              <Toggle
+                value={studentDiscount}
+                onChange={setStudentDiscount}
+                label={`Student price, ${money(studentPrice, selected.currency)}`}
+              />
             </NeoBox>
           )}
 
@@ -253,7 +257,7 @@ export default function SubscriptionScreen() {
           period: selected ? periodText(selected.periodMonths) : '',
           price: selected ? money(selected.price, selected.currency) : '',
           total: selected ? money(total, selected.currency) : '',
-          discount: useStudent ? `−${money((selected?.price ?? 0) - total, selected?.currency)} (${studentPct}%)` : null,
+          discount: useStudent ? `−${money((selected?.price ?? 0) - total, selected?.currency)}` : null,
         }}
         onClose={() => !paying && setCheckoutOpen(false)}
         onContinue={continueToPayPal}

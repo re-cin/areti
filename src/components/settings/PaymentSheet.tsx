@@ -14,7 +14,7 @@ export type CheckoutPlan = {
   price: string;
   /** What is charged after any discount. */
   total: string;
-  /** e.g. "−₱239.80 (20%)", or null when no discount applies. */
+  /** e.g. "−₱100" for the student price, or null when it doesn't apply. */
   discount: string | null;
 };
 
@@ -92,7 +92,7 @@ export function PaymentSheet({ visible, plan, onClose, onContinue, busy = false 
           </View>
           {plan.discount && (
             <View style={styles.row}>
-              <Text style={[styles.itemSub, { flex: 1 }]}>Student discount</Text>
+              <Text style={[styles.itemSub, { flex: 1 }]}>Student price</Text>
               <Text style={styles.discount}>{plan.discount}</Text>
             </View>
           )}

@@ -14,8 +14,8 @@ export type PlanPrice = {
   periodMonths: number;
   price: number;
   currency: string;
-  /** 0–100. 0 = no student discount for this plan. */
-  studentDiscountPercent: number;
+  /** What students pay for this plan, or null when there is no student price. */
+  studentPrice: number | null;
 };
 
 type Row = {
@@ -24,7 +24,7 @@ type Row = {
   period_months: number;
   price: string | number;
   currency: string;
-  student_discount_percent: string | number;
+  student_price: string | number | null;
 };
 
 /** Active plans in display order. Empty when offline or not set up. */
@@ -32,7 +32,7 @@ export async function fetchPlanPrices(): Promise<PlanPrice[]> {
   if (!supabaseConfigured) return [];
   const { data, error } = await supabase
     .from('plan_prices')
-    .select('plan, label, period_months, price, currency, student_discount_percent')
+    .select('plan, label, period_months, price, currency, student_price')
     .eq('active', true)
     .order('sort_order');
   if (error || !data) {
@@ -47,14 +47,13 @@ export async function fetchPlanPrices(): Promise<PlanPrice[]> {
       periodMonths: r.period_months,
       price: Number(r.price),
       currency: r.currency,
-      studentDiscountPercent: Number(r.student_discount_percent),
+      studentPrice: r.student_price === null ? null : Number(r.student_price),
     }));
 }
 
-/** Price after the student discount (same rounding as the server). */
+/** What is charged: the student price when asked for and set (same rule as the server). */
 export function totalFor(p: PlanPrice, student: boolean): number {
-  const pct = student ? p.studentDiscountPercent : 0;
-  return Math.round(p.price * (1 - pct / 100) * 100) / 100;
+  return student && p.studentPrice !== null ? p.studentPrice : p.price;
 }
 
 const SYMBOL: Record<string, string> = { PHP: '₱', USD: '$', EUR: '€' };

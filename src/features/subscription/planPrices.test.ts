@@ -2,7 +2,7 @@ jest.mock('@/lib/supabase', () => ({ supabase: {}, supabaseConfigured: false }))
 
 import { money, periodText, totalFor, type PlanPrice } from './planPrices';
 
-const yearly: PlanPrice = { plan: 'yearly', label: 'Yearly plan', periodMonths: 12, price: 1199, currency: 'PHP', studentDiscountPercent: 20 };
+const monthly: PlanPrice = { plan: 'monthly', label: 'Monthly plan', periodMonths: 1, price: 180, currency: 'PHP', studentPrice: 80 };
 
 describe('plan prices', () => {
   it('formats pesos with separators and only the decimals it needs', () => {
@@ -11,10 +11,10 @@ describe('plan prices', () => {
     expect(money(149)).toBe('₱149');
   });
 
-  it('applies the student discount only when asked, rounded to centavos', () => {
-    expect(totalFor(yearly, false)).toBe(1199);
-    expect(totalFor(yearly, true)).toBe(959.2);
-    expect(totalFor({ ...yearly, studentDiscountPercent: 0 }, true)).toBe(1199);
+  it('charges the student price only when asked for and set', () => {
+    expect(totalFor(monthly, false)).toBe(180);
+    expect(totalFor(monthly, true)).toBe(80);
+    expect(totalFor({ ...monthly, studentPrice: null }, true)).toBe(180);
   });
 
   it('names plan lengths', () => {
