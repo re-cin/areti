@@ -6,6 +6,7 @@ import { Icon, type IconName } from '../components/Icon';
 import { fetchDashboardStats } from '../lib/api';
 import { formatMinutes, formatNumber, timeAgo } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
+import { useLiveSubscriptions } from '../lib/useLiveSubscriptions';
 
 function StatCard({ icon, color, label, value, hint }: {
   icon: IconName; color: string; label: string; value: string; hint: React.ReactNode;
@@ -28,6 +29,7 @@ export function Dashboard() {
   const [days, setDays] = useState<7 | 14 | 30>(14);
   const [metric, setMetric] = useState<'focus_minutes' | 'signups'>('focus_minutes');
   const { data, error, loading, reload } = useAsync(() => fetchDashboardStats(days), [days]);
+  useLiveSubscriptions(reload); // Premium counts follow Supabase live
 
   const premiumShare = data && data.total_users ? Math.round((data.plans.premium / data.total_users) * 100) : 0;
 

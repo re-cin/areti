@@ -14,6 +14,7 @@ import { formatDate, formatMinutes, formatNumber, timeAgo } from '../lib/format'
 import { dailySeries, summarize } from '../lib/stats';
 import { BILLING_LABEL } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
+import { useLiveSubscriptions } from '../lib/useLiveSubscriptions';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -46,6 +47,7 @@ function StripStat({ icon, color, label, value, hint }: { icon: IconName; color:
 export function UserDetail() {
   const { id = '' } = useParams();
   const { data, error, loading, reload } = useAsync(() => fetchUserDetail(id), [id]);
+  useLiveSubscriptions(reload, id); // plan, status and due date follow Supabase live
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState<null | 'admin' | 'disable' | 'delete'>(null);
   const navigate = useNavigate();

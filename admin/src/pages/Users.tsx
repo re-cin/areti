@@ -11,6 +11,7 @@ import { useAuth } from '../lib/auth';
 import { formatDate, timeAgo } from '../lib/format';
 import { BILLING_LABEL, isPremium, type AdminUser } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
+import { useLiveSubscriptions } from '../lib/useLiveSubscriptions';
 
 type Filter = 'all' | 'free' | 'premium' | 'disabled';
 type SortKey = 'name' | 'subscription' | 'created_at' | 'last_active' | 'status';
@@ -72,6 +73,7 @@ export function Users() {
   const navigate = useNavigate();
 
   const { data, error, loading, reload } = useAsync(fetchUsers);
+  useLiveSubscriptions(reload); // plans and due dates follow Supabase live
 
   const users = useMemo(() => data ?? [], [data]);
   const [deleting, setDeleting] = useState<AdminUser | null>(null);
