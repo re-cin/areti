@@ -9,6 +9,7 @@ import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { PaymentSheet } from '@/components/settings/PaymentSheet';
 import { payWithPayPal } from '@/features/subscription/paypalCheckout';
+import { fetchPlanPrices, money, periodText, totalFor, type PlanPrice, type PlanType } from '@/features/subscription/planPrices';
 import { showComingSoon } from '@/features/account/accountAlerts';
 import { getSetting } from '@/features/settings/settingsRepo';
 import { parseSubscription, resolveTier, SUBSCRIPTION_SETTING_KEY } from '@/features/subscription/entitlements';
@@ -18,16 +19,20 @@ import { colors, fonts } from '@/theme';
 
 /**
  * Settings > Upgrade to Premium. Layout from the Figma "Subscription" frame.
- * Payments are not connected yet: "Go Premium!" shows a notice.
+ * Prices come from the Supabase plan_prices table; "Go Premium!" opens the PayPal checkout sheet.
  */
 
-// PayPal Sandbox test prices. They must match PRICES in supabase/functions/paypal-checkout (the server
-// decides what is charged; these only display it). Change both once the team decides real prices.
-const PLANS = [
-  { id: 'yearly', name: 'Yearly plan', period: '1 year', price: '₱1,199', detail: '1 year · ₱1,199', perMonth: '≈ ₱100 / month', badge: 'Save 33%' },
-  { id: 'monthly', name: 'Monthly plan', period: '1 month', price: '₱149', detail: '1 month · ₱149', perMonth: '₱149 / month', badge: null },
-] as const;
-type PlanId = (typeof PLANS)[number]['id'];
+/** What a plan card shows, worked out from its plan_prices row. */
+function planCard(p: PlanPrice, all: PlanPrice[]) {
+  const monthly = all.find((x) => x.periodMonths === 1);
+  const perMonth = p.price / p.periodMonths;
+  const savePct = monthly && p.periodMonths > 1 ? Math.round((1 - perMonth / monthly.price) * 100) : 0;
+  return {
+    detail: `${periodText(p.periodMonths)} · ${money(p.price, p.currency)}`,
+    perMonth: `${p.periodMonths > 1 ? '≈ ' : ''}${money(perMonth, p.currency)} / month`,
+    badge: savePct > 0 ? `Save ${savePct}%` : null,
+  };
+}
 
 // What Free and Premium include (from the Figma table).
 const BENEFITS: { label: string; free: boolean }[] = [
@@ -39,27 +44,39 @@ const BENEFITS: { label: string; free: boolean }[] = [
 ];
 
 const MASCOT = require('../../../assets/images/areti-mascot.png');
+const NO_PRICES: PlanPrice[] = [];
 const ROW_HEIGHT = 52;
 const STAR = '#F4A61B';
 
 export default function SubscriptionScreen() {
   const insets = useSafeAreaInsets();
-  const [plan, setPlan] = useState<PlanId>('yearly');
+  const [plan, setPlan] = useState<PlanType>('yearly');
   const [studentDiscount, setStudentDiscount] = useState(false);
-  const selected = PLANS.find((p) => p.id === plan) ?? PLANS[0];
+  const prices = useDbQuery(fetchPlanPrices, NO_PRICES);
+  const selected = prices.find((p) => p.plan === plan) ?? prices[0] ?? null;
+  const studentPct = selected?.studentDiscountPercent ?? 0;
+  const useStudent = studentDiscount && studentPct > 0;
+  const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
   const sub = useDbQuery(loadPremium, NOT_PREMIUM);
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [paying, setPaying] = useState(false);
-  const goPremium = () => setCheckoutOpen(true);
+  const goPremium = () => {
+    if (!selected) {
+      showNotice({ title: 'Prices are not loaded', message: 'Check your internet connection and open this page again.' });
+      return;
+    }
+    setPlan(selected.plan);
+    setCheckoutOpen(true);
+  };
 
   // PayPal checkout (src/features/subscription/paypalCheckout.ts). The server confirms the
   // payment and switches Premium on; this only shows the result.
   const continueToPayPal = async () => {
     if (paying) return;
     setPaying(true);
-    const result = await payWithPayPal(plan);
+    const result = await payWithPayPal(selected?.plan ?? plan, useStudent);
     setPaying(false);
     if (result.kind === 'canceled') return; // back on the sheet, nothing charged
     setCheckoutOpen(false);
@@ -156,22 +173,24 @@ export default function SubscriptionScreen() {
             <>
           {/* Plans */}
           <View style={styles.plans} accessibilityRole="radiogroup">
-            {PLANS.map((p) => {
-              const on = p.id === plan;
+            {prices.length === 0 && <Text style={styles.renews}>Loading prices…</Text>}
+            {prices.map((row) => {
+              const p = { ...row, ...planCard(row, prices) };
+              const on = selected?.plan === p.plan;
               return (
                 <Pressable
-                  key={p.id}
-                  onPress={() => setPlan(p.id)}
+                  key={p.plan}
+                  onPress={() => setPlan(p.plan)}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: on }}
-                  accessibilityLabel={`${p.name}, ${p.detail}`}>
+                  accessibilityLabel={`${p.label}, ${p.detail}`}>
                   <NeoBox
                     backgroundColor={on ? colors.white : colors.surface}
                     shadowColor={on ? colors.tealDark : colors.ink}
                     offset={on ? 4 : 2}
                     style={[styles.plan, on && styles.planOn]}>
                     <View style={{ flex: 1, gap: 4 }}>
-                      <Text style={styles.planName}>{p.name}</Text>
+                      <Text style={styles.planName}>{p.label}</Text>
                       <Text style={styles.planDetail}>{p.detail}</Text>
                     </View>
                     <Text style={styles.planPer}>{p.perMonth}</Text>
@@ -186,11 +205,13 @@ export default function SubscriptionScreen() {
             })}
           </View>
 
-          {/* Student discount */}
-          <NeoBox style={styles.discount}>
-            <Text style={styles.discountText}>Student discount</Text>
-            <Toggle value={studentDiscount} onChange={setStudentDiscount} label="Student discount" />
-          </NeoBox>
+          {/* Student discount (only when the selected plan has one in plan_prices) */}
+          {studentPct > 0 && (
+            <NeoBox style={styles.discount}>
+              <Text style={styles.discountText}>Student discount · {studentPct}% off</Text>
+              <Toggle value={studentDiscount} onChange={setStudentDiscount} label={`Student discount, ${studentPct}% off`} />
+            </NeoBox>
+          )}
 
           <NeoButton
             label="Go Premium!"
@@ -207,7 +228,9 @@ export default function SubscriptionScreen() {
           <View style={styles.footer}>
             {!sub.isPremium && (
               <Text style={styles.renews}>
-                One-time payment of {selected.price} for {selected.period}. No automatic charges.
+                {selected
+                  ? `One-time payment of ${money(total, selected.currency)} for ${periodText(selected.periodMonths)}. No automatic charges.`
+                  : 'One-time payment. No automatic charges.'}
               </Text>
             )}
             <View style={styles.links}>
@@ -225,8 +248,13 @@ export default function SubscriptionScreen() {
 
       <PaymentSheet
         visible={checkoutOpen}
-        plan={{ name: selected.name, period: selected.period, price: selected.price }}
-        studentDiscount={studentDiscount}
+        plan={{
+          name: selected?.label ?? '',
+          period: selected ? periodText(selected.periodMonths) : '',
+          price: selected ? money(selected.price, selected.currency) : '',
+          total: selected ? money(total, selected.currency) : '',
+          discount: useStudent ? `−${money((selected?.price ?? 0) - total, selected?.currency)} (${studentPct}%)` : null,
+        }}
         onClose={() => !paying && setCheckoutOpen(false)}
         onContinue={continueToPayPal}
         busy={paying}

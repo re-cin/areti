@@ -10,14 +10,17 @@ export type CheckoutPlan = {
   name: string;
   /** e.g. "1 year" */
   period: string;
-  /** e.g. "₱[PRICE]" */
+  /** Full price, e.g. "₱1,199" */
   price: string;
+  /** What is charged after any discount. */
+  total: string;
+  /** e.g. "−₱239.80 (20%)", or null when no discount applies. */
+  discount: string | null;
 };
 
 type Props = {
   visible: boolean;
   plan: CheckoutPlan;
-  studentDiscount: boolean;
   onClose: () => void;
   /** Starts PayPal checkout. */
   onContinue: () => void;
@@ -29,7 +32,7 @@ type Props = {
  * and "Continue to PayPal". Payment itself happens on PayPal's own page (never inside areti),
  * and Premium is switched on by the server after PayPal confirms it.
  */
-export function PaymentSheet({ visible, plan, studentDiscount, onClose, onContinue, busy = false }: Props) {
+export function PaymentSheet({ visible, plan, onClose, onContinue, busy = false }: Props) {
   const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
   const [progress] = useState(() => new Animated.Value(0));
@@ -87,16 +90,16 @@ export function PaymentSheet({ visible, plan, studentDiscount, onClose, onContin
             </View>
             <Text style={styles.amount}>{plan.price}</Text>
           </View>
-          {studentDiscount && (
+          {plan.discount && (
             <View style={styles.row}>
               <Text style={[styles.itemSub, { flex: 1 }]}>Student discount</Text>
-              <Text style={styles.discount}>Not available yet</Text>
+              <Text style={styles.discount}>{plan.discount}</Text>
             </View>
           )}
           <View style={styles.divider} />
           <View style={styles.row}>
             <Text style={[styles.total, { flex: 1 }]}>Total</Text>
-            <Text style={styles.total}>{plan.price}</Text>
+            <Text style={styles.total}>{plan.total}</Text>
           </View>
         </NeoBox>
 

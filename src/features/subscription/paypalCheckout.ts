@@ -17,6 +17,7 @@ import { refreshSubscription } from './subscriptionRepo';
 
 export type PaidPlan = 'monthly' | 'yearly';
 
+
 export type CheckoutResult =
   | { kind: 'paid'; currentPeriodEnd: number }
   | { kind: 'canceled' }
@@ -37,11 +38,12 @@ async function call<T>(body: Record<string, unknown>): Promise<{ data?: T; code?
   return { code: 'offline', message: "Can't reach the server. Check your internet connection and try again." };
 }
 
-export async function payWithPayPal(plan: PaidPlan): Promise<CheckoutResult> {
+/** `student` asks for the plan's student discount (from plan_prices; not verified yet). */
+export async function payWithPayPal(plan: PaidPlan, student = false): Promise<CheckoutResult> {
   if (!supabaseConfigured) return { kind: 'error', code: 'not_configured', message: 'Supabase is not set up in .env.' };
 
   const returnTo = Linking.createURL(RETURN_PATH);
-  const created = await call<{ orderId: string; approveUrl: string }>({ action: 'create', plan, returnTo });
+  const created = await call<{ orderId: string; approveUrl: string }>({ action: 'create', plan, student, returnTo });
   if (!created.data) return { kind: 'error', code: created.code ?? 'unknown', message: created.message ?? 'Could not start checkout.' };
 
   const session = await WebBrowser.openAuthSessionAsync(created.data.approveUrl, returnTo);

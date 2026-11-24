@@ -1,6 +1,6 @@
 // PayPal (sandbox by default) checkout for areti Premium. One-time payment per period.
 //
-// POST { action: "create", plan: "monthly" | "yearly", returnTo: "<app deep link>" }
+// POST { action: "create", plan: "monthly" | "yearly", student?: boolean, returnTo: "<app deep link>" }
 //   -> { orderId, approveUrl }      open approveUrl in a browser; PayPal sends the user back to returnTo
 // POST { action: "capture", orderId }
 //   -> { ok: true, plan, currentPeriodEnd }
@@ -9,22 +9,17 @@
 // that the order belongs to the signed-in user and was paid in full, and only then writes the user's
 // row in public.subscriptions (with the service role, since users can only read that table).
 //
+// Prices, plan length and student discount come from the public.plan_prices table.
+//
 // Secrets (Supabase > Edge Functions > Secrets):
 //   PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET   from developer.paypal.com > Apps & Credentials (Sandbox)
 //   PAYPAL_ENV                               "sandbox" (default) or "live"
-//   PAYPAL_PRICE_MONTHLY, PAYPAL_PRICE_YEARLY  optional, PHP, e.g. "149.00"
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
 type Plan = 'monthly' | 'yearly';
 
-const CURRENCY = 'PHP';
-// Test prices for the sandbox. Override with the PAYPAL_PRICE_* secrets once the team decides.
-const PRICES: Record<Plan, string> = {
-  monthly: Deno.env.get('PAYPAL_PRICE_MONTHLY') ?? '149.00',
-  yearly: Deno.env.get('PAYPAL_PRICE_YEARLY') ?? '1199.00',
-};
-const LABEL: Record<Plan, string> = { monthly: 'areti Premium, 1 month', yearly: 'areti Premium, 1 year' };
+type PriceRow = { plan: Plan; label: string; period_months: number; price: string | number; currency: string; student_discount_percent: string | number };
 
 const PAYPAL_BASE =
   (Deno.env.get('PAYPAL_ENV') ?? 'sandbox') === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -68,11 +63,29 @@ async function paypal(token: string, path: string, init: RequestInit = {}) {
   return { ok: res.ok, status: res.status, body };
 }
 
-function addPeriod(from: Date, plan: Plan): Date {
+function addMonths(from: Date, months: number): Date {
   const d = new Date(from);
-  if (plan === 'yearly') d.setUTCFullYear(d.getUTCFullYear() + 1);
-  else d.setUTCMonth(d.getUTCMonth() + 1);
+  d.setUTCMonth(d.getUTCMonth() + months);
   return d;
+}
+
+/** The plan's row from public.plan_prices (active plans only). */
+async function loadPrice(admin: ReturnType<typeof createClient>, plan: Plan): Promise<PriceRow | null> {
+  const { data, error } = await admin
+    .from('plan_prices')
+    .select('plan, label, period_months, price, currency, student_discount_percent')
+    .eq('plan', plan)
+    .eq('active', true)
+    .maybeSingle();
+  if (error) throw new HttpError(500, 'prices_unavailable', 'Could not load the plan prices.');
+  return data as PriceRow | null;
+}
+
+/** Amount to charge, as PayPal's "1234.50" string. Student discount applied when asked for. */
+function amountFor(row: PriceRow, student: boolean): string {
+  const price = Number(row.price);
+  const pct = student ? Number(row.student_discount_percent) : 0;
+  return (Math.round(price * (1 - pct / 100) * 100) / 100).toFixed(2);
 }
 
 Deno.serve(async (req) => {
@@ -86,12 +99,19 @@ Deno.serve(async (req) => {
     if (userError || !user) return fail(401, 'not_signed_in', 'Sign in to buy Premium.');
 
     const body = await req.json().catch(() => ({}));
+    const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
     // ---- 1) create the PayPal order
     if (body.action === 'create') {
       const plan: Plan | null = body.plan === 'monthly' || body.plan === 'yearly' ? body.plan : null;
       if (!plan) return fail(400, 'bad_plan', 'Choose the monthly or yearly plan.');
       if (!isAppLink(body.returnTo)) return fail(400, 'bad_return', 'Missing app return link.');
+
+      const price = await loadPrice(admin, plan);
+      if (!price) return fail(404, 'plan_unavailable', 'That plan is not available right now.');
+      // NOTE: the student discount is not verified yet; anyone who switches it on gets it.
+      const student = body.student === true && Number(price.student_discount_percent) > 0;
+      const value = amountFor(price, student);
 
       const back = (result: 'success' | 'cancel') =>
         `${SUPABASE_URL}/functions/v1/paypal-return?result=${result}&to=${encodeURIComponent(body.returnTo)}`;
@@ -106,8 +126,8 @@ Deno.serve(async (req) => {
             {
               reference_id: plan,
               custom_id: user.id,
-              description: LABEL[plan],
-              amount: { currency_code: CURRENCY, value: PRICES[plan] },
+              description: `areti Premium, ${price.label}${student ? ' (student)' : ''}`,
+              amount: { currency_code: price.currency, value },
             },
           ],
           payment_source: {
@@ -126,7 +146,7 @@ Deno.serve(async (req) => {
       if (!order.ok) return fail(502, 'paypal_create_failed', order.body?.message ?? `PayPal error ${order.status}.`);
       const approveUrl = order.body.links?.find((l: { rel: string }) => l.rel === 'payer-action' || l.rel === 'approve')?.href;
       if (!approveUrl) return fail(502, 'paypal_no_link', 'PayPal did not return a checkout link.');
-      return json({ orderId: order.body.id, approveUrl, price: PRICES[plan], currency: CURRENCY });
+      return json({ orderId: order.body.id, approveUrl, amount: value, currency: price.currency, student });
     }
 
     // ---- 2) capture: confirm with PayPal, then switch Premium on
@@ -152,12 +172,18 @@ Deno.serve(async (req) => {
       if (!captured.ok || captured.body.status !== 'COMPLETED' || capture?.status !== 'COMPLETED') {
         return fail(402, 'capture_failed', captured.body?.message ?? 'PayPal could not complete the payment.');
       }
-      if (capture.amount?.currency_code !== CURRENCY || capture.amount?.value !== PRICES[plan]) {
-        return fail(402, 'amount_mismatch', 'The paid amount does not match the plan price.');
+      // Only this function can create orders (it holds the PayPal secret), so the order's own amount
+      // is the price we set. The capture must match it exactly.
+      const ordered = unit?.amount;
+      if (!ordered || capture.amount?.currency_code !== ordered.currency_code || capture.amount?.value !== ordered.value) {
+        return fail(402, 'amount_mismatch', 'The paid amount does not match the order.');
       }
 
+      // How long one payment lasts (from the table; falls back to the plan type).
+      const price = await loadPrice(admin, plan);
+      const months = price?.period_months ?? (plan === 'yearly' ? 12 : 1);
+
       // Paid: extend from the current end if Premium is still running, otherwise from now.
-      const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
       const { data: existing } = await admin
         .from('subscriptions')
         .select('plan, status, started_at, current_period_end')
@@ -166,7 +192,7 @@ Deno.serve(async (req) => {
       const now = new Date();
       const currentEnd = existing?.current_period_end ? new Date(existing.current_period_end) : null;
       const stillPremium = existing?.plan === 'premium' && existing.status !== 'expired' && (!currentEnd || currentEnd > now);
-      const periodEnd = addPeriod(stillPremium && currentEnd ? currentEnd : now, plan);
+      const periodEnd = addMonths(stillPremium && currentEnd ? currentEnd : now, months);
 
       const row = {
         user_id: user.id,
