@@ -47,9 +47,16 @@ export type SubscriptionChange = {
   current_period_end: string | null;
 };
 
-/** A subscription only counts as Premium while it is active or trialing. */
-export function isPremium(u: Pick<AdminUser, 'plan' | 'subscription_status'>) {
-  return u.plan === 'premium' && (u.subscription_status === 'active' || u.subscription_status === 'trialing');
+/**
+ * Premium while active or trialing. A canceled subscription stays Premium until its due time
+ * (same rule as the app and public.is_premium).
+ */
+export function isPremium(u: Pick<AdminUser, 'plan' | 'subscription_status' | 'current_period_end'>) {
+  if (u.plan !== 'premium') return false;
+  const end = u.current_period_end ? Date.parse(u.current_period_end) : null;
+  if (end !== null && end <= Date.now()) return false;
+  if (u.subscription_status === 'active' || u.subscription_status === 'trialing') return true;
+  return u.subscription_status === 'canceled' && end !== null;
 }
 
 /** Result of public.admin_user_detail(). */

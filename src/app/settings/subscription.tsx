@@ -284,7 +284,11 @@ const dateText = premiumDateText;
 
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
-  const line = sub.expiresAt ? `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.` : 'Premium is active.';
+  const line = !sub.expiresAt
+    ? 'Premium is active.'
+    : sub.canceled
+      ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(sub.expiresAt)}.`
+      : `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.`;
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
       <View style={styles.statusHead}>

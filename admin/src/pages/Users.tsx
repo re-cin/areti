@@ -189,7 +189,11 @@ export function Users() {
                     {u.plan === 'premium' && (
                       <span className="renew">
                         {u.billing_period && `${BILLING_LABEL[u.billing_period]} · `}
-                        {u.subscription_status === 'active' || u.subscription_status === 'trialing' ? 'Renews' : 'Ended'}{' '}
+                        {u.subscription_status === 'active' || u.subscription_status === 'trialing'
+                          ? 'Renews'
+                          : isPremium(u)
+                            ? 'Ends'
+                            : 'Ended'}{' '}
                         {formatDate(u.current_period_end)}
                       </span>
                     )}

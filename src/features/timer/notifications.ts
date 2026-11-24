@@ -76,6 +76,11 @@ export async function scheduleSessionReminders(reminders: SessionReminder[]): Pr
 const supported = (Platform.OS === 'ios' || Platform.OS === 'android') && notificationsAvailable;
 let configured = false;
 
+/** Sets up the notification handler and Android channel once (shared with the Premium reminders). */
+export async function configureNotifications() {
+  return configure();
+}
+
 async function configure() {
   const Notifications = loadNotifications();
   if (!Notifications) return;
@@ -89,6 +94,10 @@ async function configure() {
         onReminderWhileOpen?.(n.request.content.title ?? 'Pomodoro soon', n.request.content.body ?? '', Boolean(data.openPomodoro));
         // The app plays the session's own sound (Soft Chime, Desk Bell…) instead of the phone's default.
         playChime(data.sound ?? 'Silent', data.volume ?? 80);
+        return { shouldShowBanner: false, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false };
+      }
+      // App open: the Premium-ending reminder already shows as areti's own pop-up (PremiumEndingReminders).
+      if (data?.kind === 'premium') {
         return { shouldShowBanner: false, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false };
       }
       return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false };

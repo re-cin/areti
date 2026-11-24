@@ -15,7 +15,9 @@ const MASCOT = require('../../../assets/images/areti-mascot.png');
  */
 export function PremiumCard({ info, now }: { info: PremiumInfo; now: number }) {
   const left = info.expiresAt ? timeLeftText(info.expiresAt, now) : 'Active';
-  const until = info.expiresAt ? `Until ${premiumDateTimeText(info.expiresAt)}` : 'Thanks for supporting areti!';
+  const until = info.expiresAt
+    ? `${info.canceled ? 'Canceled · ends' : 'Until'} ${premiumDateTimeText(info.expiresAt)}`
+    : 'Thanks for supporting areti!';
   return (
     <Pressable
       onPress={() => router.push('/settings/subscription')}

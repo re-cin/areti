@@ -4,7 +4,7 @@ import { regenerateSchedules } from '@/features/planner/examsRepo';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
 import { eq } from 'drizzle-orm';
-import { SUBSCRIPTION_SETTING_KEY, parseSubscription, type SubscriptionRecord } from './entitlements';
+import { SUBSCRIPTION_SETTING_KEY, parseSubscription, recordFromRow, type SubscriptionRecord } from './entitlements';
 
 /**
  * Copies the student's plan from Supabase into a local cache so scheduling works offline.
@@ -18,11 +18,7 @@ export async function refreshSubscription(): Promise<void> {
   if (!userId) return;
   const { data, error } = await supabase.from('subscriptions').select('plan, status, current_period_end').eq('user_id', userId).maybeSingle();
   if (error) return;
-  const next: SubscriptionRecord = data
-    ? { plan: data.plan === 'premium' && ['active', 'trialing'].includes(data.status) ? 'premium' : 'free',
-        expiresAt: data.current_period_end ? Date.parse(data.current_period_end) : null }
-    : { plan: 'free', expiresAt: null };
-  if (next.expiresAt !== null && !Number.isFinite(next.expiresAt)) next.expiresAt = null;
+  const next: SubscriptionRecord = recordFromRow(data);
   const value = JSON.stringify(next);
   const current = db.select().from(settings).where(eq(settings.key, SUBSCRIPTION_SETTING_KEY)).get();
   if (current && JSON.stringify(parseSubscription(current.value)) === value) return;

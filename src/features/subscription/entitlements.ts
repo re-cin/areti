@@ -37,7 +37,32 @@ export const entitlementsFor = (tier: PlanTier): Entitlements => (tier === 'prem
 /** Local cache of the server's subscription row. Never uploaded: the server is the authority. */
 export const SUBSCRIPTION_SETTING_KEY = 'subscription.plan';
 
-export type SubscriptionRecord = { plan: PlanTier; /** epoch ms, null = no expiry */ expiresAt: number | null };
+export type SubscriptionRecord = {
+  plan: PlanTier;
+  /** epoch ms, null = no expiry */
+  expiresAt: number | null;
+  /** Canceled: Premium stays until expiresAt, then ends (no renewal). Left out when not canceled. */
+  canceled?: true;
+};
+
+/** The server's subscriptions row, as refreshSubscription reads it. */
+export type SubscriptionRow = { plan: string; status: string; current_period_end: string | null };
+
+/**
+ * Turns the server row into the phone's cached record.
+ * Active and trial subscriptions are Premium. A canceled one keeps Premium until its due time
+ * (that's when the 24 h / 1 h reminders show), then ends. Expired, or anything else, is Free.
+ */
+export function recordFromRow(row: SubscriptionRow | null): SubscriptionRecord {
+  if (!row) return { plan: 'free', expiresAt: null };
+  const parsed = row.current_period_end ? Date.parse(row.current_period_end) : NaN;
+  const expiresAt = Number.isFinite(parsed) ? parsed : null;
+  if (row.plan !== 'premium') return { plan: 'free', expiresAt };
+  if (row.status === 'active' || row.status === 'trialing') return { plan: 'premium', expiresAt };
+  // Canceled without a due time has nothing left to run out: Free straight away.
+  if (row.status === 'canceled' && expiresAt !== null) return { plan: 'premium', expiresAt, canceled: true };
+  return { plan: 'free', expiresAt };
+}
 
 /** Parses the cached JSON. Anything unreadable or unexpected is treated as Free. */
 export function parseSubscription(raw: string | null | undefined): SubscriptionRecord | null {
@@ -46,7 +71,7 @@ export function parseSubscription(raw: string | null | undefined): SubscriptionR
     const value = JSON.parse(raw) as Partial<SubscriptionRecord> | null;
     if (!value || (value.plan !== 'free' && value.plan !== 'premium')) return null;
     const expiresAt = typeof value.expiresAt === 'number' && Number.isFinite(value.expiresAt) ? value.expiresAt : null;
-    return { plan: value.plan, expiresAt };
+    return value.canceled === true ? { plan: value.plan, expiresAt, canceled: true } : { plan: value.plan, expiresAt };
   } catch {
     return null;
   }

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import Storage from 'expo-sqlite/kv-store';
-import { router } from 'expo-router';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { useDataVersion } from '@/stores/dataVersion';
 import { showNotice } from '@/stores/notice';
 import { loadPremium, premiumDateTimeText } from './premiumInfo';
 import { refreshSubscription } from './subscriptionRepo';
+import { schedulePremiumEndingNotifications } from './premiumNotifications';
 import { dueReminder, msUntilNextCheck, type PremiumReminder } from './premiumReminders';
 import { timeLeftText } from './timeLeft';
 
@@ -69,7 +69,9 @@ function useLiveSubscription() {
 }
 
 /**
- * Pop-ups for Premium users: "24 hours left" and "1 hour left", each once per Premium period.
+ * For a CANCELED subscription only: pop-ups "24 hours left" and "1 hour left", each once per due time,
+ * plus the same two as phone notifications (they arrive even when the app is closed).
+ * Active subscriptions get neither.
  * Checks when the app starts, comes back to the foreground, after a sync, and right at each
  * reminder moment while the app is open. Mounted once in the root layout; draws nothing itself.
  */
@@ -95,8 +97,11 @@ export function PremiumEndingReminders() {
       if (timer) clearTimeout(timer);
       timer = null;
       const premium = await loadPremium();
-      if (!alive || !premium.isPremium || !premium.expiresAt) return;
-      const end = premium.expiresAt;
+      // Only a canceled subscription actually ends, so only then is there anything to remind about.
+      const ending = premium.isPremium && premium.canceled && premium.expiresAt ? premium.expiresAt : null;
+      await schedulePremiumEndingNotifications(ending);
+      if (!alive || ending === null) return;
+      const end = ending;
       const now = Date.now();
 
       const shown = await readShown(end);
@@ -108,11 +113,9 @@ export function PremiumEndingReminders() {
         await markShown(end, shown);
         showNotice({
           title: due === '1h' ? '1 hour of Premium left' : '24 hours of Premium left',
-          message: `Your Premium ends ${premiumDateTimeText(end)} (${timeLeftText(end, now)}). Renew to keep it going.`,
+          message: `Your subscription was canceled, so Premium ends ${premiumDateTimeText(end)} (${timeLeftText(end, now)}).`,
           icon: 'crown',
-          buttonLabel: 'Renew',
-          cancelLabel: 'Later',
-          onPress: () => router.push('/settings/subscription'),
+          buttonLabel: 'OK',
         });
       }
 

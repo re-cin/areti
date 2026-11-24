@@ -1,4 +1,4 @@
-import { FREE_MONTHLY_GENERATIONS, entitlementsFor, generationsAreLimited, parseSubscription, resolveTier } from './entitlements';
+import { FREE_MONTHLY_GENERATIONS, entitlementsFor, generationsAreLimited, parseSubscription, recordFromRow, resolveTier } from './entitlements';
 
 describe('entitlements', () => {
   it('gives Free a monthly generation allowance and Premium automatic, adaptive planning', () => {
@@ -30,4 +30,26 @@ describe('entitlements', () => {
     expect(parseSubscription('{"plan":"premium","expiresAt":"soon"}')).toEqual({ plan: 'premium', expiresAt: null });
   });
 
+});
+
+describe('recordFromRow', () => {
+  const end = '2026-12-01T10:00:00.000Z';
+  const endMs = Date.parse(end);
+  it('active and trial subscriptions are Premium', () => {
+    expect(recordFromRow({ plan: 'premium', status: 'active', current_period_end: end })).toEqual({ plan: 'premium', expiresAt: endMs });
+    expect(recordFromRow({ plan: 'premium', status: 'trialing', current_period_end: null })).toEqual({ plan: 'premium', expiresAt: null });
+  });
+  it('a canceled subscription keeps Premium until its due time', () => {
+    const record = recordFromRow({ plan: 'premium', status: 'canceled', current_period_end: end });
+    expect(record).toEqual({ plan: 'premium', expiresAt: endMs, canceled: true });
+    expect(resolveTier(record, endMs - 1)).toBe('premium');
+    expect(resolveTier(record, endMs)).toBe('free');
+    expect(parseSubscription(JSON.stringify(record))).toEqual(record);
+  });
+  it('canceled without a due time, expired, Free or no row is Free', () => {
+    expect(recordFromRow({ plan: 'premium', status: 'canceled', current_period_end: null }).plan).toBe('free');
+    expect(recordFromRow({ plan: 'premium', status: 'expired', current_period_end: end }).plan).toBe('free');
+    expect(recordFromRow({ plan: 'free', status: 'active', current_period_end: null }).plan).toBe('free');
+    expect(recordFromRow(null)).toEqual({ plan: 'free', expiresAt: null });
+  });
 });

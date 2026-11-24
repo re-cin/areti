@@ -21,5 +21,5 @@ export function usePremium(): PremiumInfo & { now: number } {
     if (justEnded) bumpData();
   }, [justEnded]);
 
-  return { isPremium, expiresAt: cached.expiresAt, now };
+  return { ...cached, isPremium, now };
 }
