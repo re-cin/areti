@@ -5,7 +5,7 @@ import { addDays, startOfDay } from '@/lib/dates';
 import { and, asc, eq, gte, isNull, lt } from 'drizzle-orm';
 import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
 import { bumpData } from '@/stores/dataVersion';
-import { generateSchedule, sessionMinutes, type BusyTime, type SchedulePlan } from './engine';
+import { generateSchedule, sessionMinutes, type BusyTime, type SchedulePlan, type WeeklySlot } from './engine';
 import { cancelStudyPlanWork } from './studyPlanLifecycle';
 import { buildInsights, type PlanInsights } from './insights';
 import {
@@ -107,7 +107,37 @@ export async function listPlanSessions(id: string) {
 
 export type ExamPreferences = { scope: 'this' | 'all'; focusCount: number; focusMin: number;
   breakMin: number; longBreakMin: number; start: number; end: number; excluded: number[];
-  studyDays?: number[]; dailyGoalMin?: number; totalBlocks?: number; planStartDate?: number };
+  studyDays?: number[]; dailyGoalMin?: number; totalBlocks?: number; planStartDate?: number;
+  /** True (default): study time comes from Settings › Preferences › Planner Study Slots. False: this exam's own
+   *  `start`/`end` (kept for exams that set their own hours). */
+  useStudySlots?: boolean };
+
+/** Settings › Preferences is saved under this key (see features/preferences/preferencesStore.ts). */
+const USER_PREFERENCES_KEY = 'user.preferences';
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+/** Same as DEFAULT_PREFERENCES in preferencesStore: 6:00 AM – 8:00 PM every day until the user saves slots. */
+const DEFAULT_SLOT: WeeklySlot = { start: 6 * 60, end: 20 * 60 };
+
+const hhmm = (value: unknown): number | null => {
+  if (typeof value !== 'string' || !/^\d{1,2}:\d{2}$/.test(value)) return null;
+  const [h, m] = value.split(':').map(Number);
+  return h >= 0 && h < 24 && m >= 0 && m < 60 ? h * 60 + m : null;
+};
+
+/**
+ * Planner Study Slots from Settings › Preferences, by weekday (index = Date.getDay()). Custom mode leaves
+ * switched-off days empty (null); Default mode studies every day. These are the only hours study plans use.
+ */
+export function weeklyStudySlots(raw: string | undefined): (WeeklySlot | null)[] {
+  const prefs = readJson<{ mode?: string; schedule?: Record<string, { start?: string; end?: string }>; enabledDays?: string[] } | null>(raw ?? 'null', null);
+  return WEEKDAY_NAMES.map(day => {
+    if (prefs?.mode === 'Custom' && Array.isArray(prefs.enabledDays) && !prefs.enabledDays.includes(day)) return null;
+    const slot = prefs?.schedule?.[day];
+    const start = hhmm(slot?.start);
+    const end = hhmm(slot?.end);
+    return start === null || end === null ? DEFAULT_SLOT : { start, end };
+  });
+}
 
 export const DEFAULT_EXAM_PREFERENCES: ExamPreferences = {
   scope: 'this', focusCount: 4, focusMin: 25, breakMin: 5, longBreakMin: 30,
@@ -170,6 +200,7 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
   const busy: BusyTime[] = [];
   const reservedSessions = new Set<string>();
   const currentMinute = now.getHours() * 60 + now.getMinutes();
+  const weekly = weeklyStudySlots(stored.get(USER_PREFERENCES_KEY));
   for (const exam of exams) {
     const saved = readJson<ExamPreferences | null>(stored.get(`exam-prefs:${exam.id}`) ?? 'null', null);
     let p = { ...DEFAULT_EXAM_PREFERENCES, ...saved, longBreakMin: Math.max(30, saved?.longBreakMin ?? 30) };
@@ -220,7 +251,9 @@ function calculate(now: Date, override?: { id: string; prefs: ExamPreferences })
           endMinute: start + sessionMinutes(row.completedBlocks, frozen), focusMinutes: row.completedBlocks * frozen.focusMin });
       }
     }
+    // Study time comes from Settings › Preferences › Planner Study Slots (not the old fixed 7–9 PM).
     plans.push({ ...p, id: exam.id, subjectId: exam.subjectId, examDate: exam.examDate,
+      weekly: p.useStudySlots === false ? undefined : weekly,
       difficulty: exam.difficulty, remainingBlocks: Math.max(0, p.totalBlocks - credited) });
   }
   const externalTasks = allTasks.filter(t => !(t.source === 'generated' && knownPlanIds.has(t.planId ?? '')));

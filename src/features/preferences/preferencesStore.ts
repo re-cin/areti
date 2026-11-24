@@ -140,6 +140,13 @@ export const usePreferences = create<PreferencesStore>((set, get) => ({
         .run();
 
       set({ preferences: next, hydrated: true });
+      // Study plans use the Planner Study Slots: re-plan as soon as they change (loaded lazily to avoid an
+      // import cycle with the planner).
+      if ('schedule' in patch || 'enabledDays' in patch || 'mode' in patch) {
+        void import('@/features/planner/examsRepo')
+          .then(m => m.regenerateSchedules())
+          .catch(e => console.warn('[preferences] Could not reschedule study plans', e));
+      }
     } catch (error) {
       console.warn('[preferences] Could not save preferences', error);
     }

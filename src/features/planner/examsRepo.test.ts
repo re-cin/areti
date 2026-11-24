@@ -11,7 +11,7 @@ import { useTimer } from '@/features/timer/timerStore';
 import { DEFAULT_POMODORO } from '@/features/timer/pomodoroSettings';
 import { SUBSCRIPTION_SETTING_KEY, PremiumRequiredError, type PlanTier } from '@/features/subscription/entitlements';
 import { GenerationLimitError, GenerationUnavailableError } from '@/features/subscription/generationQuota';
-import { DEFAULT_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
+import { DEFAULT_EXAM_PREFERENCES as BASE_EXAM_PREFERENCES, createExam, deleteStudyPlan, examsQuery, getExam, getExamAccess, getExamPreferences, getPlanInsights, getProtectedSubjectIds, previewStudySchedule, regenerateSchedules, saveProtectedSubjectIds, saveStudySchedule, updateExam, updateExamDifficulty } from './examsRepo';
 
 jest.mock('@/db/client', () => {
   const { DatabaseSync } = jest.requireActual('node:sqlite');
@@ -56,12 +56,19 @@ const setTier = (plan: PlanTier, expiresAt: number | null = null) => {
     .onConflictDoUpdate({ target: settings.key, set: { value } }).run();
 };
 
+// These tests set each exam's own study hours, so they turn the Preferences study slots off.
+const DEFAULT_EXAM_PREFERENCES = { ...BASE_EXAM_PREFERENCES, useStudySlots: false };
+
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(now);
   for (const table of [tasks, plannedSessions, focusSessions, ghostState, studyPlans, subjects, settings]) db.delete(table).run();
   useTimer.setState({ status: 'idle', plannedSessionId: null, run: null, cfg: null });
   db.insert(subjects).values({ id: 'math', name: 'Math', color: '#ffffff', updatedAt: now.getTime() }).run();
   setTier('premium'); // The original tests describe adaptive (Premium) scheduling. Free is covered below.
+  // Planner Study Slots (Settings › Preferences): 7–9 PM every day, like the old fixed default.
+  const evening = { start: '19:00', end: '21:00' };
+  const schedule = Object.fromEntries(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => [d, evening]));
+  db.insert(settings).values({ key: 'user.preferences', value: JSON.stringify({ mode: 'Default', schedule }), updatedAt: now.getTime() }).run();
   mockReserve.mockReset();
 });
 afterEach(() => jest.useRealTimers());
@@ -585,4 +592,37 @@ describe('Free vs Premium', () => {
     expect(insights.detailed).toMatchObject({ enoughTime: false, shortfallBlocks: 4, daysLeft: 3 });
   });
 
+});
+
+describe('Planner Study Slots from Settings › Preferences', () => {
+  const setSlots = (start: string, end: string, extra: Record<string, unknown> = {}) => {
+    const schedule = Object.fromEntries(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(d => [d, { start, end }]));
+    db.update(settings).set({ value: JSON.stringify({ mode: 'Default', schedule, ...extra }) }).where(eq(settings.key, 'user.preferences')).run();
+  };
+
+  it('places study sessions inside the Preferences slots, not the old 7–9 PM', async () => {
+    setSlots('06:00', '08:00');
+    await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });
+    const sessions = activeSessions();
+    expect(sessions.length).toBeGreaterThan(0);
+    // It is 8:00 AM on day 0, so today's 6–8 AM slot has passed.
+    expect(sessions.every(s => s.date > day && s.startMinute === 6 * 60)).toBe(true);
+  });
+
+  it('skips days switched off in Custom mode', async () => {
+    setSlots('06:00', '08:00', { mode: 'Custom', enabledDays: ['Monday', 'Tuesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] });
+    await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 5) });
+    const wednesday = addDays(day, 2); // 23 Nov 2026 is a Monday
+    expect(new Date(wednesday).getDay()).toBe(3);
+    expect(activeSessions().some(s => s.date === wednesday)).toBe(false);
+    expect(activeSessions().length).toBeGreaterThan(0);
+  });
+
+  it('moves sessions when the slots change', async () => {
+    setSlots('06:00', '08:00');
+    await createExam({ name: 'Math final', subjectId: 'math', date: addDays(day, 4) });
+    setSlots('13:00', '15:00');
+    await regenerateSchedules();
+    expect(activeSessions().every(s => s.startMinute === 13 * 60)).toBe(true);
+  });
 });

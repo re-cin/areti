@@ -7,7 +7,12 @@ export type SchedulePlan = {
   difficulty: number; start: number; end: number;
   focusMin: number; focusCount: number; breakMin: number; longBreakMin: number;
   excluded: number[]; studyDays?: number[]; planStartDate?: number;
+  /** Study time per weekday from Settings › Preferences › Planner Study Slots (index = getDay(), 0 = Sunday;
+   *  null = no study that day). When set, it replaces `start`/`end`. */
+  weekly?: (WeeklySlot | null)[];
 };
+/** One weekday's study time in minutes since midnight. `end <= start` runs past midnight. */
+export type WeeklySlot = { start: number; end: number };
 export type BusyTime = { date: number; startMinute: number; endMinute: number; focusMinutes?: number };
 export type StudySession = { planId: string; subjectId: string; date: number; startMinute: number; endMinute: number; blocks: number };
 export type ScheduleResult = { sessions: StudySession[]; shortfallBlocks: number; shortfallByPlan: Record<string, number> };
@@ -21,10 +26,21 @@ export function sessionMinutes(blocks: number, prefs: Pick<SchedulePlan, 'focusM
 }
 
 /** Overnight windows belong to their starting weekday. Exclusions block the whole calendar date. */
-export function studyWindows(plan: Pick<SchedulePlan, 'start' | 'end' | 'examDate' | 'excluded' | 'studyDays' | 'planStartDate'>, date: number): { start: number; end: number }[] {
-  if (date >= startOfDay(plan.examDate) || plan.excluded.includes(date) || plan.start === plan.end) return [];
+export function studyWindows(plan: Pick<SchedulePlan, 'start' | 'end' | 'examDate' | 'excluded' | 'studyDays' | 'planStartDate' | 'weekly'>, date: number): { start: number; end: number }[] {
+  if (date >= startOfDay(plan.examDate) || plan.excluded.includes(date)) return [];
   const allowed = (anchor: number) => (plan.planStartDate === undefined || anchor >= plan.planStartDate)
     && !plan.excluded.includes(anchor) && (!plan.studyDays || plan.studyDays.includes(new Date(anchor).getDay()));
+  if (plan.weekly) {
+    // Preferences study slots: this weekday's slot, plus the after-midnight part of yesterday's overnight slot.
+    const windows: { start: number; end: number }[] = [];
+    const yesterday = addDays(date, -1);
+    const before = plan.weekly[new Date(yesterday).getDay()];
+    if (before && before.end <= before.start && before.end > 0 && allowed(yesterday)) windows.push({ start: 0, end: before.end });
+    const slot = plan.weekly[new Date(date).getDay()];
+    if (slot && slot.start !== slot.end && allowed(date)) windows.push({ start: slot.start, end: slot.end > slot.start ? slot.end : 1440 });
+    return windows;
+  }
+  if (plan.start === plan.end) return [];
   if (plan.end > plan.start) return allowed(date) ? [{ start: plan.start, end: plan.end }] : [];
   const windows = [];
   if (plan.end > 0 && allowed(addDays(date, -1))) windows.push({ start: 0, end: plan.end });
