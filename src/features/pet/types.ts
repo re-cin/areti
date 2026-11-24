@@ -49,6 +49,8 @@ export type Overlay = 'confetti';
 
 export type DisplayedExpression = {
   id: ExpressionId;
+  /** The situation that was picked, before any locked fallback (added expressions attach to it). */
+  slot: ExpressionId;
   overlay?: Overlay;
   /** The matrix (base) mood underneath any override. */
   base: MatrixMood;

@@ -599,3 +599,20 @@ thead th.actions-col { text-align: right; }
 @media (max-width: 1000px) { .controls-grid { grid-template-columns: 1fr; } }
 .sound-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 1300px) { .sound-cols { grid-template-columns: 1fr; } }
+
+/* Pet tab */
+.pet-thumb { width: 48px; height: 48px; flex: none; border: 1.5px solid var(--ink); border-radius: 12px; background: var(--surface); object-fit: contain; padding: 4px; box-sizing: border-box; }
+.pet-thumb.builtin { display: flex; align-items: center; justify-content: center; background: var(--tealSoft); }
+.pet-thumb.lg { width: 96px; height: 96px; }
+.slot-group { border-bottom: 1px solid var(--divider); }
+.slot-group .music-row { border-bottom: none; }
+.slot-group .music-row.added { padding-left: 24px; }
+.slot-group .music-row .dropdown-btn { padding-top: 4px; padding-bottom: 4px; }
+.seg button.locked { opacity: .55; cursor: not-allowed; display: inline-flex; align-items: center; gap: 4px; }
+.pet-divider { border: none; border-top: 1.5px solid var(--line); margin: 32px 0 24px; }
+.pet-line-input { min-height: 84px; resize: vertical; line-height: 1.4; font-family: inherit; }
+a.btn { text-decoration: none; color: inherit; }
+.level-input { width: 100%; }
+.level-input.sm { width: 72px; padding: 4px 8px; font-size: 13px; }
+.level-input.invalid { border-color: var(--dangerDark); }
+.row-level { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }

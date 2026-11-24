@@ -2,7 +2,7 @@ import { StreakIcon } from '@/components/ui/StreakIcon';
 import { Text } from '@/components/ui/Text';
 import { colors, spacing } from '@/theme';
 import { StyleSheet, View } from 'react-native';
-import { daySummary, minutesByDay, streaks } from '@/features/stats/stats';
+import { daySummary, streakDays, streaks } from '@/features/stats/stats';
 import { loadStatSessions } from '@/features/stats/statsRepo';
 import { useDbQuery } from '@/lib/useDbQuery';
 
@@ -10,8 +10,7 @@ import { useDbQuery } from '@/lib/useDbQuery';
 async function loadToday() {
   const sessions = await loadStatSessions();
   const today = new Date();
-  const studyDays = new Set(minutesByDay(sessions).keys());
-  return { streak: streaks(studyDays, today).current, minutes: Math.round(daySummary(sessions, today).minutes) };
+  return { streak: streaks(streakDays(sessions), today).current, minutes: Math.round(daySummary(sessions, today).minutes) };
 }
 
 const fmtMinutes = (m: number) => (m < 60 ? `${m} ${m === 1 ? 'min' : 'mins'}` : `${Math.floor(m / 60)} hr ${m % 60 ? `${m % 60} min` : ''}`.trim());

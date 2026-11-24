@@ -23,7 +23,13 @@ import {
   nextUnlock,
   resolveExpression,
   unlockedExpressions,
+  addedLinesFor,
+  customLines,
+  isUnlocked,
+  pickVariant,
+  type CustomExpression,
 } from '@/features/pet';
+import { usePetContent } from '@/features/pet/customContent';
 import { startOfDay } from '@/lib/dates';
 import { EXPRESSION_PREVIEW, PET_NAME_MAX, usePetStore } from '@/stores/petStore';
 
@@ -48,9 +54,22 @@ function parse<T>(value: string | undefined, fallback: T): T {
   }
 }
 
+/** Small seeded random (0..1), so a pick stays the same until the situation changes or the tab is reopened. */
+function seeded(seed: number): () => number {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6d2b79f5) >>> 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const hash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261);
+
 /** Everything the Reti screen shows, live from the database and the spec rules. */
-export function usePetView() {
+export function usePetView(rollSeed = 0) {
   const now = useMinuteClock();
+  const content = usePetContent();
   const today = startOfDay(now);
 
   const { data: log, updatedAt: logLoadedAt } = useLiveQuery(focusLogQuery());
@@ -87,9 +106,14 @@ export function usePetView() {
       brief,
     });
     // DEV preview from the Expressions grid overrides what the rules picked.
-    const displayed = preview ? { ...resolved, id: preview, overlay: undefined } : resolved;
+    const displayed = preview ? { ...resolved, id: preview, slot: preview, overlay: undefined } : resolved;
     const progress = goalProgress(stats.minutesToday, goalMinutes);
     const restMode = progress >= 1 && session !== 'focus' && brief === null;
+    // Expressions added by admins for this situation: random among the unlocked ones and the built-in. The pick
+    // changes when the situation changes or the Reti tab is opened again (rollSeed), not every minute.
+    const custom: CustomExpression | null = preview ? null : pickVariant(displayed.slot, lvl.level, content.expressions,
+      isUnlocked(displayed.slot, lvl.level), seeded(rollSeed ^ hash(displayed.slot)));
+    const builtInLines = [...linesFor(displayed.id, lvl.level, restMode), ...(restMode ? [] : addedLinesFor(displayed.id, content.lines))];
 
     return {
       name: ghostRows?.[0]?.name ?? 'Reti',
@@ -99,7 +123,9 @@ export function usePetView() {
       next: nextUnlock(lvl.level),
       expression: getExpression(displayed.id),
       overlay: displayed.overlay,
-      lines: preview ? linesFor(preview, 99) : linesFor(displayed.id, lvl.level, restMode),
+      /** An added expression to show instead of the built-in art (null = built-in). */
+      custom,
+      lines: preview ? linesFor(preview, 99) : custom && !restMode ? customLines(custom, content.lines, builtInLines) : builtInLines,
       preview,
       talkIndex,
       momentum,
@@ -114,7 +140,7 @@ export function usePetView() {
       /** True once the focus log and settings have loaded (so events don't fire on empty data). */
       loaded: Boolean(logLoadedAt && settingsLoadedAt),
     };
-  }, [log, exams, ghostRows, settingRows, logLoadedAt, settingsLoadedAt, session, brief, talkIndex, preview, now, today]);
+  }, [log, exams, ghostRows, settingRows, logLoadedAt, settingsLoadedAt, session, brief, talkIndex, preview, now, today, content, rollSeed]);
 }
 
 export async function renamePet(name: string) {

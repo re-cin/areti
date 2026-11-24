@@ -30,12 +30,12 @@ const base: PetSituation = {
 };
 
 describe('credited minutes (spec 1)', () => {
-  it('matches the examples table', () => {
+  it('credits every whole minute studied (team rule: no 15-minute minimum)', () => {
     expect(creditedMinutes(25)).toBe(25);
     expect(creditedMinutes(40)).toBe(40);
-    expect(creditedMinutes(15)).toBe(15);
-    expect(creditedMinutes(14)).toBe(0);
+    expect(creditedMinutes(14)).toBe(14);
     expect(creditedMinutes(22.9)).toBe(22);
+    expect(creditedMinutes(0.5)).toBe(0);
   });
   it('caps at the daily ceiling', () => {
     expect(applyDailyCeiling(580, 50)).toBe(20);

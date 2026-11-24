@@ -1,13 +1,13 @@
 // Spec section 1 (credited focus minutes) and 3.1 (momentum).
 
-/** A block needs at least this many focused minutes to earn any credit. */
-export const MIN_CREDITED_MINUTES = 15;
+/** Team rule (Nov 2026): every whole minute studied counts, even when a block is ended early. */
+export const MIN_CREDITED_MINUTES = 1;
 /** Proposed guard: daily credit ceiling (~10 hours). */
 export const DAILY_CREDIT_CEILING = 600;
 
 /**
- * Credited minutes for one focus block, applied when it ends (completed or cancelled).
- * Whole minutes only, rounded down; under 15 gives 0.
+ * Credited minutes for one focus block, applied when it ends (completed or ended early).
+ * Whole minutes only, rounded down (under 1 minute gives 0).
  */
 export function creditedMinutes(focusedMinutes: number): number {
   const whole = Math.floor(Math.max(0, focusedMinutes));

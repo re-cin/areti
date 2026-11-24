@@ -54,14 +54,14 @@ export function isExamNear(examInDays: number | null): boolean {
 export function resolveExpression(s: PetSituation): DisplayedExpression {
   const progress = goalProgress(s.minutesToday, s.goalMinutes);
   const base = matrixMood(s.momentum, progress);
-  const show = (id: ExpressionId): DisplayedExpression => ({ id: withFallback(id, s.level), base });
+  const show = (id: ExpressionId): DisplayedExpression => ({ id: withFallback(id, s.level), slot: id, base });
 
   // 1. Brief expressions.
   if (s.brief === 'goalCelebration') {
     // Locked celebration falls back to Neutral + confetti.
     return isUnlocked('goalCelebration', s.level)
-      ? { id: 'goalCelebration', base }
-      : { id: 'neutral', overlay: 'confetti', base };
+      ? { id: 'goalCelebration', slot: 'goalCelebration', base }
+      : { id: 'neutral', slot: 'goalCelebration', overlay: 'confetti', base };
   }
   if (s.brief === 'memoryFlash') return show('memoryFlash');
 

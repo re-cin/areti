@@ -7,3 +7,4 @@ export * from './dialogue';
 export * from './format';
 export * from './schedule';
 export * from './focusLog';
+export * from './slots';

@@ -1,4 +1,4 @@
-import { daySummary, intensityLevel, periodSummary, streaks, subjectTotals, type StatSession } from './stats';
+import { daySummary, intensityLevel, periodSummary, streakDays, streaks, subjectTotals, type StatSession } from './stats';
 
 const at = (y: number, m: number, d: number, h = 10) => new Date(y, m - 1, d, h).getTime();
 const s = (ts: number, min: number, subjectId: string | null = 'a', completed = true): StatSession => ({
@@ -34,7 +34,20 @@ describe('intensityLevel', () => {
 describe('daySummary', () => {
   it('adds up minutes, sessions and xp for one day', () => {
     const sessions = [s(at(2026, 9, 10), 25), s(at(2026, 9, 10, 15), 10, 'b', false), s(at(2026, 9, 11), 25)];
-    expect(daySummary(sessions, new Date(2026, 8, 10))).toEqual({ minutes: 35, sessions: 2, xp: 25 }); // 25-min block credits 25; the 10-min one is under 15, so 0
+    // Every minute studied gives XP, also the 10-minute block that was ended early.
+    expect(daySummary(sessions, new Date(2026, 8, 10))).toEqual({ minutes: 35, sessions: 2, xp: 35 });
+  });
+
+  it('includes the streak bonus, like Reti', () => {
+    const sessions = [8, 9, 10].map((d) => s(at(2026, 9, d), 50));
+    expect(daySummary(sessions, new Date(2026, 8, 10)).xp).toBe(55); // day 3 of the streak: +10%
+  });
+});
+
+describe('streakDays', () => {
+  it('counts days with a finished block only', () => {
+    const sessions = [s(at(2026, 9, 10), 5), s(at(2026, 9, 11), 40, 'a', false)];
+    expect([...streakDays(sessions)]).toEqual(['2026-09-10']);
   });
 });
 

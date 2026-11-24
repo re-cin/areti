@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 import type { ExpressionId } from '@/features/pet';
@@ -13,6 +13,7 @@ import { SpeechBubble } from '@/components/pet/SpeechBubble';
 import { XpCard } from '@/components/pet/XpCard';
 import { HeaderGear, ScreenHeader } from '@/components/ui/ScreenHeader';
 import { pickLine } from '@/features/pet';
+import { refreshPetContent } from '@/features/pet/customContent';
 import { renamePet, usePetEvents, usePetView } from '@/hooks/usePetView';
 import { EXPRESSION_PREVIEW, PET_NAME_MAX, usePetStore } from '@/stores/petStore';
 import { colors, spacing } from '@/theme';
@@ -26,7 +27,13 @@ const SHEET_PEEK = 170;
 
 export default function RetiScreen() {
   const insets = useSafeAreaInsets();
-  const pet = usePetView();
+  // A new random pick among added expressions each time the tab is opened, and fresh content from the admin site.
+  const [rollSeed, setRollSeed] = useState(() => Date.now());
+  useFocusEffect(useCallback(() => {
+    setRollSeed(Date.now());
+    void refreshPetContent().catch(() => {});
+  }, []));
+  const pet = usePetView(rollSeed);
   usePetEvents(pet);
   const talk = usePetStore((s) => s.talk);
   const togglePreview = usePetStore((s) => s.togglePreview);
@@ -84,7 +91,7 @@ export default function RetiScreen() {
           </View>
 
           <View style={styles.ghost}>
-            <PetGhost expression={pet.expression.id} overlay={pet.overlay} onPress={talk} />
+            <PetGhost expression={pet.expression.id} overlay={pet.overlay} customUrl={pet.custom?.url} onPress={talk} />
           </View>
         </Animated.View>
 

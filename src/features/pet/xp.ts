@@ -1,43 +1,23 @@
-// XP rules for Reti. Pure functions, shared by the timer (awarding) and statistics (display).
+// XP rules for Reti, shared by the timer (awarding), Pomodoro, Statistics and the Reti tab.
+// One source: the pet module (credit.ts, levels.ts, focusLog.ts). This file only adapts it for
+// callers that work in seconds.
+//  - A focus block is credited with the whole minutes actually focused (rounded down), whether it ran to
+//    the end or was ended early.
+//  - At most DAILY_CREDIT_CAP_MIN credited minutes per day (about 10 hours).
+//  - EXP = credited minutes x streak bonus (x1.1 from a 3-day streak, x1.2 from 7). The streak counts days
+//    with at least one finished focus block, of any length.
+//  - Levels use the spec thresholds (levels.ts), the same on every tab.
+import { applyDailyCeiling, creditedMinutes as creditedFromMinutes, DAILY_CREDIT_CEILING, MIN_CREDITED_MINUTES } from './credit';
 
-// Core rule: every ghost feature runs from CREDITED focus minutes.
-//  - A focus block is credited with the whole minutes actually focused (rounded down), only if that is
-//    15 or more; under 15 minutes gives 0.
-//  - Credit is applied when the block ends, whether it completed or was cancelled.
-//  - Guard: at most DAILY_CREDIT_CAP_MIN credited minutes per day (about 10 hours).
-// 1 credited minute = 1 XP.
+export const MIN_CREDITED_MIN = MIN_CREDITED_MINUTES;
+export const DAILY_CREDIT_CAP_MIN = DAILY_CREDIT_CEILING;
 
-export const MIN_CREDITED_MIN = 15;
-export const DAILY_CREDIT_CAP_MIN = 600;
-
-/** Credited minutes for one focus block: whole minutes, 0 under 15. (25 done -> 25, 40 -> 40, 15 -> 15, 14 -> 0) */
+/** Credited minutes for one focus block: whole minutes studied. (25 done -> 25, ended at 12:40 -> 12) */
 export function creditedMinutes(durationSec: number): number {
-  const min = Math.floor(durationSec / 60);
-  return min >= MIN_CREDITED_MIN ? min : 0;
+  return creditedFromMinutes(durationSec / 60);
 }
 
 /** Credit actually given for a block, after the daily cap (`creditedToday` = already credited that day). */
 export function creditWithDailyCap(durationSec: number, creditedToday: number): number {
-  return Math.min(creditedMinutes(durationSec), Math.max(0, DAILY_CREDIT_CAP_MIN - creditedToday));
-}
-
-/** XP for one focus block = its credited minutes (completed or cancelled doesn't matter). */
-export function xpForFocus(durationSec: number, _completed?: boolean): number {
-  return creditedMinutes(durationSec);
-}
-
-/** XP needed to go from `level` to the next level (Lv 4 needs 500). */
-export function xpToNextLevel(level: number): number {
-  return 100 * (level + 1);
-}
-
-/** Adds XP, levelling up as many times as needed. `xp` is progress inside the current level. */
-export function addXp(level: number, xp: number, gained: number): { level: number; xp: number } {
-  let l = level;
-  let x = xp + Math.max(0, gained);
-  while (x >= xpToNextLevel(l)) {
-    x -= xpToNextLevel(l);
-    l += 1;
-  }
-  return { level: l, xp: x };
+  return applyDailyCeiling(creditedToday, creditedMinutes(durationSec));
 }

@@ -3,18 +3,25 @@ import { focusStats, momentumNow, minutesInSlots, inWindow, DEFAULT_SLEEP } from
 const DAY_SLOT = [{ start: 9 * 60, end: 21 * 60 }];
 
 const at = (y: number, mo: number, d: number, h: number, mi = 0) => new Date(y, mo, d, h, mi).getTime();
-const block = (start: number, minutes: number) => ({ startedAt: start, durationSec: minutes * 60 });
+const block = (start: number, minutes: number, completed = true) => ({ startedAt: start, durationSec: minutes * 60, completed });
 
 describe('focusStats', () => {
   const now = at(2026, 10, 22, 18);
   it('is empty with no sessions', () => {
     expect(focusStats([], now)).toEqual({ totalExp: 0, expToday: 0, minutesToday: 0, streakDays: 0 });
   });
-  it('credits today with the 15-minute rule', () => {
-    const s = focusStats([block(at(2026, 10, 22, 9), 25), block(at(2026, 10, 22, 10), 14)], now);
-    expect(s.minutesToday).toBe(25);
-    expect(s.expToday).toBe(25);
+  it('credits every minute studied, also from a block ended early', () => {
+    const s = focusStats([block(at(2026, 10, 22, 9), 25), block(at(2026, 10, 22, 10), 14, false)], now);
+    expect(s.minutesToday).toBe(39);
+    expect(s.expToday).toBe(39);
     expect(s.streakDays).toBe(1);
+  });
+  it('counts a streak day only with a finished block, of any length', () => {
+    const early = focusStats([block(at(2026, 10, 22, 9), 40, false)], now);
+    expect(early.minutesToday).toBe(40);
+    expect(early.streakDays).toBe(0);
+    const short = focusStats([block(at(2026, 10, 22, 9), 5)], now);
+    expect(short.streakDays).toBe(1);
   });
   it('applies the streak bonus from day 3', () => {
     const days = [20, 21, 22].map((d) => block(at(2026, 10, d, 9), 50));

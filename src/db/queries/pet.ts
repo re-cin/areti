@@ -10,7 +10,7 @@ import { focusSessions, ghostState, settings, studyPlans } from '../schema';
 /** Every logged focus block. EXP, level, streak and momentum are derived from these. */
 export const focusLogQuery = () =>
   db
-    .select({ startedAt: focusSessions.startedAt, durationSec: focusSessions.durationSec })
+    .select({ startedAt: focusSessions.startedAt, durationSec: focusSessions.durationSec, completed: focusSessions.completed })
     .from(focusSessions)
     .where(isNull(focusSessions.deletedAt))
     .orderBy(asc(focusSessions.startedAt));

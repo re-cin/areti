@@ -24,6 +24,8 @@ type Props = {
   onPress?: () => void;
   /** Width of the old placeholder; the square body is sized to match its height. */
   width?: number;
+  /** An expression added on the admin site: a looping WebP of the whole pet, shown instead of body + face. */
+  customUrl?: string;
 };
 
 /**
@@ -31,7 +33,7 @@ type Props = {
  * code float and confetti. Still-head bodies play by themselves with the face fixed;
  * the moving-head body is played frame by frame so the face follows the head.
  */
-export function PetGhost({ expression, overlay, onPress, width = 170 }: Props) {
+export function PetGhost({ expression, overlay, onPress, width = 170, customUrl }: Props) {
   const size = (width * 40) / 32; // square slot, same height as the old placeholder
   const scale = size / CANVAS;
   const bodyId = BODY_FOR[expression];
@@ -71,7 +73,9 @@ export function PetGhost({ expression, overlay, onPress, width = 170 }: Props) {
       accessibilityLabel={`${getExpression(expression).label} ghost`}
       accessibilityHint="Tap to talk">
       <Animated.View style={[{ width: size, height: size }, floatStyle]}>
-        {body.kind === 'webp' ? (
+        {customUrl ? (
+          <Image source={{ uri: customUrl }} style={StyleSheet.absoluteFill} contentFit="contain" autoplay cachePolicy="disk" />
+        ) : body.kind === 'webp' ? (
           <>
             <Image source={body.source} style={StyleSheet.absoluteFill} contentFit="contain" autoplay />
             <View pointerEvents="none" style={{ position: 'absolute', left: FACE_BOX.x * scale, top: FACE_BOX.y * scale }}>

@@ -13,8 +13,8 @@ import { Text } from '@/components/ui/Text';
 import { formatHM, formatLongDuration, isSameDay, MONTHS, startOfDay, startOfMonth } from '@/lib/dateHelpers';
 import { useDbQuery } from '@/lib/useDbQuery';
 import { useToday } from '@/hooks/useToday';
-import { getGhost } from '@/features/pet/petRepo';
-import { daySummary, minutesByDay, periodSummary, streaks, subjectTotals, type Period, type StatSession } from '@/features/stats/stats';
+import { DEFAULT_GHOST, getGhost } from '@/features/pet/petRepo';
+import { daySummary, minutesByDay, periodSummary, streakDays, streaks, subjectTotals, type Period, type StatSession } from '@/features/stats/stats';
 import { loadStatSessions } from '@/features/stats/statsRepo';
 import { subjectLookup, type SubjectRow } from '@/features/subjects/subjectsRepo';
 import { colors, fonts, radii, spacing } from '@/theme';
@@ -51,10 +51,11 @@ export default function StatisticsScreen() {
 
   const sessions = useDbQuery(loadStatSessions, [] as StatSession[]);
   const subjects = useDbQuery(subjectLookup, new Map<string, SubjectRow>());
-  const ghost = useDbQuery(getGhost, { id: '', level: 1, xp: 0, xpToNext: 200 });
+  const ghost = useDbQuery(getGhost, DEFAULT_GHOST);
 
   const byDay = useMemo(() => minutesByDay(sessions), [sessions]);
-  const streak = useMemo(() => streaks(new Set(byDay.keys()), today), [byDay, today]);
+  // Streak = days with a finished focus block (same as the Planner and Reti's streak bonus).
+  const streak = useMemo(() => streaks(streakDays(sessions), today), [sessions, today]);
   const day = useMemo(() => daySummary(sessions, selected), [sessions, selected]);
 
   // Month stats follow the month shown in the calendar; week stats follow the selected day.
@@ -160,7 +161,7 @@ export default function StatisticsScreen() {
                 )}
               </View>
               <Text style={{ alignSelf: 'flex-end', fontFamily: fonts.semiBold, fontSize: 11 }}>
-                {ghost.xp} / {ghost.xpToNext} XP
+                {ghost.label}
               </Text>
             </View>
           </View>

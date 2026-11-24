@@ -2,8 +2,8 @@ import { applyDailyCeiling, creditedMinutes, decayMomentum, gainMomentum, MOMENT
 import { expForMinutes } from './levels';
 import { DEFAULT_STUDY_SLOTS, minutesInSlots, type TimeWindow } from './schedule';
 
-/** The parts of a `focus_sessions` row the ghost needs. */
-export type FocusRecord = { startedAt: number; durationSec: number };
+/** The parts of a `focus_sessions` row the ghost needs. `completed`: the block ran to its end. */
+export type FocusRecord = { startedAt: number; durationSec: number; completed?: boolean };
 
 const dayOf = (ms: number) => {
   const d = new Date(ms);
@@ -19,11 +19,25 @@ const prevDay = (day: number) => {
 export type FocusStats = {
   totalExp: number;
   expToday: number;
-  /** Credited minutes today (after the 15-minute rule and the daily ceiling). */
+  /** Credited minutes today (whole minutes studied, after the daily ceiling). */
   minutesToday: number;
-  /** Consecutive days with at least one credited block, ending today (or yesterday). */
+  /** Consecutive days with at least one finished focus block (any length), ending today (or yesterday). */
   streakDays: number;
 };
+
+/** Local-midnight days that have at least one finished focus block: these make the streak. */
+export function streakDaySet(records: readonly FocusRecord[]): Set<number> {
+  const days = new Set<number>();
+  for (const r of records) if (r.completed) days.add(dayOf(r.startedAt));
+  return days;
+}
+
+/** Consecutive streak days ending on `day`. */
+export function streakEndingOn(days: ReadonlySet<number>, day: number): number {
+  let n = 0;
+  for (let d = day; days.has(d); d = prevDay(d)) n++;
+  return n;
+}
 
 /**
  * Everything level/goal related, derived from the focus log. Nothing here is stored,
@@ -40,12 +54,9 @@ export function focusStats(records: readonly FocusRecord[], now: number): FocusS
     perDay.set(day, sofar + applyDailyCeiling(sofar, credit));
   }
 
-  // EXP per day with that day's streak bonus (spec 7).
-  const streakAt = (day: number) => {
-    let n = 0;
-    for (let d = day; perDay.has(d); d = prevDay(d)) n++;
-    return n;
-  };
+  // EXP per day with that day's streak bonus (spec 7). The streak counts days with a finished block.
+  const streak = streakDaySet(records);
+  const streakAt = (day: number) => streakEndingOn(streak, day);
   let totalExp = 0;
   let expToday = 0;
   const today = dayOf(now);
@@ -55,7 +66,7 @@ export function focusStats(records: readonly FocusRecord[], now: number): FocusS
     if (day === today) expToday = exp;
   }
 
-  const streakDays = perDay.has(today) ? streakAt(today) : streakAt(prevDay(today));
+  const streakDays = streak.has(today) ? streakAt(today) : streakAt(prevDay(today));
   return { totalExp, expToday, minutesToday: perDay.get(today) ?? 0, streakDays };
 }
 

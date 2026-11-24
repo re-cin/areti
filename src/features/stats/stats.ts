@@ -1,6 +1,6 @@
 // Pure statistics math. Input: focus sessions; output: numbers the Statistics screen shows.
 import { addDays, dayKey, daysBetween, startOfDay, startOfMonth, startOfWeek } from '@/lib/dateHelpers';
-import { creditedMinutes, DAILY_CREDIT_CAP_MIN } from '@/features/pet/xp';
+import { focusStats } from '@/features/pet/focusLog';
 
 export type StatSession = {
   startedAt: number;
@@ -28,6 +28,14 @@ export function intensityLevel(minutes: number): 0 | 1 | 2 | 3 | 4 {
   if (minutes < 60) return 2;
   if (minutes < 120) return 3;
   return 4;
+}
+
+/**
+ * Streak days ('YYYY-MM-DD'): days with at least one finished focus block, of any length.
+ * The same rule Reti uses for its streak bonus, so the Planner, Statistics and Reti agree.
+ */
+export function streakDays(sessions: StatSession[]): Set<string> {
+  return new Set(sessions.filter((s) => s.completed).map((s) => dayKey(s.startedAt)));
 }
 
 /**
@@ -60,7 +68,8 @@ export function daySummary(sessions: StatSession[], day: Date): DaySummary {
   return {
     minutes: mine.reduce((a, s) => a + s.durationSec / 60, 0),
     sessions: mine.length,
-    xp: Math.min(mine.reduce((a, s) => a + creditedMinutes(s.durationSec), 0), DAILY_CREDIT_CAP_MIN),
+    // Same EXP as Reti: credited minutes (daily cap) with that day's streak bonus.
+    xp: focusStats(sessions, startOfDay(day).getTime()).expToday,
   };
 }
 

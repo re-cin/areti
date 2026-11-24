@@ -23,7 +23,7 @@ export function Login({ notice }: { notice?: string }) {
   return (
     <div className="login">
       <div className="login-art">
-        <img className="m" src="/mascot.png" alt="" />
+        <img className="m" src="/areti-icon.png" alt="" />
         <h2>areti admin</h2>
         <p>Keep an eye on how students are studying and manage their subscriptions.</p>
       </div>

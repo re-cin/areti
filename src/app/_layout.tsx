@@ -17,6 +17,7 @@ import { View } from 'react-native';
 import migrations from '../../drizzle/migrations';
 import { startAutoSync } from '@/sync/sync';
 import { loadCachedRemoteSounds, refreshRemoteSounds } from '@/features/audio/remoteSounds';
+import { loadCachedPetContent, refreshPetContent } from '@/features/pet/customContent';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notifications';
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
@@ -45,6 +46,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (!dbReady) return;
     void loadCachedRemoteSounds().then(() => refreshRemoteSounds()).catch(() => {});
+    // Expressions and dialogue added by admins (admin site → Pet).
+    void loadCachedPetContent().then(() => refreshPetContent()).catch(() => {});
   }, [dbReady]);
 
   // Which page is showing, read by the reminder popup below.
