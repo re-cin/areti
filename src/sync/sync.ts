@@ -1,6 +1,6 @@
 import { getTableColumns, getTableName, gt, sql } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
-import Storage from 'expo-sqlite/kv-store';
+import { deviceStorage as Storage } from '@/lib/storage';
 import { addDatabaseChangeListener } from 'expo-sqlite';
 import { AppState } from 'react-native';
 import { db } from '@/db/client';
@@ -15,6 +15,8 @@ import {
   tasks,
 } from '@/db/schema';
 import { supabase, supabaseConfigured } from '@/lib/supabase';
+import { bumpData } from '@/stores/dataVersion';
+import { refreshSessionReminders } from '@/features/timer/reminders';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -53,7 +55,7 @@ const TABLES: SyncedTable[] = [
 ];
 
 /** Settings that belong to this phone only and are never uploaded. */
-const LOCAL_ONLY_SETTINGS = new Set(['session']);
+const LOCAL_ONLY_SETTINGS = new Set(['session', 'timer.state']); // timer.state = the Pomodoro running on this phone
 
 const PAGE = 500;
 
@@ -61,28 +63,54 @@ const PAGE = 500;
 // Public API
 // ---------------------------------------------------------------------------
 
-let running: Promise<void> | null = null;
+/**
+ * How a sync went:
+ *  - 'ok': everything uploaded and downloaded
+ *  - 'offline': couldn't reach the server (no internet, timeout)
+ *  - 'error': the server answered with an error
+ *  - 'signed-out' / 'not-configured': nothing to sync
+ */
+export type SyncResult = 'ok' | 'offline' | 'error' | 'signed-out' | 'not-configured';
+
+let running: Promise<SyncResult> | null = null;
 let again = false;
 
-/** Runs one sync now (or right after the one in progress). Never throws. */
-export function syncNow(): Promise<void> {
+/**
+ * Runs one sync now (or right after the one in progress) and says how it went.
+ * Never throws; failed syncs are retried automatically later.
+ */
+export function syncNow(): Promise<SyncResult> {
   if (running) {
     again = true;
     return running;
   }
   running = (async () => {
+    let result: SyncResult = 'ok';
     do {
       again = false;
       try {
-        await syncOnce();
+        result = await syncOnce();
       } catch (e) {
-        if (__DEV__) console.warn('[sync] failed (will retry later):', e);
+        result = isNetworkError(e) ? 'offline' : 'error';
+        if (__DEV__) console.warn(`[sync] failed (${result}, will retry later):`, e);
       }
     } while (again);
+    return result;
   })().finally(() => {
     running = null;
   });
   return running;
+}
+
+/** Wraps a Supabase error with which step and table failed, so logs say exactly what went wrong. */
+function syncError(step: string, error: { message: string; code?: string; details?: string | null; hint?: string | null }) {
+  const extra = [error.code && `code ${error.code}`, error.details, error.hint].filter(Boolean).join(' | ');
+  return new Error(`${step}: ${error.message}${extra ? ` (${extra})` : ''}`);
+}
+
+function isNetworkError(e: unknown) {
+  const text = e instanceof Error ? `${e.name} ${e.message}` : typeof e === 'object' && e ? JSON.stringify(e) : String(e);
+  return /network|fetch|timed? ?out|offline|ENOTFOUND|ECONN/i.test(text);
 }
 
 /** Starts automatic syncing. Call once when the app starts; returns a stop function. */
@@ -135,6 +163,8 @@ export async function clearLocalData() {
   } finally {
     pulling = false;
   }
+  bumpData();
+  void refreshSessionReminders();
 }
 
 // ---------------------------------------------------------------------------
@@ -143,11 +173,11 @@ export async function clearLocalData() {
 
 let pulling = false;
 
-async function syncOnce() {
-  if (!supabaseConfigured) return;
+async function syncOnce(): Promise<SyncResult> {
+  if (!supabaseConfigured) return 'not-configured';
   const { data } = await supabase.auth.getSession();
   const userId = data.session?.user.id;
-  if (!userId) return;
+  if (!userId) return 'signed-out';
 
   const started = Date.now();
   // All tables at the same time (each: upload, then download).
@@ -158,6 +188,8 @@ async function syncOnce() {
     }),
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
+  void refreshSessionReminders();
+  return 'ok';
 }
 
 async function push({ table, conflict, updatedAt }: SyncedTable, userId: string) {
@@ -179,7 +211,7 @@ async function push({ table, conflict, updatedAt }: SyncedTable, userId: string)
       .map((r) => ({ ...toRemote(table, r), user_id: userId }));
     if (upload.length) {
       const { error } = await supabase.from(name).upsert(upload, { onConflict: conflict });
-      if (error) throw error;
+      if (error) throw syncError(`upload ${name}`, error);
     }
 
     cursor = Number(rows[rows.length - 1].updatedAt);
@@ -200,7 +232,7 @@ async function pull({ table, key, updatedAt }: SyncedTable, userId: string) {
       .gte('server_updated_at', cursor)
       .order('server_updated_at')
       .limit(PAGE);
-    if (error) throw error;
+    if (error) throw syncError(`download ${name}`, error);
     if (!data || data.length === 0) return;
 
     pulling = true;
@@ -218,6 +250,7 @@ async function pull({ table, key, updatedAt }: SyncedTable, userId: string) {
     } finally {
       pulling = false;
     }
+    bumpData(); // screens using useDbQuery re-read the downloaded rows
 
     const last = String((data[data.length - 1] as Record<string, unknown>).server_updated_at);
     // Same timestamp again means everything at it is already applied; stop to avoid looping.

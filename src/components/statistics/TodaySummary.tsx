@@ -39,7 +39,7 @@ export function TodaySummary({ level, xp, xpGoal, studied, sessions, xpGained }:
             }}
           />
           <View style={{ backgroundColor: colors.surface, borderRadius: radii.card, padding: spacing.md, gap: spacing.xs }}>
-            <Text variant="subheading">Today you've:</Text>
+            <Text variant="subheading">Today you&apos;ve:</Text>
             <Text variant="small" color={colors.muted}>
               Studied for a total of{' '}
               <Text variant="smallStrong" color={colors.terracottaDark}>

@@ -14,6 +14,8 @@ export const colors = {
   muted: '#5B5650', // secondary text
   mutedSoft: '#B3ABA0', // locked / disabled, drag handles
   avatar: '#E2D9CD', // empty profile picture
+  line: '#DDD5CA', // thin dividers inside cards (Pomodoro, Statistics, Settings)
+  chartBg: '#E6DED3', // bar chart well (Statistics)
   teal: '#7FC4C0', // main accent
   tealSoft: '#C9E8E5',
   tealDark: '#3E8F8A', // teal text on light backgrounds (XP)
@@ -28,6 +30,17 @@ export const colors = {
   dangerButton: '#D97B74', // "Delete everything"
   dangerDark: '#B3261E',
   exam: '#9B5CF6',
+  studyPlan: {
+    surface: '#F7F2EB',
+    border: '#3B3430',
+    text: '#0A0A09',
+    muted: '#534640',
+    quiet: '#73706B',
+    divider: '#DDD7CC',
+    calendar: '#8B5CF6',
+    toggle: '#F5EFE2',
+    button: '#312924',
+  },
   // Study heatmap, from "less" to "more" (index 0 = no study).
   heat: ['#FBF7F0', '#F6E1D1', '#EDC3A6', '#E2A27E', '#D4805A'],
   pill: {

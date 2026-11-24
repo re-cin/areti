@@ -10,6 +10,8 @@ export type CardTask = {
   subject: string;
   color: string;
   done: boolean;
+  /** Scheduled as a Pomodoro session: shows the clock and has no tick box. */
+  hasPomodoro: boolean;
 };
 
 export function toCardTask(
@@ -26,5 +28,6 @@ export function toCardTask(
     subject: s?.name ?? 'No subject',
     color: s?.color ?? '#5B5650',
     done: t.done,
+    hasPomodoro: Boolean(t.hasPomodoro),
   };
 }

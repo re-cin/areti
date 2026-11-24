@@ -27,8 +27,8 @@ import {
 import { borders, colors, spacing } from '@/theme';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View, type LayoutChangeEvent, type ScrollViewInstance } from 'react-native';
 import Animated, {
   Easing,
@@ -55,9 +55,13 @@ export default function PlannerScreen() {
 
   const { date: dateParam, n } = useLocalSearchParams<{ date?: string; n?: string }>();
 
-  useEffect(() => {
-    if (dateParam) setSelectedDate(startOfDay(new Date(Number(dateParam))));
-  }, [dateParam, n]);
+  const routeSelection = `${dateParam ?? ''}:${n ?? ''}`;
+  const [previousRouteSelection, setPreviousRouteSelection] = useState<string | null>(null);
+  if (previousRouteSelection !== routeSelection) {
+    setPreviousRouteSelection(routeSelection);
+    const next = dateParam ? startOfDay(Number(dateParam)) : NaN;
+    if (Number.isFinite(next)) setSelectedDate(next);
+  }
 
   const weekStart = startOfWeek(selectedDate); // TODO: follow the "first day of week" setting
   const days = weekDays(weekStart);
@@ -72,6 +76,19 @@ export default function PlannerScreen() {
   const weeks = monthWeeks(selectedDate); // TODO: follow the "first day of week" setting
   const tasksByDay = useTasksByDay(weeks[0][0], weeks[weeks.length - 1][6]);
   const scrollRef = useRef<ScrollViewInstance>(null);
+
+  // Leaving the tab resets the page (scrolled to the top, week view), so it looks fresh when you come back.
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        setExpanded(false);
+        progress.set(0);
+      },
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      [],
+    ),
+  );
   const progress = useSharedValue(0); // 0 = week strip, 1 = full month
 
   useEffect(() => {
@@ -170,6 +187,8 @@ export default function PlannerScreen() {
 
         {/* 3: the cream panel */}
         <View style={[styles.sheet, { minHeight: Math.max(viewportH - stickyH, 0) }]}>
+          {/* Cream continues below the panel, so pulling past the bottom never shows the teal page. */}
+          <View pointerEvents="none" style={styles.sheetOverscroll} />
           <View style={styles.sectionRow}>
             <Text variant="smallStrong" color={extra.muted}>Daily Tasks</Text>
             <Pressable style={styles.editBtn} hitSlop={10}>
@@ -200,7 +219,8 @@ export default function PlannerScreen() {
       {/* Sticky buttons: outside the ScrollView so they stay put above the tab bar */}
       <View style={styles.actions} pointerEvents="box-none">
         <LinearGradient
-          colors={['transparent', extra.sheet, extra.sheet]}
+          // Fade from the page color itself. Plain 'transparent' is transparent BLACK, which made a gray band.
+          colors={[`${extra.sheet}00`, extra.sheet, extra.sheet]}
           style={styles.actions}
           pointerEvents="box-none">
           <NeoButton
@@ -219,7 +239,7 @@ export default function PlannerScreen() {
             shadowColor={extra.finishedShadow}
             icon={<Ionicons name="calendar-outline" size={18} color={colors.white} />}
             style={{ flex: 1 }}
-            onPress={() => {}}
+            onPress={() => router.push('/planner/set-exam')}
           />
         </LinearGradient>
       </View>
@@ -271,6 +291,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xl,
     paddingBottom: 110, // clears the sticky buttons; raise/lower to taste
   },
+  sheetOverscroll: { position: 'absolute', left: 0, right: 0, top: '100%', height: 2000, backgroundColor: extra.sheet },
   sectionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png",
         "softwareKeyboardLayoutMode": "pan"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.recin.areti"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -35,6 +36,7 @@
       ],
       "expo-sqlite",
       "@react-native-community/datetimepicker",
+      "expo-audio",
       [
         "expo-image-picker",
         {

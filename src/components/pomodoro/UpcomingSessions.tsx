@@ -1,80 +1,96 @@
-import { Pressable, View } from 'react-native';
+import { Alert, Pressable, View } from 'react-native';
 import { Icon } from '@/components/ui/Icon';
-import { SubjectPill } from '@/components/ui/SubjectPill';
+import { Pill } from '@/components/ui/Pill';
 import { Text } from '@/components/ui/Text';
-import { borders, colors, spacing } from '@/theme';
-
-export type UpcomingSession = {
-  id: string;
-  subject: string;
-  color: string;
-  time: string;
-  blocks: number;
-  minutes: number;
-};
+import { formatClock, formatHM } from '@/lib/dateHelpers';
+import { sessionLengthMin } from '@/features/timer/session';
+import { deletePlannedSession, type UpcomingSession } from '@/features/timer/timerRepo';
+import { colors, fonts, spacing } from '@/theme';
 
 type Props = {
   sessions: UpcomingSession[];
-  /** Expanded = the full-height "all tasks" sheet (plain + instead of circled +). */
-  expanded?: boolean;
-  onToggle?: () => void;
-  onAdd?: () => void;
+  focusMin: number;
+  activeSessionId: string | null;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  onAdd: () => void;
+  onStart: (s: UpcomingSession) => void;
 };
 
-/** "Upcoming Sessions" list. Tapping the title expands / collapses the sheet. */
-export function UpcomingSessions({ sessions, expanded, onToggle, onAdd }: Props) {
-  return (
-    <View>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          paddingBottom: spacing.sm,
-          borderBottomWidth: borders.thin,
-          borderBottomColor: colors.ink,
-        }}>
-        <Pressable
-          onPress={onToggle}
-          style={{ flex: 1 }}
-          accessibilityRole="button"
-          accessibilityLabel={expanded ? 'Show timer' : 'Show all sessions'}>
-          <Text variant="subheading">Upcoming Sessions</Text>
-        </Pressable>
-        <Pressable onPress={onAdd} hitSlop={10} accessibilityRole="button" accessibilityLabel="Add session">
-          <Icon name={expanded ? 'plus' : 'plus-circle'} size={expanded ? 20 : 22} strokeWidth={2.2} />
-        </Pressable>
-      </View>
-      {sessions.map((s) => (
-        <SessionRow key={s.id} session={s} />
-      ))}
-    </View>
-  );
-}
+export function UpcomingSessions({ sessions, focusMin, activeSessionId, expanded, onToggleExpanded, onAdd, onStart }: Props) {
+  const confirmDelete = (s: UpcomingSession) =>
+    Alert.alert('Remove session?', `${s.subjectName}${s.startMinute != null ? ` at ${formatClock(s.startMinute)}` : ''}`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => void deletePlannedSession(s.id) },
+    ]);
 
-function SessionRow({ session }: { session: UpcomingSession }) {
   return (
-    <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.divider,
-      }}>
-      <View style={{ flex: 1, gap: 2 }}>
-        <SubjectPill label={session.subject} color={session.color} />
-        <Text variant="smallStrong" color={colors.muted} style={{ marginLeft: spacing.sm }}>
-          {session.time}
-        </Text>
+    <View style={{ gap: spacing.sm }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Pressable
+          onPress={onToggleExpanded}
+          style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Show timer' : 'Expand upcoming sessions'}>
+          <Text variant="heading" style={{ fontSize: 19 }}>
+            Upcoming Sessions
+          </Text>
+          <Icon name={expanded ? 'chevronDown' : 'chevronUp'} size={18} strokeWidth={2.5} color={colors.muted} />
+        </Pressable>
+        <Pressable onPress={onAdd} hitSlop={10} accessibilityRole="button" accessibilityLabel="Add a session">
+          <Icon name={expanded ? 'plus' : 'plusCircle'} size={24} />
+        </Pressable>
       </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text variant="small" color={colors.muted}>
-          {session.blocks} blocks
+      <View style={{ height: 2, backgroundColor: colors.ink }} />
+
+      {sessions.length === 0 ? (
+        <Text variant="body" color={colors.muted} style={{ paddingVertical: spacing.lg }}>
+          Nothing planned for the rest of today. Tap + to add a session, or press play for a free focus run.
         </Text>
-        <Text variant="smallStrong" color={colors.muted}>
-          {session.minutes} min
-        </Text>
-      </View>
+      ) : (
+        sessions.map((s) => {
+          const left = s.blocks - s.completedBlocks;
+          // Total session length = focus blocks + short and long breaks (session structure rules).
+          const minutes = sessionLengthMin(s.settings, s.blocks);
+          const active = s.id === activeSessionId;
+          return (
+            <Pressable
+              key={s.id}
+              onPress={() => onStart(s)}
+              onLongPress={() => confirmDelete(s)}
+              accessibilityRole="button"
+              accessibilityHint="Starts this session. Long press to remove it."
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: spacing.md,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.line,
+                opacity: pressed ? 0.6 : 1,
+              })}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <Pill label={s.subjectName} color={s.subjectColor} />
+                {s.taskTitle ? (
+                  <Text style={{ fontFamily: fonts.semiBold, fontSize: 15, paddingLeft: 4 }} numberOfLines={1}>
+                    {s.taskTitle}
+                  </Text>
+                ) : null}
+                <Text variant="caption" color={colors.muted} style={{ fontFamily: fonts.semiBold, paddingLeft: 4 }}>
+                  {active ? 'IN PROGRESS' : s.startMinute != null ? formatClock(s.startMinute) : 'Any time'}
+                </Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text variant="caption" color={colors.muted} style={{ fontSize: 14 }}>
+                  {left} {left === 1 ? 'block' : 'blocks'}
+                </Text>
+                <Text variant="bodyStrong" color={colors.muted} style={{ fontSize: 14 }}>
+                  {minutes < 60 ? `${minutes} min` : formatHM(minutes)}
+                </Text>
+              </View>
+            </Pressable>
+          );
+        })
+      )}
     </View>
   );
 }

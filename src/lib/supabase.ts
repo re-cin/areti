@@ -1,6 +1,6 @@
 import 'react-native-url-polyfill/auto';
 import { createClient } from '@supabase/supabase-js';
-import Storage from 'expo-sqlite/kv-store';
+import { deviceStorage } from './storage';
 import { AppState } from 'react-native';
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -15,7 +15,7 @@ export const supabaseConfigured = Boolean(url && anonKey);
  */
 export const supabase = createClient(url ?? 'https://not-configured.supabase.co', anonKey ?? 'not-configured', {
   auth: {
-    storage: Storage,
+    storage: deviceStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

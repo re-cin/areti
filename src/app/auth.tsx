@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
@@ -18,7 +18,8 @@ import { Wordmark } from '@/components/brand/Wordmark';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError, MIN_PASSWORD_LENGTH, signIn, signUp } from '@/lib/auth';
+import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, resendSignUpCode, signIn, signUp } from '@/lib/auth';
+import { showWelcome } from '@/lib/welcome';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
 
@@ -55,14 +56,27 @@ export default function Auth() {
   // animation, Reti is already standing in this exact spot, so it stays solid.
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromOnboarding = from === 'onboarding';
-  const fade = useRef(new Animated.Value(0)).current;
+  const [fade] = useState(() => new Animated.Value(0));
+  // Reti floats gently up and down (same as the Welcome page). Starts at rest, so the
+  // hand-off from the onboarding animation stays seamless.
+  const [float] = useState(() => new Animated.Value(0));
   useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (reduce) return fade.setValue(1);
       Animated.timing(fade, { toValue: 1, duration: 380, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+      loop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(float, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(float, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+        ]),
+      );
+      loop.start();
     });
-  }, [fade]);
+    return () => loop?.stop();
+  }, [fade, float]);
   const fadeStyle = { opacity: fade };
+  const floatStyle = { transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] };
   const riseStyle = {
     opacity: fade,
     transform: [{ translateY: fade.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
@@ -87,8 +101,19 @@ export default function Auth() {
       if (isSignUp) await signUp(email, password);
       else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
-      router.replace('/planner');
+      if (isSignUp) {
+        router.replace('/welcome'); // new account: welcome page, then the Planner
+      } else {
+        router.replace('/planner');
+        showWelcome();
+      }
     } catch (e) {
+      if (e instanceof AuthError && e.code === 'confirm-email') {
+        // Sign up: Supabase just emailed the code. Sign in before confirming: send a fresh one.
+        if (!isSignUp) await resendSignUpCode(email).catch(() => {});
+        router.push({ pathname: '/verify-email', params: { email: email.trim() } });
+        return;
+      }
       setError(errorMessage(e));
     } finally {
       setBusy(false);
@@ -119,7 +144,7 @@ export default function Auth() {
           )}
           <Animated.Image
             source={MASCOT}
-            style={[styles.mascot, fromOnboarding ? null : fadeStyle]}
+            style={[styles.mascot, fromOnboarding ? null : fadeStyle, floatStyle]}
             accessibilityLabel="Reti the ghost"
           />
           <Animated.View style={[styles.wordmark, fadeStyle]}>
@@ -135,7 +160,7 @@ export default function Auth() {
           <TextField
             onFocus={onFocus}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(t) => { setEmail(t); setError(null); }}
             placeholder="you@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -157,7 +182,7 @@ export default function Auth() {
           <PasswordField
             onFocus={onFocus}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(t) => { setPassword(t); setError(null); }}
             autoComplete={isSignUp ? 'new-password' : 'current-password'}
             textContentType={isSignUp ? 'newPassword' : 'password'}
             returnKeyType={isSignUp ? 'next' : 'done'}
@@ -170,7 +195,7 @@ export default function Auth() {
               <PasswordField
                 onFocus={onFocus}
                 value={confirm}
-                onChangeText={setConfirm}
+                onChangeText={(t) => { setConfirm(t); setError(null); }}
                 autoComplete="new-password"
                 textContentType="newPassword"
                 returnKeyType="done"
@@ -218,9 +243,10 @@ function validate({
   isSignUp: boolean;
 }): string | null {
   if (!/^\S+@\S+\.\S+$/.test(email.trim())) return 'Enter a valid email address.';
-  if (!password) return 'Enter your password.';
-  if (isSignUp && password.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for your password.`;
-  if (isSignUp && password !== confirm) return "Passwords don't match.";
+  const pw = cleanPassword(password);
+  if (!pw) return 'Enter your password.';
+  if (isSignUp && pw.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for your password.`;
+  if (isSignUp && pw !== cleanPassword(confirm)) return "Passwords don't match.";
   return null;
 }
 
@@ -232,7 +258,7 @@ function errorMessage(e: unknown) {
     case 'wrong-credentials':
       return 'Wrong email or password.';
     case 'confirm-email':
-      return 'Check your email and tap the confirmation link, then sign in.';
+      return 'Enter the code we emailed you to finish creating your account.';
     case 'weak-password':
       return 'That password is too weak. Try a longer one with letters and numbers.';
     case 'offline':

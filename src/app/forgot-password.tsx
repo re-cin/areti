@@ -7,7 +7,7 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
-import { AuthError, MIN_PASSWORD_LENGTH, resetPasswordWithCode, sendPasswordResetCode } from '@/lib/auth';
+import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, resetPasswordWithCode, sendPasswordResetCode } from '@/lib/auth';
 import { colors, fonts, spacing } from '@/theme';
 
 /** Seconds before "Resend code" can be used again. */
@@ -59,8 +59,8 @@ export default function ForgotPassword() {
     if (busy) return;
     const digits = code.replace(/\s/g, '');
     if (!/^\d{6,10}$/.test(digits)) return setError('Enter the code from the email.');
-    if (password.length < MIN_PASSWORD_LENGTH) return setError(`Use at least ${MIN_PASSWORD_LENGTH} characters for your new password.`);
-    if (password !== confirm) return setError("Passwords don't match.");
+    if (cleanPassword(password).length < MIN_PASSWORD_LENGTH) return setError(`Use at least ${MIN_PASSWORD_LENGTH} characters for your new password.`);
+    if (cleanPassword(password) !== cleanPassword(confirm)) return setError("Passwords don't match.");
     setError(null);
     setBusy(true);
     try {
@@ -89,11 +89,11 @@ export default function ForgotPassword() {
 
         {step === 'email' ? (
           <View>
-            <Text style={styles.intro}>Enter your account's email and we'll send you a code to reset your password.</Text>
+            <Text style={styles.intro}>Enter your account&apos;s email and we&apos;ll send you a code to reset your password.</Text>
             <Text style={styles.label}>Email address</Text>
             <TextField
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => { setEmail(t); setError(null); }}
               onFocus={onFocus}
               placeholder="you@example.com"
               keyboardType="email-address"
@@ -118,13 +118,13 @@ export default function ForgotPassword() {
           <View>
             <Text style={styles.intro}>
               We sent a code to <Text style={styles.strong}>{email.trim()}</Text>. Enter it below with your new password.
-              Check your spam folder if you don't see it.
+              Check your spam folder if you don&apos;t see it.
             </Text>
 
             <Text style={styles.label}>Code</Text>
             <TextField
               value={code}
-              onChangeText={setCode}
+              onChangeText={(t) => { setCode(t); setError(null); }}
               onFocus={onFocus}
               placeholder="123456"
               keyboardType="number-pad"
@@ -136,7 +136,7 @@ export default function ForgotPassword() {
             <Text style={styles.label}>New password</Text>
             <PasswordField
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(t) => { setPassword(t); setError(null); }}
               onFocus={onFocus}
               autoComplete="new-password"
               textContentType="newPassword"
@@ -145,7 +145,7 @@ export default function ForgotPassword() {
             <Text style={styles.label}>Re-enter password</Text>
             <PasswordField
               value={confirm}
-              onChangeText={setConfirm}
+              onChangeText={(t) => { setConfirm(t); setError(null); }}
               onFocus={onFocus}
               autoComplete="new-password"
               textContentType="newPassword"

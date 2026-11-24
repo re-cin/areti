@@ -7,19 +7,29 @@ import { borders, colors, spacing } from '@/theme';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { plannerColors as extra } from './plannerColors';
 
-/** A task in the Daily Tasks / Finished lists, with its done checkbox. */
+/**
+ * A task in the Daily Tasks / Finished lists. Plain tasks have a done tick box;
+ * tasks scheduled as a Pomodoro session show a clock instead and no tick box.
+ */
 export function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => void }) {
   const done = task.done;
-  const fg = done ? extra.muted : colors.ink;
+  const fg = colors.ink;
   return (
+    // Finished: the whole card fades (Figma "Planner - Home"), flat with no hard shadow.
+    <View style={done ? styles.finished : undefined}>
     <NeoBox
       offset={3}
+      shadow={!done}
       backgroundColor={done ? extra.finishedBg : colors.surface}
-      shadowColor={done ? extra.finishedShadow : colors.ink}
       style={styles.taskBox}>
       <View style={styles.taskTime}>
-        <Text variant="smallStrong" color={fg}>{task.time}</Text>
-        <Text variant="caption" color={fg}>{task.duration}</Text>
+        {/* One line each; wide enough for "12:22 pm", and shrinks a little rather than wrapping. */}
+        <Text variant="smallStrong" color={fg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          {task.time}
+        </Text>
+        <Text variant="caption" color={fg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+          {task.duration}
+        </Text>
       </View>
       <View style={[styles.taskBar, { backgroundColor: task.color }]} />
       <View style={{ flex: 1, gap: 4 }}>
@@ -32,24 +42,33 @@ export function TaskCard({ task, onToggle }: { task: CardTask; onToggle: () => v
         </Text>
         <View style={styles.taskMeta}>
           <Pill label={task.subject} color={task.color} />
-          {/* TODO: only show the clock when the task has a linked Pomodoro (task.hasPomodoro) */}
-          {!done && <Ionicons name="time" size={16} color={task.color} />}
+          {task.hasPomodoro && !done && <Ionicons name="time" size={16} color={task.color} />}
         </View>
       </View>
-      <Pressable onPress={onToggle} hitSlop={10}>
-        {done ? (
-          <View style={styles.checkDone}>
-            <Ionicons name="checkmark" size={16} color={colors.white} />
-          </View>
-        ) : (
-          <View style={styles.check} />
-        )}
-      </Pressable>
+      {/* Pomodoro sessions are not tickable: no tick box at all. */}
+      {!task.hasPomodoro && (
+        <Pressable
+          onPress={onToggle}
+          hitSlop={10}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: done }}
+          accessibilityLabel={done ? 'Mark as not done' : 'Mark as done'}>
+          {done ? (
+            <View style={[styles.checkDone, { backgroundColor: task.color }]}>
+              <Ionicons name="checkmark" size={16} color={colors.white} />
+            </View>
+          ) : (
+            <View style={styles.check} />
+          )}
+        </Pressable>
+      )}
     </NeoBox>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  finished: { opacity: 0.5 },
   taskBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -57,7 +76,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     gap: spacing.md,
   },
-  taskTime: { width: 44, alignItems: 'flex-end' },
+  taskTime: { width: 68, alignItems: 'flex-end' },
   taskBar: { width: 3, alignSelf: 'stretch', borderRadius: 2 },
   taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   check: {
@@ -72,7 +91,6 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.ink,
     alignItems: 'center',
     justifyContent: 'center',
   },
