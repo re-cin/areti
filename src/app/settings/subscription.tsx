@@ -56,14 +56,14 @@ export default function SubscriptionScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ flexGrow: 1 }}>
         {/* Teal hero: back button, wordmark, outlined "Premium" */}
-        <View style={[styles.hero, { paddingTop: insets.top + 84 }]}>
-          {/* Wordmark + title stacked on the left, Reti on the right */}
-          <View style={styles.heroRow}>
-            <View style={styles.heroText}>
-              <Wordmark width={110} backgroundColor={colors.welcomeTeal} />
-              <OutlinedTitle text="Premium" />
+        <View style={[styles.hero, { paddingTop: insets.top + 30 }]}>
+          {/* Wordmark level with the back button, big title below, Reti perched on its top-right corner */}
+          <Wordmark width={120} backgroundColor={colors.welcomeTeal} />
+          <View style={styles.titleWrap}>
+            <OutlinedTitle text="Premium" />
+            <View style={styles.retiPerch} pointerEvents="none">
+              <FloatingReti />
             </View>
-            <FloatingReti />
           </View>
           <Pressable
             onPress={() => router.back()}
@@ -300,13 +300,13 @@ function Star() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.welcomeTeal },
-  hero: { alignItems: 'center', gap: 4, paddingBottom: 30 },
+  hero: { alignItems: 'center', gap: 4, paddingBottom: 34 },
   backWrap: { position: 'absolute', left: 20 },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  heroText: { alignItems: 'center', gap: 2 },
-  reti: { width: 64, height: 75, resizeMode: 'contain' },
-  title: { fontFamily: fonts.semiBold, fontSize: 52, lineHeight: 62, letterSpacing: 1 },
+  titleWrap: { marginTop: 6 },
+  retiPerch: { position: 'absolute', top: -34, right: -30, transform: [{ rotate: '12deg' }] },
+  reti: { width: 54, height: 63, resizeMode: 'contain' },
+  title: { fontFamily: fonts.semiBold, fontSize: 60, lineHeight: 72, letterSpacing: 1 },
   sheet: {
     flex: 1,
     backgroundColor: colors.splash,
