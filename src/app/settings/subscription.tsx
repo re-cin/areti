@@ -7,6 +7,8 @@ import { Wordmark } from '@/components/brand/Wordmark';
 import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
+import { PaymentSheet } from '@/components/settings/PaymentSheet';
+import { payWithPayPal } from '@/features/subscription/paypalCheckout';
 import { showComingSoon } from '@/features/account/accountAlerts';
 import { getSetting } from '@/features/settings/settingsRepo';
 import { parseSubscription, resolveTier, SUBSCRIPTION_SETTING_KEY } from '@/features/subscription/entitlements';
@@ -19,10 +21,11 @@ import { colors, fonts } from '@/theme';
  * Payments are not connected yet: "Go Premium!" shows a notice.
  */
 
-// TODO: real prices and discount once the team decides them (Figma uses the same placeholders).
+// PayPal Sandbox test prices. They must match PRICES in supabase/functions/paypal-checkout (the server
+// decides what is charged; these only display it). Change both once the team decides real prices.
 const PLANS = [
-  { id: 'yearly', name: 'Yearly plan', detail: '1 year · ₱[PRICE]', perMonth: '₱[PRICE] / month', renews: '₱[PRICE] / year', badge: 'Save [X]%' },
-  { id: 'monthly', name: 'Monthly plan', detail: '1 month · ₱[PRICE]', perMonth: '₱[PRICE] / month', renews: '₱[PRICE] / month', badge: null },
+  { id: 'yearly', name: 'Yearly plan', period: '1 year', price: '₱1,199', detail: '1 year · ₱1,199', perMonth: '≈ ₱100 / month', badge: 'Save 33%' },
+  { id: 'monthly', name: 'Monthly plan', period: '1 month', price: '₱149', detail: '1 month · ₱149', perMonth: '₱149 / month', badge: null },
 ] as const;
 type PlanId = (typeof PLANS)[number]['id'];
 
@@ -47,12 +50,32 @@ export default function SubscriptionScreen() {
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
   const sub = useDbQuery(loadPremium, NOT_PREMIUM);
 
-  const goPremium = () =>
-    showNotice({
-      title: 'Premium is coming soon',
-      message: "Payments aren't set up yet. Thanks for wanting to support areti!",
-      icon: 'crown',
-    });
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [paying, setPaying] = useState(false);
+  const goPremium = () => setCheckoutOpen(true);
+
+  // PayPal checkout (src/features/subscription/paypalCheckout.ts). The server confirms the
+  // payment and switches Premium on; this only shows the result.
+  const continueToPayPal = async () => {
+    if (paying) return;
+    setPaying(true);
+    const result = await payWithPayPal(plan);
+    setPaying(false);
+    if (result.kind === 'canceled') return; // back on the sheet, nothing charged
+    setCheckoutOpen(false);
+    setTimeout(() => {
+      if (result.kind === 'paid') {
+        showNotice({
+          title: "You're Premium!",
+          message: `Thanks for supporting areti. Premium is on until ${dateText(result.currentPeriodEnd)}.`,
+          icon: 'crown',
+          buttonLabel: 'Yay!',
+        });
+      } else {
+        showNotice({ title: 'Payment did not go through', message: result.message });
+      }
+    }, 260);
+  };
 
   return (
     <View style={styles.screen}>
@@ -182,7 +205,11 @@ export default function SubscriptionScreen() {
           )}
 
           <View style={styles.footer}>
-            {!sub.isPremium && <Text style={styles.renews}>Auto-renews for {selected.renews} until cancelled</Text>}
+            {!sub.isPremium && (
+              <Text style={styles.renews}>
+                One-time payment of {selected.price} for {selected.period}. No automatic charges.
+              </Text>
+            )}
             <View style={styles.links}>
               <Pressable onPress={() => showComingSoon('Terms of Use')} hitSlop={8} accessibilityRole="link">
                 <Text style={styles.link}>Terms of Use</Text>
@@ -195,6 +222,15 @@ export default function SubscriptionScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <PaymentSheet
+        visible={checkoutOpen}
+        plan={{ name: selected.name, period: selected.period, price: selected.price }}
+        studentDiscount={studentDiscount}
+        onClose={() => !paying && setCheckoutOpen(false)}
+        onContinue={continueToPayPal}
+        busy={paying}
+      />
     </View>
   );
 }
