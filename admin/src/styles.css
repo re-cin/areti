@@ -225,7 +225,7 @@ thead th.sub-col { background: var(--terracottaSoft); color: var(--ink); }
 .user-cell .t { font-weight: 500; display: flex; align-items: center; gap: 6px; }
 .user-cell .s { color: var(--muted); font-size: 13px; }
 .sub-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; min-width: 150px; }
-.sub-cell .renew { font-size: 12px; color: var(--muted); font-weight: 500; }
+.sub-cell .renew { font-size: 12px; color: var(--muted); font-weight: 500; white-space: nowrap; }
 .empty { padding: 48px 16px; text-align: center; color: var(--muted); }
 
 /* ---------- Modal ---------- */
@@ -559,12 +559,12 @@ thead th.actions-col { text-align: right; }
 .confirm-modal .modal-actions { justify-content: center; }
 /* Fixed column widths so sorting never moves the table around */
 .utable { table-layout: fixed; }
-.utable th:nth-child(1) { width: 30%; }
-.utable th:nth-child(2) { width: 17%; }
+.utable th:nth-child(1) { width: 26%; }
+.utable th:nth-child(2) { width: 22%; } /* room for "Monthly · Renews Dec 24, 2026" on one line */
 .utable th:nth-child(3) { width: 13%; }
 .utable th:nth-child(4) { width: 12%; }
 .utable th:nth-child(5) { width: 13%; }
-.utable th:nth-child(6) { width: 15%; }
+.utable th:nth-child(6) { width: 14%; }
 
 /* Reti (blank) */
 .blank-page { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 360px; text-align: center; }
