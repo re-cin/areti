@@ -29,13 +29,19 @@ import { colors, fonts } from '@/theme';
 function planCard(p: PlanPrice, all: PlanPrice[], student: boolean) {
   const amount = totalFor(p, student);
   const monthly = all.find((x) => x.periodMonths === 1);
+  const months = p.periodMonths ?? 0;
   const monthlyAmount = monthly ? totalFor(monthly, student) : 0;
-  const perMonth = amount / p.periodMonths;
-  const savePct = monthly && p.periodMonths > 1 ? Math.round((1 - perMonth / monthlyAmount) * 100) : 0;
+  const perMonth = months > 0 ? amount / months : 0;
+  // "Save X%" compares longer plans with paying monthly for the same time.
+  const savePct = monthly && months > 1 ? Math.round((1 - perMonth / monthlyAmount) * 100) : 0;
+  // Weekly (and other day-based) plans show their price per week instead of per month.
+  const perUnit = p.periodDays
+    ? `${money(amount, p.currency)} / ${p.periodDays === 7 ? 'week' : periodText(p)}`
+    : `${months > 1 ? '≈ ' : ''}${money(perMonth, p.currency)} / month`;
   return {
-    detail: `${periodText(p.periodMonths)} · ${money(amount, p.currency)}`,
+    detail: `${periodText(p)} · ${money(amount, p.currency)}`,
     was: amount < p.price ? money(p.price, p.currency) : null,
-    perMonth: `${p.periodMonths > 1 ? '≈ ' : ''}${money(perMonth, p.currency)} / month`,
+    perMonth: perUnit,
     badge: savePct > 0 ? `Save ${savePct}%` : null,
   };
 }
@@ -239,7 +245,7 @@ export default function SubscriptionScreen() {
             {!sub.isPremium && (
               <Text style={styles.renews}>
                 {selected
-                  ? `One-time payment of ${money(total, selected.currency)} for ${periodText(selected.periodMonths)}. No automatic charges.`
+                  ? `One-time payment of ${money(total, selected.currency)} for ${periodText(selected)}. No automatic charges.`
                   : 'One-time payment. No automatic charges.'}
               </Text>
             )}
@@ -260,7 +266,7 @@ export default function SubscriptionScreen() {
         visible={checkoutOpen}
         plan={{
           name: selected?.label ?? '',
-          period: selected ? periodText(selected.periodMonths) : '',
+          period: selected ? periodText(selected) : '',
           price: selected ? money(selected.price, selected.currency) : '',
           total: selected ? money(total, selected.currency) : '',
           discount: useStudent ? `−${money((selected?.price ?? 0) - total, selected?.currency)}` : null,

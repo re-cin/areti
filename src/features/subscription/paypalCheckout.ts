@@ -15,7 +15,7 @@ import { refreshSubscription } from './subscriptionRepo';
  * Server code: supabase/functions/paypal-checkout and supabase/functions/paypal-return.
  */
 
-export type PaidPlan = 'monthly' | 'yearly';
+export type PaidPlan = 'weekly' | 'monthly' | 'yearly';
 
 
 export type CheckoutResult =

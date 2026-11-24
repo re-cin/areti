@@ -6,12 +6,15 @@ import { supabase, supabaseConfigured } from '@/lib/supabase';
  * Edge Function reads the same table, so what the app shows is what PayPal charges.
  */
 
-export type PlanType = 'monthly' | 'yearly';
+export type PlanType = 'weekly' | 'monthly' | 'yearly';
 
 export type PlanPrice = {
   plan: PlanType;
   label: string;
-  periodMonths: number;
+  /** Plan length in months (monthly 1, yearly 12), or null for plans measured in days. */
+  periodMonths: number | null;
+  /** Plan length in days (weekly 7), or null for plans measured in months. */
+  periodDays: number | null;
   price: number;
   currency: string;
   /** What students pay for this plan, or null when there is no student price. */
@@ -21,7 +24,8 @@ export type PlanPrice = {
 type Row = {
   plan: string;
   label: string;
-  period_months: number;
+  period_months: number | null;
+  period_days: number | null;
   price: string | number;
   currency: string;
   student_price: string | number | null;
@@ -32,7 +36,7 @@ export async function fetchPlanPrices(): Promise<PlanPrice[]> {
   if (!supabaseConfigured) return [];
   const { data, error } = await supabase
     .from('plan_prices')
-    .select('plan, label, period_months, price, currency, student_price')
+    .select('plan, label, period_months, period_days, price, currency, student_price')
     .eq('active', true)
     .order('sort_order');
   if (error || !data) {
@@ -40,11 +44,12 @@ export async function fetchPlanPrices(): Promise<PlanPrice[]> {
     return [];
   }
   return (data as Row[])
-    .filter((r) => r.plan === 'monthly' || r.plan === 'yearly')
+    .filter((r) => r.plan === 'weekly' || r.plan === 'monthly' || r.plan === 'yearly')
     .map((r) => ({
       plan: r.plan as PlanType,
       label: r.label,
       periodMonths: r.period_months,
+      periodDays: r.period_days,
       price: Number(r.price),
       currency: r.currency,
       studentPrice: r.student_price === null ? null : Number(r.student_price),
@@ -67,8 +72,13 @@ export function money(amount: number, currency = 'PHP'): string {
   return `${symbol}${grouped}${cents === '00' ? '' : `.${cents}`}`;
 }
 
-/** "1 month", "1 year", "6 months". */
-export function periodText(months: number): string {
+/** "1 week", "1 month", "1 year", "6 months", "10 days". */
+export function periodText(p: Pick<PlanPrice, 'periodMonths' | 'periodDays'>): string {
+  if (p.periodDays) {
+    if (p.periodDays % 7 === 0) return p.periodDays === 7 ? '1 week' : `${p.periodDays / 7} weeks`;
+    return p.periodDays === 1 ? '1 day' : `${p.periodDays} days`;
+  }
+  const months = p.periodMonths ?? 1;
   if (months === 12) return '1 year';
   if (months % 12 === 0) return `${months / 12} years`;
   return months === 1 ? '1 month' : `${months} months`;

@@ -1,6 +1,6 @@
 // PayPal (sandbox by default) checkout for areti Premium. One-time payment per period.
 //
-// POST { action: "create", plan: "monthly" | "yearly", student?: boolean, returnTo: "<app deep link>" }
+// POST { action: "create", plan: "weekly" | "monthly" | "yearly", student?: boolean, returnTo: "<app deep link>" }
 //   -> { orderId, approveUrl }      open approveUrl in a browser; PayPal sends the user back to returnTo
 // POST { action: "capture", orderId }
 //   -> { ok: true, plan, currentPeriodEnd }
@@ -17,9 +17,13 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-type Plan = 'monthly' | 'yearly';
+type Plan = 'weekly' | 'monthly' | 'yearly';
+const isPlan = (v: unknown): v is Plan => v === 'weekly' || v === 'monthly' || v === 'yearly';
 
-type PriceRow = { plan: Plan; label: string; period_months: number; price: string | number; currency: string; student_price: string | number | null };
+type PriceRow = {
+  plan: Plan; label: string; period_months: number | null; period_days: number | null;
+  price: string | number; currency: string; student_price: string | number | null;
+};
 
 const PAYPAL_BASE =
   (Deno.env.get('PAYPAL_ENV') ?? 'sandbox') === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
@@ -63,9 +67,11 @@ async function paypal(token: string, path: string, init: RequestInit = {}) {
   return { ok: res.ok, status: res.status, body };
 }
 
-function addMonths(from: Date, months: number): Date {
+/** End of one paid period: plan_prices gives the length in months (monthly, yearly) or days (weekly). */
+function addPeriod(from: Date, months: number | null, days: number | null): Date {
   const d = new Date(from);
-  d.setUTCMonth(d.getUTCMonth() + months);
+  if (days) d.setUTCDate(d.getUTCDate() + days);
+  else d.setUTCMonth(d.getUTCMonth() + (months ?? 1));
   return d;
 }
 
@@ -73,7 +79,7 @@ function addMonths(from: Date, months: number): Date {
 async function loadPrice(admin: ReturnType<typeof createClient>, plan: Plan): Promise<PriceRow | null> {
   const { data, error } = await admin
     .from('plan_prices')
-    .select('plan, label, period_months, price, currency, student_price')
+    .select('plan, label, period_months, period_days, price, currency, student_price')
     .eq('plan', plan)
     .eq('active', true)
     .maybeSingle();
@@ -102,8 +108,8 @@ Deno.serve(async (req) => {
 
     // ---- 1) create the PayPal order
     if (body.action === 'create') {
-      const plan: Plan | null = body.plan === 'monthly' || body.plan === 'yearly' ? body.plan : null;
-      if (!plan) return fail(400, 'bad_plan', 'Choose the monthly or yearly plan.');
+      const plan: Plan | null = isPlan(body.plan) ? body.plan : null;
+      if (!plan) return fail(400, 'bad_plan', 'Choose a weekly, monthly or yearly plan.');
       if (!isAppLink(body.returnTo)) return fail(400, 'bad_return', 'Missing app return link.');
 
       const price = await loadPrice(admin, plan);
@@ -158,7 +164,7 @@ Deno.serve(async (req) => {
       if (!details.ok) return fail(404, 'order_not_found', 'That PayPal order was not found.');
       const unit = details.body.purchase_units?.[0];
       if (unit?.custom_id !== user.id) return fail(403, 'not_your_order', 'This order belongs to another account.');
-      const plan: Plan | null = unit?.reference_id === 'monthly' || unit?.reference_id === 'yearly' ? unit.reference_id : null;
+      const plan: Plan | null = isPlan(unit?.reference_id) ? unit.reference_id : null;
       if (!plan) return fail(400, 'bad_order', 'Unknown plan on this order.');
       if (details.body.status === 'COMPLETED') return fail(409, 'already_processed', 'This payment was already applied.');
       if (details.body.status !== 'APPROVED') return fail(402, 'not_approved', 'The payment was not approved on PayPal.');
@@ -180,7 +186,8 @@ Deno.serve(async (req) => {
 
       // How long one payment lasts (from the table; falls back to the plan type).
       const price = await loadPrice(admin, plan);
-      const months = price?.period_months ?? (plan === 'yearly' ? 12 : 1);
+      const months = price ? price.period_months : plan === 'yearly' ? 12 : plan === 'monthly' ? 1 : null;
+      const days = price ? price.period_days : plan === 'weekly' ? 7 : null;
 
       // Paid: extend from the current end if Premium is still running, otherwise from now.
       const { data: existing } = await admin
@@ -191,7 +198,7 @@ Deno.serve(async (req) => {
       const now = new Date();
       const currentEnd = existing?.current_period_end ? new Date(existing.current_period_end) : null;
       const stillPremium = existing?.plan === 'premium' && existing.status !== 'expired' && (!currentEnd || currentEnd > now);
-      const periodEnd = addMonths(stillPremium && currentEnd ? currentEnd : now, months);
+      const periodEnd = addPeriod(stillPremium && currentEnd ? currentEnd : now, months, days);
 
       const row = {
         user_id: user.id,
