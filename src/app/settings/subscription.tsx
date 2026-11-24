@@ -73,7 +73,12 @@ export default function SubscriptionScreen() {
   const useStudent = studentDiscount && selected?.studentPrice != null;
   const total = selected ? totalFor(selected, useStudent) : 0;
   // Premium status: the Supabase subscriptions row, cached on the phone by refreshSubscription().
-  const sub = usePremium(); // live: admin edits, payments and the countdown
+  const live = usePremium(); // live: admin edits, payments and the countdown
+  // Right after a successful payment, show the subscriber view at once from the payment result,
+  // even before the saved status has been read back.
+  const [paid, setPaid] = useState<{ expiresAt: number | null; period: PlanType } | null>(null);
+  if (paid && live.isPremium) setPaid(null);
+  const sub = paid && !live.isPremium ? { ...live, isPremium: true, canceled: false, ...paid } : live;
   const planName = sub.period
     ? (prices.find((x) => x.plan === sub.period)?.label ?? sub.period[0].toUpperCase() + sub.period.slice(1))
     : null;
@@ -98,7 +103,10 @@ export default function SubscriptionScreen() {
     setPaying(false);
     if (result.kind === 'canceled') return; // back on the sheet, nothing charged
     setCheckoutOpen(false);
-    // Paid: stay here. The page has already switched to the subscriber view (You're Premium).
+    // Paid: stay here and switch to the subscriber view (You're Premium) right away.
+    if (result.kind === 'paid') {
+      setPaid({ expiresAt: Number.isFinite(result.currentPeriodEnd) ? result.currentPeriodEnd : null, period: selected?.plan ?? plan });
+    }
     setTimeout(() => {
       if (result.kind === 'paid') {
         showNotice({
