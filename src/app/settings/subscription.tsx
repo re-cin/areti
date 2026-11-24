@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
 import { Wordmark } from '@/components/brand/Wordmark';
+import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { showComingSoon } from '@/features/account/accountAlerts';
@@ -219,17 +220,22 @@ function OutlinedTitle({ text }: { text: string }) {
 const RETI_W = 54;
 const RUN_LEG_MS = 2600; // one trip from one side to the other
 const STEP_MS = 170; // one bounce of a running step
+const CROWN_LEAD = 0.22; // how far ahead the crown is, in trips (1 = a whole side-to-side run)
+const HOP_MS = 280; // half of one crown bounce (up, then down)
 
 /**
- * Small Reti running back and forth under the title without stopping: he leans into the
- * direction he runs, turns around at each side, and bobs with every step.
- * Stays still in the middle when Reduce Motion is on.
+ * Small Reti chasing a bouncing crown back and forth under the title, without stopping.
+ * The crown hops ahead; Reti leans into the run, turns at each side and bobs with every step.
+ * Both stay still in the middle when Reduce Motion is on.
  */
 function RunningReti() {
   const { width } = useWindowDimensions();
   const range = Math.max(0, width / 2 - RETI_W / 2 - 28); // how far from the middle he runs
   const [run] = useState(() => new Animated.Value(0.5)); // 0 → 1 = left → right, 1 → 2 = right → left
   const [step] = useState(() => new Animated.Value(0));
+  const [hop] = useState(() => new Animated.Value(0));
+  // The crown runs the same laps, a little ahead of Reti.
+  const [crownRun] = useState(() => Animated.modulo(Animated.add(run, CROWN_LEAD), 2));
 
   useEffect(() => {
     const loops: Animated.CompositeAnimation[] = [];
@@ -250,19 +256,39 @@ function RunningReti() {
           Animated.timing(step, { toValue: 0, duration: STEP_MS, easing: Easing.in(Easing.quad), useNativeDriver: true }),
         ]),
       );
-      loops.push(lap, bob);
-      lap.start();
-      bob.start();
+      const bounce = Animated.loop(
+        Animated.sequence([
+          Animated.timing(hop, { toValue: 1, duration: HOP_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(hop, { toValue: 0, duration: HOP_MS, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ]),
+      );
+      loops.push(lap, bob, bounce);
+      loops.forEach((l) => l.start());
     });
     return () => {
       cancelled = true;
       loops.forEach((l) => l.stop());
     };
-  }, [run, step]);
+  }, [run, step, hop]);
 
   const turn = [0, 0.999, 1, 1.999, 2];
   return (
     <View style={styles.runway} pointerEvents="none">
+      <Animated.View
+        accessible
+        accessibilityLabel="Crown"
+        style={[
+          styles.crown,
+          {
+            transform: [
+              { translateX: crownRun.interpolate({ inputRange: [0, 1, 2], outputRange: [-range, range, -range] }) },
+              { translateY: hop.interpolate({ inputRange: [0, 1], outputRange: [0, -24] }) },
+              { rotate: hop.interpolate({ inputRange: [0, 1], outputRange: ['-8deg', '8deg'] }) },
+            ],
+          },
+        ]}>
+        <Icon name="crown" size={28} color={colors.ink} fill={colors.gold} strokeWidth={1.4} />
+      </Animated.View>
       <Animated.Image
         source={MASCOT}
         accessibilityLabel="Reti the ghost running"
@@ -340,6 +366,7 @@ const styles = StyleSheet.create({
   titleWrap: { marginTop: 6 },
   runway: { alignSelf: 'stretch', alignItems: 'center', height: 74, justifyContent: 'flex-end', marginTop: 4 },
   reti: { width: RETI_W, height: 63, resizeMode: 'contain' },
+  crown: { position: 'absolute', bottom: 6, zIndex: 1 }, // on top, so it hops over Reti when they cross at a wall
   title: { fontFamily: fonts.semiBold, fontSize: 60, lineHeight: 72, letterSpacing: 1 },
   sheet: {
     flex: 1,
