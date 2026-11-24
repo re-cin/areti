@@ -11,6 +11,7 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { Text } from '@/components/ui/Text';
 import { MONTHS } from '@/lib/dateHelpers';
 import { useDbQuery } from '@/lib/useDbQuery';
+import { FREE_SUBSCRIPTION, getSubscription } from '@/features/account/subscriptionRepo';
 import { showSignOutInfo } from '@/features/account/accountAlerts';
 import { EmailTakenError, getProfile, updateProfile, type Profile } from '@/features/account/accountRepo';
 import { AuthError, deleteAccount } from '@/lib/auth';
@@ -24,6 +25,8 @@ const EMPTY_PROFILE: Profile = { id: '', name: '', email: '', pictureUri: null, 
 
 export default function AccountSettingsScreen() {
   const profile = useDbQuery(getProfile, EMPTY_PROFILE);
+  // Re-reads Premium from Supabase; it updates profile.plan, which the screen shows.
+  useDbQuery(getSubscription, FREE_SUBSCRIPTION);
   const [editingName, setEditingName] = useState(false);
   const [editingEmail, setEditingEmail] = useState(false);
   const [name, setName] = useState('');

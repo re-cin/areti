@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { Text } from '@/components/ui/Text';
 import { useDbQuery } from '@/lib/useDbQuery';
+import { FREE_SUBSCRIPTION, getSubscription } from '@/features/account/subscriptionRepo';
 import { showComingSoon, showSignOutInfo } from '@/features/account/accountAlerts';
 import { getProfile, type Profile } from '@/features/account/accountRepo';
 import { colors, fonts, spacing } from '@/theme';
@@ -17,6 +18,8 @@ const comingSoon = showComingSoon;
 
 export default function UserSettingsScreen() {
   const profile = useDbQuery(getProfile, EMPTY_PROFILE);
+  // Re-reads Premium from Supabase; it updates profile.plan, which the screen shows.
+  useDbQuery(getSubscription, FREE_SUBSCRIPTION);
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
   const rows: { icon: IconName; label: string; href?: Href; onPress?: () => void }[] = [

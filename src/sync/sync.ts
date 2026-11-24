@@ -17,6 +17,7 @@ import {
 import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { bumpData } from '@/stores/dataVersion';
 import { refreshSessionReminders } from '@/features/timer/reminders';
+import { getSubscription } from '@/features/account/subscriptionRepo';
 
 /**
  * Offline-first sync between the phone's SQLite database and Supabase.
@@ -189,6 +190,7 @@ async function syncOnce(): Promise<SyncResult> {
   );
   if (__DEV__) console.log(`[sync] done in ${Date.now() - started} ms`);
   void refreshSessionReminders();
+  void getSubscription().catch(() => {}); // Premium status from the cloud subscriptions table
   return 'ok';
 }
 

@@ -8,6 +8,8 @@ import { Icon } from '@/components/ui/Icon';
 import { NeoBox } from '@/components/ui/NeoBox';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { showComingSoon } from '@/features/account/accountAlerts';
+import { FREE_SUBSCRIPTION, getSubscription, type Subscription } from '@/features/account/subscriptionRepo';
+import { useDbQuery } from '@/lib/useDbQuery';
 import { showNotice } from '@/stores/notice';
 import { colors, fonts } from '@/theme';
 
@@ -41,6 +43,8 @@ export default function SubscriptionScreen() {
   const [plan, setPlan] = useState<PlanId>('yearly');
   const [studentDiscount, setStudentDiscount] = useState(false);
   const selected = PLANS.find((p) => p.id === plan) ?? PLANS[0];
+  // Premium status comes from the Supabase subscriptions table (saved on the phone for offline).
+  const sub = useDbQuery(getSubscription, FREE_SUBSCRIPTION);
 
   const goPremium = () =>
     showNotice({
@@ -122,6 +126,10 @@ export default function SubscriptionScreen() {
             </View>
           </NeoBox>
 
+          {sub.isPremium ? (
+            <PremiumStatus sub={sub} />
+          ) : (
+            <>
           {/* Plans */}
           <View style={styles.plans} accessibilityRole="radiogroup">
             {PLANS.map((p) => {
@@ -169,9 +177,11 @@ export default function SubscriptionScreen() {
             textVariant="heading"
             contentStyle={{ paddingVertical: 15 }}
           />
+            </>
+          )}
 
           <View style={styles.footer}>
-            <Text style={styles.renews}>Auto-renews for {selected.renews} until cancelled</Text>
+            {!sub.isPremium && <Text style={styles.renews}>Auto-renews for {selected.renews} until cancelled</Text>}
             <View style={styles.links}>
               <Pressable onPress={() => showComingSoon('Terms of Use')} hitSlop={8} accessibilityRole="link">
                 <Text style={styles.link}>Terms of Use</Text>
@@ -185,6 +195,26 @@ export default function SubscriptionScreen() {
         </View>
       </ScrollView>
     </View>
+  );
+}
+
+const dateText = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+/** Shown instead of the plans when Supabase says the user already has Premium. */
+function PremiumStatus({ sub }: { sub: Subscription }) {
+  const end = sub.periodEnd ? dateText(sub.periodEnd) : null;
+  let line = end ? `Renews on ${end}.` : 'Active.';
+  if (sub.status === 'trialing') line = end ? `Your free trial ends on ${end}.` : 'You are on a free trial.';
+  if (sub.status === 'canceled') line = end ? `Canceled. Premium stays on until ${end}.` : 'Canceled.';
+  return (
+    <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
+      <View style={styles.statusHead}>
+        <Icon name="crown" size={22} color={colors.ink} fill={colors.gold} strokeWidth={1.4} />
+        <Text style={styles.statusTitle}>You&apos;re Premium</Text>
+      </View>
+      <Text style={styles.statusLine}>{line}</Text>
+      {sub.startedAt ? <Text style={styles.statusSince}>Member since {dateText(sub.startedAt)}</Text> : null}
+    </NeoBox>
   );
 }
 
@@ -412,6 +442,11 @@ const styles = StyleSheet.create({
   track: { width: 52, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: colors.ink, padding: 2.5, justifyContent: 'center' },
   knob: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.white, borderWidth: 1.5, borderColor: colors.ink },
   footer: { alignItems: 'center', gap: 8 },
+  status: { padding: 20, gap: 6, borderColor: colors.tealDark, borderWidth: 3 },
+  statusHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusTitle: { fontFamily: fonts.semiBold, fontSize: 20, color: colors.ink },
+  statusLine: { fontFamily: fonts.medium, fontSize: 15, color: colors.ink },
+  statusSince: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted },
   renews: { fontFamily: fonts.regular, fontSize: 13, color: colors.muted, textAlign: 'center' },
   links: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   link: { fontFamily: fonts.semiBold, fontSize: 13, color: colors.ink, textDecorationLine: 'underline' },
