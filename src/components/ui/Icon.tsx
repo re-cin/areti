@@ -11,14 +11,14 @@ type OwnIconName =
   | 'user' | 'settings' | 'chevronLeft' | 'chevronRight' | 'chevronDown' | 'chevronUp'
   | 'play' | 'pause' | 'restart' | 'close' | 'plus' | 'plusCircle' | 'clock' | 'sort'
   | 'flame' | 'download' | 'sync' | 'trash' | 'logout' | 'camera' | 'crown' | 'pencil'
-  | 'book' | 'sliders' | 'shield' | 'help' | 'info' | 'warning' | 'calendar' | 'stats' | 'ghost';
+  | 'book' | 'sliders' | 'shield' | 'help' | 'info' | 'warning' | 'calendar' | 'stats' | 'ghost' | 'lock';
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number; fill?: string };
 
 const OWN = new Set<string>([
   'user', 'settings', 'chevronLeft', 'chevronRight', 'chevronDown', 'chevronUp', 'play', 'pause', 'restart', 'close',
   'plus', 'plusCircle', 'clock', 'sort', 'flame', 'download', 'sync', 'trash', 'logout', 'camera', 'crown', 'pencil',
-  'book', 'sliders', 'shield', 'help', 'info', 'warning', 'calendar', 'stats', 'ghost',
+  'book', 'sliders', 'shield', 'help', 'info', 'warning', 'calendar', 'stats', 'ghost', 'lock',
 ]);
 
 export function Icon({ name, size = 22, color = colors.ink, strokeWidth = 2, fill }: Props) {
@@ -90,7 +90,10 @@ export function Icon({ name, size = 22, color = colors.ink, strokeWidth = 2, fil
       case 'stats':
         return <Path {...p} d="M3 21h18M5 21v-9a3 3 0 0 1 6 0v9M11 21V8a3 3 0 0 1 6 0v13" />;
       case 'ghost':
-        return (<><Path {...p} d="M5 21V11a7 7 0 0 1 14 0v10l-2.33-1.75L14.33 21 12 19.25 9.67 21l-2.34-1.75z" /><Circle {...solid} cx={9.5} cy={11} r={0.6} /><Circle {...solid} cx={14.5} cy={11} r={0.6} /></>);
+        // Reti: round dome head, sides that pinch in, a flared hem with four scallops, upright pill eyes.
+        return (<><Path {...p} d="M4 11.5a8 8 0 0 1 16 0c0 3 -.8 4.5 -.4 5.9c.3 1 .9 1.6 .9 2.4a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0a2.125 1.5 0 0 1-4.25 0c0-.8.6-1.4.9-2.4c.4-1.4-.4-2.9-.4-5.9Z" /><Path {...p} d="M9.5 10.2v1.8M14.5 10.2v1.8" /></>);
+      case 'lock':
+        return (<><Rect {...p} x={4} y={11} width={16} height={11} rx={2.5} /><Path {...p} d="M8 11V7a4 4 0 0 1 8 0v4" /></>);
     }
   })();
 

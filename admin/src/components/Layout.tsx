@@ -22,8 +22,8 @@ export function Layout() {
           <NavLink to="/users">
             <Icon name="users" /> Users
           </NavLink>
-          <NavLink to="/reti">
-            <Icon name="ghost" /> Reti
+          <NavLink to="/pet">
+            <Icon name="ghost" /> Pet
           </NavLink>
           <NavLink to="/controls">
             <Icon name="sliders" /> Controls

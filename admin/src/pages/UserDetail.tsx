@@ -12,6 +12,7 @@ import { deleteUser, fetchUserDetail, setAdmin, setDisabled } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatMinutes, formatNumber, timeAgo } from '../lib/format';
 import { dailySeries, summarize } from '../lib/stats';
+import { retiView } from '../lib/reti';
 import { BILLING_LABEL } from '../lib/types';
 import { useAsync } from '../lib/useAsync';
 import { useLiveSubscriptions } from '../lib/useLiveSubscriptions';
@@ -73,7 +74,8 @@ export function UserDetail() {
   const maxWeekday = Math.max(1, ...stats.weekdays);
   const maxSubject = Math.max(1, ...stats.subjectTotals.map((s) => s.minutes));
   const daysLeft = sub.current_period_end ? Math.ceil((Date.parse(sub.current_period_end) - Date.now()) / DAY) : null;
-  const xpNeeded = ghost ? 100 * (ghost.level + 1) : 0;
+  // Same level rules as the app (src/features/pet): worked out from the focus log, not the stored row.
+  const reti = ghost ? retiView({ ghost: { ...ghost, updated_at: 0 }, daily_goal: null, sessions: data.sessions }) : null;
   const memberDays = Math.max(0, Math.floor((Date.now() - Date.parse(user.created_at)) / DAY));
   const dueColor = daysLeft === null ? undefined : daysLeft < 0 ? 'var(--dangerDark)' : daysLeft <= 7 ? 'var(--terracottaDark)' : undefined;
 
@@ -208,13 +210,13 @@ export function UserDetail() {
             <div className="kv"><span>Planner tasks done</span><b>{data.tasks.done} / {data.tasks.total}{data.tasks.overdue > 0 && <span style={{ color: 'var(--terracottaDark)' }}> · {data.tasks.overdue} overdue</span>}</b></div>
             <div className="kv"><span>Member for</span><b>{memberDays} day{memberDays === 1 ? '' : 's'}</b></div>
           </div>
-          {ghost && (
+          {reti && (
             <div className="neo pet">
-              <img src="/mascot.png" alt="" />
+              <img src="/areti-icon.png" alt="" />
               <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600 }}>{ghost.name} · Level {ghost.level}</div>
-                <div className="xp"><div style={{ width: `${Math.min(100, (ghost.xp / xpNeeded) * 100)}%` }} /></div>
-                <div className="muted small">{ghost.xp} / {xpNeeded} XP to level {ghost.level + 1}</div>
+                <div style={{ fontWeight: 600 }}>{reti.name} · Level {reti.level}</div>
+                <div className="xp"><div style={{ width: `${Math.round(reti.progress * 100)}%` }} /></div>
+                <div className="muted small">{reti.maxLevel ? 'Max level' : `${reti.xp} / ${reti.xpToNext} EXP to level ${reti.level + 1}`}</div>
               </div>
             </div>
           )}

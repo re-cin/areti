@@ -1,4 +1,5 @@
 import type { AdminUser, DashboardStats, SubscriptionChange, UserDetail } from './types';
+import type { RetiDetail, RetiSession, TestBlock } from './reti';
 import { isPremium } from './types';
 
 // Sample data so the site can be opened without a Supabase project (demo mode).
@@ -157,4 +158,37 @@ export async function demoSetDisabled(userId: string, disabled: boolean) {
 export async function demoDeleteUser(userId: string) {
   if (userId === DEMO_ADMIN_ID) throw new Error('You cannot delete your own account here');
   users = users.filter((u) => u.id !== userId);
+}
+
+// ---- Reti page (demo): each user's focus log kept in memory, test blocks included ----
+const demoReti = new Map<string, RetiSession[]>();
+
+async function demoLog(userId: string): Promise<RetiSession[] | null> {
+  if (!demoReti.has(userId)) {
+    const detail = await demoUserDetail(userId);
+    if (!detail) return null;
+    demoReti.set(userId, detail.sessions.map((s) => ({ started_at: s.started_at, duration_sec: s.duration_sec, completed: s.completed, test: false })));
+  }
+  return demoReti.get(userId)!;
+}
+
+export async function demoRetiDetail(userId: string): Promise<RetiDetail | null> {
+  const log = await demoLog(userId);
+  if (!log) return null;
+  return { ghost: { name: 'Reti', level: 1, xp: 0, updated_at: now }, daily_goal: null, sessions: [...log].sort((a, b) => a.started_at - b.started_at) };
+}
+
+export async function demoAddTestFocus(userId: string, block: TestBlock) {
+  const log = await demoLog(userId);
+  if (!log) throw new Error('No such user');
+  if (!users.find((u) => u.id === userId)?.is_admin) throw new Error('Test tools only work on admin accounts');
+  log.push({ ...block, test: true });
+}
+
+export async function demoRemoveTestFocus(userId: string): Promise<number> {
+  const log = await demoLog(userId);
+  if (!log) return 0;
+  const kept = log.filter((s) => !s.test);
+  demoReti.set(userId, kept);
+  return log.length - kept.length;
 }

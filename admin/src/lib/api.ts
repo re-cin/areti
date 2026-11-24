@@ -1,4 +1,5 @@
-import { demoDashboardStats, demoDeleteUser, demoListUsers, demoSetAdmin, demoSetDisabled, demoSetSubscription, demoUserDetail } from './demo';
+import { demoAddTestFocus, demoDashboardStats, demoDeleteUser, demoListUsers, demoRemoveTestFocus, demoRetiDetail, demoSetAdmin, demoSetDisabled, demoSetSubscription, demoUserDetail } from './demo';
+import type { RetiDetail, TestBlock } from './reti';
 import { supabase, supabaseConfigured } from './supabase';
 import type { AdminUser, DashboardStats, SubscriptionChange, UserDetail } from './types';
 
@@ -67,4 +68,33 @@ export async function deleteUser(userId: string) {
   if (files?.length) await supabase.storage.from('avatars').remove(files.map((f) => `${userId}/${f.name}`));
   const { error } = await supabase.rpc('admin_delete_user', { p_user_id: userId });
   if (error) throw error;
+}
+
+// ---- Reti page (supabase/migrations/20261124120000_admin_reti_tools.sql) ----
+
+/** One user's ghost, daily goal and focus log (null if the user no longer exists). */
+export async function fetchRetiDetail(userId: string): Promise<RetiDetail | null> {
+  if (!supabaseConfigured) return demoRetiDetail(userId);
+  const { data, error } = await supabase.rpc('admin_reti_detail', { p_user_id: userId });
+  if (error) throw error;
+  return (data ?? null) as RetiDetail | null;
+}
+
+/** Adds test focus blocks (marked as test data) to a user's focus log. The phone gets them at its next sync. */
+export async function addTestFocus(userId: string, blocks: TestBlock[]) {
+  for (const b of blocks) {
+    if (!supabaseConfigured) { await demoAddTestFocus(userId, b); continue; }
+    const { error } = await supabase.rpc('admin_add_test_focus', {
+      p_user_id: userId, p_started_at: Math.round(b.started_at), p_duration_sec: b.duration_sec, p_completed: b.completed,
+    });
+    if (error) throw error;
+  }
+}
+
+/** Removes only the test blocks; real study stays. Returns how many were removed. */
+export async function removeTestFocus(userId: string): Promise<number> {
+  if (!supabaseConfigured) return demoRemoveTestFocus(userId);
+  const { data, error } = await supabase.rpc('admin_remove_test_focus', { p_user_id: userId });
+  if (error) throw error;
+  return Number(data ?? 0);
 }

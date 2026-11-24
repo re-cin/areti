@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth';
 import { Controls } from './pages/Controls';
 import { Dashboard } from './pages/Dashboard';
 import { Login } from './pages/Login';
+import { Pet } from './pages/Pet';
 import { Reti } from './pages/Reti';
 import { UserDetail } from './pages/UserDetail';
 import { Users } from './pages/Users';
@@ -20,7 +21,9 @@ export function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
-        <Route path="/reti" element={<Reti />} />
+        <Route path="/pet" element={<Pet />} />
+        <Route path="/pet/test" element={<Reti />} />
+        <Route path="/reti" element={<Navigate to="/pet" replace />} />
         <Route path="/controls" element={<Controls />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>

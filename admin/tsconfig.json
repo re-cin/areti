@@ -13,5 +13,5 @@
     "noUnusedParameters": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "../src/theme/colors.ts"]
+  "include": ["src", "../src/theme/colors.ts", "../src/features/pet/credit.ts", "../src/features/pet/levels.ts", "../src/features/pet/expressions.ts", "../src/features/pet/focusLog.ts", "../src/features/pet/schedule.ts", "../src/features/pet/types.ts", "../src/features/pet/dialogue.ts", "../src/features/pet/slots.ts"]
 }

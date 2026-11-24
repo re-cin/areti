@@ -204,7 +204,7 @@ export async function recordFocus(input: {
       await finishLinkedTask(session.id);
     }
   }
-  // XP = credited minutes (whole minutes, 0 under 15), completed or cancelled, within the daily cap.
+  // XP = credited minutes (whole minutes studied), finished or ended early, within the daily cap.
   await awardXp(creditWithDailyCap(input.durationSec, creditedToday));
   bumpData();
 }

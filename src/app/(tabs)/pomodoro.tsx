@@ -11,7 +11,7 @@ import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { Text } from '@/components/ui/Text';
 import { formatTimer } from '@/lib/dateHelpers';
 import { useDbQuery } from '@/lib/useDbQuery';
-import { getGhost } from '@/features/pet/petRepo';
+import { DEFAULT_GHOST, getGhost } from '@/features/pet/petRepo';
 import { getNotificationPermission, requestNotificationPermission } from '@/features/timer/notifications';
 import { DEFAULT_POMODORO, loadPomodoroSettings } from '@/features/timer/pomodoroSettings';
 import { blockMin } from '@/features/timer/session';
@@ -152,7 +152,7 @@ export default function PomodoroScreen() {
   const timer = useTimer();
   const remaining = useTimer(selectRemainingMs);
   const settings = useDbQuery(loadPomodoroSettings, DEFAULT_POMODORO);
-  const ghost = useDbQuery(getGhost, { id: '', level: 1, xp: 0, xpToNext: 200 });
+  const ghost = useDbQuery(getGhost, DEFAULT_GHOST);
   const upcoming = useDbQuery(listUpcomingToday, [] as UpcomingSession[]);
 
   const idle = timer.status === 'idle';
@@ -193,11 +193,9 @@ export default function PomodoroScreen() {
         run && run.completedBlocks > 0
         ? `${run.completedBlocks} of ${run.totalBlocks} blocks done`
         : undefined
-      : focusedMin >= 15
-        ? `${focusedMin} min will be credited`
-        : focusedMin >= 1
-          ? `${focusedMin} min saved, no XP (under 15 min)`
-          : 'Less than a minute, nothing saved';
+      : focusedMin >= 1
+        ? `${focusedMin} min will be credited to Reti`
+        : 'Less than a minute, nothing saved';
 
   const circle = Math.min(width - 96, 290);
 
@@ -237,7 +235,7 @@ export default function PomodoroScreen() {
           <Text style={{ fontFamily: fonts.semiBold, fontSize: 14 }}>LVL {ghost.level}</Text>
           <BlockDots total={totalDots} filled={filledDots} />
           <Text variant="caption" style={{ fontFamily: fonts.semiBold, fontSize: 11 }}>
-            {ghost.xp} / {ghost.xpToNext} XP
+            {ghost.label}
           </Text>
         </View>
 
@@ -386,7 +384,7 @@ export default function PomodoroScreen() {
       <ConfirmDialog
         visible={confirmingStop && !idle}
         title="End this session?"
-        message="Your focus time so far goes to your statistics. Reti earns XP when a block reaches 15 minutes."
+        message="Your focus time so far goes to your statistics and gives Reti XP. Only finished blocks count toward your streak."
         highlight={stopHighlight}
         cancelLabel="Keep going"
         confirmLabel="End session"
