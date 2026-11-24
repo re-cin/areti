@@ -19,6 +19,7 @@ import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
 import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, resendSignUpCode, signIn, signUp } from '@/lib/auth';
+import { DISPLAY_NAME_MAX, displayNameProblem } from '@/lib/displayName';
 import { showWelcome } from '@/lib/welcome';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
@@ -42,6 +43,7 @@ export default function Auth() {
   const [headerHeight, setHeaderHeight] = useState(0);
 
   const [mode, setMode] = useState<Mode>('Sign In');
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -91,14 +93,14 @@ export default function Auth() {
 
   const submit = async () => {
     if (busy) return;
-    const problem = validate({ email, password, confirm, isSignUp });
+    const problem = validate({ displayName, email, password, confirm, isSignUp });
     setError(problem);
     if (problem) return;
 
     setBusy(true);
     const started = Date.now();
     try {
-      if (isSignUp) await signUp(email, password);
+      if (isSignUp) await signUp(email, password, displayName);
       else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
       if (isSignUp) {
@@ -156,7 +158,24 @@ export default function Auth() {
         <Animated.View style={[styles.form, riseStyle]}>
           <SegmentedControl options={MODES} value={mode} onChange={switchMode} />
 
-          <Text style={[styles.label, styles.firstLabel]}>Email address</Text>
+          {isSignUp && (
+            <>
+              <Text style={[styles.label, styles.firstLabel]}>Display name</Text>
+              <TextField
+                onFocus={onFocus}
+                value={displayName}
+                onChangeText={(t) => { setDisplayName(t); setError(null); }}
+                placeholder="What should we call you?"
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                maxLength={DISPLAY_NAME_MAX}
+                returnKeyType="next"
+              />
+            </>
+          )}
+
+          <Text style={[styles.label, isSignUp ? null : styles.firstLabel]}>Email address</Text>
           <TextField
             onFocus={onFocus}
             value={email}
@@ -232,16 +251,22 @@ export default function Auth() {
 }
 
 function validate({
+  displayName,
   email,
   password,
   confirm,
   isSignUp,
 }: {
+  displayName: string;
   email: string;
   password: string;
   confirm: string;
   isSignUp: boolean;
 }): string | null {
+  if (isSignUp) {
+    const nameProblem = displayNameProblem(displayName);
+    if (nameProblem) return nameProblem;
+  }
   if (!/^\S+@\S+\.\S+$/.test(email.trim())) return 'Enter a valid email address.';
   const pw = cleanPassword(password);
   if (!pw) return 'Enter your password.';

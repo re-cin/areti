@@ -1,6 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { clearLocalData, finishAndClearLocalData } from '@/sync/sync';
 import { supabase, supabaseConfigured } from './supabase';
+import { cleanDisplayName } from './displayName';
 
 /**
  * Accounts are Supabase Auth (email + password), so the same account works on any phone.
@@ -40,9 +41,14 @@ export class AuthError extends Error {
  * Supabase emails a 6-digit code and this throws AuthError('confirm-email'): show the code screen
  * (app/verify-email.tsx), then call verifySignUpCode. The "Confirm signup" email template must include {{ .Token }}.
  */
-export async function signUp(email: string, password: string) {
+export async function signUp(email: string, password: string, displayName: string) {
   ensureConfigured();
-  const { data, error } = await supabase.auth.signUp({ email: email.trim(), password: cleanPassword(password) });
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password: cleanPassword(password),
+    // Saved as the account's row in public.profile by a database trigger (save_profile_from_signup).
+    options: { data: { display_name: cleanDisplayName(displayName) } },
+  });
   if (error) throw toAuthError(error);
   // With email confirmation on, Supabase hides "already registered" by returning a user with no identities.
   if (data.user && data.user.identities?.length === 0) throw new AuthError('email-taken');
