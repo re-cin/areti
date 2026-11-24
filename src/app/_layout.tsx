@@ -18,7 +18,7 @@ import { startAutoSync } from '@/sync/sync';
 import { refreshSessionReminders } from '@/features/timer/reminders';
 import { setOnPermissionGranted, setReminderPopup } from '@/features/timer/notifications';
 import { isPomodoroVisible, showNotice } from '@/stores/notice';
-import * as Notifications from 'expo-notifications';
+import { loadNotifications } from '@/lib/notificationPermission';
 import { router, usePathname } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
@@ -68,6 +68,9 @@ export default function RootLayout() {
     });
     setOnPermissionGranted(() => void refreshSessionReminders());
     void refreshSessionReminders();
+    // Null in Expo Go on Android, where notifications aren't available.
+    const Notifications = loadNotifications();
+    if (!Notifications) return;
     const tap = Notifications.addNotificationResponseReceivedListener((r) => {
       const data = r.notification.request.content.data as { kind?: string } | undefined;
       if (data?.kind === 'reminder') router.navigate('/pomodoro');

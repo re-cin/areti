@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
  * 'ExpoTopicSubscriptionModule'". In a development or release build it works normally.
  */
 
-type NotificationsModule = typeof import('expo-notifications');
+export type NotificationsModule = typeof import('expo-notifications');
 
 /**
  * On Android, expo-notifications needs this native module the moment it is imported.
@@ -18,7 +18,8 @@ type NotificationsModule = typeof import('expo-notifications');
 const missingNativeModule =
   Platform.OS === 'android' && requireOptionalNativeModule('ExpoTopicSubscriptionModule') == null;
 
-function loadNotifications(): NotificationsModule | null {
+/** Returns expo-notifications, or null where it can't load (Expo Go on Android). */
+export function loadNotifications(): NotificationsModule | null {
   if (missingNativeModule) return null;
   try {
     return require('expo-notifications') as NotificationsModule;

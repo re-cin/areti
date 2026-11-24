@@ -1,7 +1,10 @@
-import * as Notifications from 'expo-notifications';
+import { loadNotifications } from '@/lib/notificationPermission';
 import { Platform } from 'react-native';
 import type { PhaseEnd } from './session';
 import { playChime } from '@/features/audio/playChime';
+
+// Loaded lazily: importing expo-notifications crashes Expo Go on Android (no ExpoTopicSubscriptionModule).
+const Notifications = Platform.OS === 'ios' || Platform.OS === 'android' ? loadNotifications() : null;
 
 // Local notifications for the end of each timer phase. They fire even when the app is
 // closed, because they are scheduled up front with the exact end time.
@@ -24,6 +27,7 @@ export function setReminderPopup(fn: (title: string, body: string, openPomodoro:
 
 /** Cancels only our scheduled notifications whose id starts with `prefix` (timer vs reminders). */
 async function cancelWithPrefix(prefix: string) {
+  if (!Notifications) return;
   const all = await Notifications.getAllScheduledNotificationsAsync();
   await Promise.all(
     all.filter((n) => n.identifier.startsWith(prefix)).map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
@@ -47,7 +51,7 @@ export type SessionReminder = {
  * Silent sessions remind without a sound. (Custom sounds need a dev build; Expo Go uses the phone's default.)
  */
 export async function scheduleSessionReminders(reminders: SessionReminder[]): Promise<void> {
-  if (!supported) return;
+  if (!Notifications) return;
   try {
     await configure();
     await cancelWithPrefix(REMINDER_PREFIX);
@@ -66,11 +70,10 @@ export async function scheduleSessionReminders(reminders: SessionReminder[]): Pr
     console.warn('[notifications] reminders', e);
   }
 }
-const supported = Platform.OS === 'ios' || Platform.OS === 'android';
 let configured = false;
 
 async function configure() {
-  if (!supported || configured) return;
+  if (!Notifications || configured) return;
   configured = true;
   Notifications.setNotificationHandler({
     handleNotification: async (n) => {
@@ -96,7 +99,7 @@ async function configure() {
 export type PermissionState = 'granted' | 'denied' | 'undetermined' | 'unsupported';
 
 export async function getNotificationPermission(): Promise<PermissionState> {
-  if (!supported) return 'unsupported';
+  if (!Notifications) return 'unsupported';
   try {
     const { status } = await Notifications.getPermissionsAsync();
     return status as PermissionState;
@@ -106,7 +109,7 @@ export async function getNotificationPermission(): Promise<PermissionState> {
 }
 
 export async function requestNotificationPermission(): Promise<PermissionState> {
-  if (!supported) return 'unsupported';
+  if (!Notifications) return 'unsupported';
   try {
     await configure();
     const { status } = await Notifications.requestPermissionsAsync();
@@ -128,7 +131,7 @@ function message(end: PhaseEnd): { title: string; body: string } {
 
 /** Replaces any scheduled timer notifications with one per upcoming phase end. */
 export async function scheduleTimerNotifications(timeline: PhaseEnd[], silent = false): Promise<void> {
-  if (!supported) return;
+  if (!Notifications) return;
   try {
     await configure();
     await cancelWithPrefix(TIMER_PREFIX); // leaves session reminders alone
@@ -149,7 +152,7 @@ export async function scheduleTimerNotifications(timeline: PhaseEnd[], silent = 
 }
 
 export async function cancelTimerNotifications(): Promise<void> {
-  if (!supported) return;
+  if (!Notifications) return;
   try {
     await cancelWithPrefix(TIMER_PREFIX);
   } catch (e) {
