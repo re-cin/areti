@@ -18,17 +18,7 @@ import { Wordmark } from '@/components/brand/Wordmark';
 import { NeoButton } from '@/components/ui/NeoButton';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { TextField } from '@/components/ui/TextField';
-import {
-  AuthError,
-  cleanPassword,
-  isUsernameAvailable,
-  MIN_PASSWORD_LENGTH,
-  resendSignUpCode,
-  signIn,
-  signInWithUsername,
-  signUp,
-} from '@/lib/auth';
-import { looksLikeEmail, usernameProblem } from '@/lib/username';
+import { AuthError, cleanPassword, MIN_PASSWORD_LENGTH, resendSignUpCode, signIn, signUp } from '@/lib/auth';
 import { showWelcome } from '@/lib/welcome';
 import { useKeyboardAwareScroll } from '@/hooks/useKeyboardAwareScroll';
 import { colors, fonts } from '@/theme';
@@ -52,32 +42,13 @@ export default function Auth() {
   const [headerHeight, setHeaderHeight] = useState(0);
 
   const [mode, setMode] = useState<Mode>('Sign In');
-  // Sign Up: the email. Sign In: the email or the username.
   const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
-  const [nameCheck, setNameCheck] = useState<'idle' | 'checking' | 'free' | 'taken'>('idle');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const isSignUp = mode === 'Sign Up';
-
-  // Sign Up: check the username with Supabase a moment after the user stops typing.
-  useEffect(() => {
-    if (!isSignUp || usernameProblem(username)) return;
-    let alive = true;
-    const t = setTimeout(() => {
-      setNameCheck('checking');
-      isUsernameAvailable(username)
-        .then((free) => alive && setNameCheck(free ? 'free' : 'taken'))
-        .catch(() => alive && setNameCheck('idle')); // offline: checked again when signing up
-    }, 400);
-    return () => {
-      alive = false;
-      clearTimeout(t);
-    };
-  }, [username, isSignUp]);
   // Keep the focused field visible above the phone keyboard.
   const { scrollRef, onScroll, onFocus, keyboardPadding } = useKeyboardAwareScroll();
 
@@ -120,16 +91,15 @@ export default function Auth() {
 
   const submit = async () => {
     if (busy) return;
-    const problem = validate({ email, username, password, confirm, isSignUp }) ?? (isSignUp && nameCheck === 'taken' ? errorMessage(new AuthError('username-taken')) : null);
+    const problem = validate({ email, password, confirm, isSignUp });
     setError(problem);
     if (problem) return;
 
     setBusy(true);
     const started = Date.now();
     try {
-      if (isSignUp) await signUp(email, password, username);
-      else if (looksLikeEmail(email)) await signIn(email, password);
-      else await signInWithUsername(email, password);
+      if (isSignUp) await signUp(email, password);
+      else await signIn(email, password);
       if (__DEV__) console.log(`[auth] ${isSignUp ? 'sign up' : 'sign in'} took ${Date.now() - started} ms`);
       if (isSignUp) {
         router.replace('/welcome'); // new account: welcome page, then the Planner
@@ -140,14 +110,11 @@ export default function Auth() {
     } catch (e) {
       if (e instanceof AuthError && e.code === 'confirm-email') {
         // Sign up: Supabase just emailed the code. Sign in before confirming: send a fresh one.
-        // (After a username sign-in the server tells us the account's email.)
-        const address = e.email ?? email.trim();
-        if (!isSignUp) await resendSignUpCode(address).catch(() => {});
-        router.push({ pathname: '/verify-email', params: { email: address } });
+        if (!isSignUp) await resendSignUpCode(email).catch(() => {});
+        router.push({ pathname: '/verify-email', params: { email: email.trim() } });
         return;
       }
-      if (e instanceof AuthError && e.code === 'username-taken') setNameCheck('taken');
-      setError(errorMessage(e, isSignUp));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -189,42 +156,16 @@ export default function Auth() {
         <Animated.View style={[styles.form, riseStyle]}>
           <SegmentedControl options={MODES} value={mode} onChange={switchMode} />
 
-          {isSignUp && (
-            <>
-              <Text style={[styles.label, styles.firstLabel]}>Username</Text>
-              <TextField
-                onFocus={onFocus}
-                value={username}
-                onChangeText={(t) => {
-                  setUsername(t.replace(/\s/g, ''));
-                  setNameCheck('idle');
-                  setError(null);
-                }}
-                placeholder="e.g. ryan_b"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="username-new"
-                textContentType="username"
-                maxLength={20}
-                returnKeyType="next"
-              />
-              <UsernameHint username={username} check={nameCheck} />
-            </>
-          )}
-
-          <Text style={[styles.label, isSignUp ? null : styles.firstLabel]}>
-            {isSignUp ? 'Email address' : 'Email or username'}
-          </Text>
+          <Text style={[styles.label, styles.firstLabel]}>Email address</Text>
           <TextField
             onFocus={onFocus}
             value={email}
             onChangeText={(t) => { setEmail(t); setError(null); }}
-            placeholder={isSignUp ? 'you@example.com' : 'you@example.com or username'}
+            placeholder="you@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete={isSignUp ? 'email' : 'username'}
-            textContentType={isSignUp ? 'emailAddress' : 'username'}
+            autoComplete="email"
+            textContentType="emailAddress"
             returnKeyType="next"
           />
 
@@ -290,47 +231,18 @@ export default function Auth() {
   );
 }
 
-/** Under the Username field: the rules, or whether the username is free. */
-function UsernameHint({ username, check }: { username: string; check: 'idle' | 'checking' | 'free' | 'taken' }) {
-  const problem = username ? usernameProblem(username) : null;
-  const [text, color] = !username
-    ? ['3–20 characters: letters, numbers, _ and .', colors.inkSoft]
-    : problem
-      ? [problem, colors.dangerDark]
-      : check === 'checking'
-        ? ['Checking…', colors.inkSoft]
-        : check === 'free'
-          ? ['✓ Username is available', colors.tealDark]
-          : check === 'taken'
-            ? ['That username is taken. Try another one.', colors.dangerDark]
-            : ['3–20 characters: letters, numbers, _ and .', colors.inkSoft];
-  return (
-    <Text style={[styles.hint, { color }]} accessibilityLiveRegion="polite">
-      {text}
-    </Text>
-  );
-}
-
 function validate({
   email,
-  username,
   password,
   confirm,
   isSignUp,
 }: {
   email: string;
-  username: string;
   password: string;
   confirm: string;
   isSignUp: boolean;
 }): string | null {
-  if (isSignUp) {
-    const nameProblem = usernameProblem(username);
-    if (nameProblem) return nameProblem;
-  }
-  const id = email.trim();
-  if (!isSignUp && !id) return 'Enter your email or username.';
-  if ((isSignUp || looksLikeEmail(id)) && !/^\S+@\S+\.\S+$/.test(id)) return 'Enter a valid email address.';
+  if (!/^\S+@\S+\.\S+$/.test(email.trim())) return 'Enter a valid email address.';
   const pw = cleanPassword(password);
   if (!pw) return 'Enter your password.';
   if (isSignUp && pw.length < MIN_PASSWORD) return `Use at least ${MIN_PASSWORD} characters for your password.`;
@@ -338,15 +250,13 @@ function validate({
   return null;
 }
 
-function errorMessage(e: unknown, isSignUp = true) {
+function errorMessage(e: unknown) {
   if (!(e instanceof AuthError)) return 'Something went wrong. Please try again.';
   switch (e.code) {
     case 'email-taken':
       return 'An account with this email already exists. Sign in instead.';
-    case 'username-taken':
-      return 'That username is taken. Try another one.';
     case 'wrong-credentials':
-      return isSignUp ? 'Wrong email or password.' : 'Wrong email, username or password.';
+      return 'Wrong email or password.';
     case 'confirm-email':
       return 'Enter the code we emailed you to finish creating your account.';
     case 'weak-password':
@@ -410,11 +320,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.terracottaDark,
     marginBottom: 7,
-  },
-  hint: {
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    marginTop: 6,
   },
   error: {
     fontFamily: fonts.medium,
