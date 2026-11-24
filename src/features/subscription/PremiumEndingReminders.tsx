@@ -2,9 +2,11 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import Storage from 'expo-sqlite/kv-store';
 import { router } from 'expo-router';
+import { supabase, supabaseConfigured } from '@/lib/supabase';
 import { useDataVersion } from '@/stores/dataVersion';
 import { showNotice } from '@/stores/notice';
 import { loadPremium, premiumDateTimeText } from './premiumInfo';
+import { refreshSubscription } from './subscriptionRepo';
 import { dueReminder, msUntilNextCheck, type PremiumReminder } from './premiumReminders';
 import { timeLeftText } from './timeLeft';
 
@@ -31,11 +33,48 @@ async function markShown(endMs: number, shown: Set<PremiumReminder>) {
 }
 
 /**
+ * Listens to the signed-in user's row in the Supabase `subscriptions` table (Realtime), so an
+ * admin edit or a PayPal payment reaches the phone within a second or two instead of at the next
+ * sync. Each change refreshes the cached plan, which re-runs the reminder check below.
+ */
+function useLiveSubscription() {
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const listen = (userId: string | undefined) => {
+      if (channel) void supabase.removeChannel(channel);
+      channel = null;
+      if (!userId) return;
+      channel = supabase
+        .channel(`subscription:${userId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subscriptions', filter: `user_id=eq.${userId}` },
+          () => void refreshSubscription(),
+        )
+        .subscribe();
+    };
+
+    supabase.auth.getSession().then(({ data }) => listen(data.session?.user.id));
+    const { data: auth } = supabase.auth.onAuthStateChange((_event, session) => listen(session?.user.id));
+    // Coming back from the background: the live connection may have dropped, so ask once.
+    const app = AppState.addEventListener('change', (state) => state === 'active' && void refreshSubscription());
+    return () => {
+      auth.subscription.unsubscribe();
+      app.remove();
+      if (channel) void supabase.removeChannel(channel);
+    };
+  }, []);
+}
+
+/**
  * Pop-ups for Premium users: "24 hours left" and "1 hour left", each once per Premium period.
  * Checks when the app starts, comes back to the foreground, after a sync, and right at each
  * reminder moment while the app is open. Mounted once in the root layout; draws nothing itself.
  */
 export function PremiumEndingReminders() {
+  useLiveSubscription();
   const version = useDataVersion((s) => s.version); // re-check after syncs / admin changes
 
   useEffect(() => {
