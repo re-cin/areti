@@ -56,7 +56,7 @@ export default function SubscriptionScreen() {
         contentContainerStyle={{ flexGrow: 1 }}>
         {/* Teal hero: back button, wordmark, outlined "Premium" */}
         <View style={[styles.hero, { paddingTop: insets.top + 30 }]}>
-          <Wordmark width={127} color={colors.white} backgroundColor={colors.welcomeTeal} />
+          <Wordmark width={127} backgroundColor={colors.welcomeTeal} />
           <OutlinedTitle text="Premium" />
           <Pressable
             onPress={() => router.back()}
