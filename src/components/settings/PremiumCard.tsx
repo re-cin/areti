@@ -17,7 +17,11 @@ export function PremiumCard({ info, now }: { info: PremiumInfo; now: number }) {
   // A subscription renews, so the end date only matters once it's canceled.
   const ending = info.canceled && info.expiresAt ? info.expiresAt : null;
   const left = ending ? timeLeftText(ending, now) : 'Active';
-  const until = ending ? `Canceled · ends ${premiumDateTimeText(ending)}` : 'Thanks for supporting areti!';
+  const until = ending
+    ? `Canceled · ends ${premiumDateTimeText(ending)}`
+    : info.expiresAt
+      ? `Auto-renews ${premiumDateTimeText(info.expiresAt)}`
+      : 'Thanks for supporting areti!';
   return (
     <Pressable
       onPress={() => router.push('/settings/subscription')}
