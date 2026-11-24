@@ -286,16 +286,23 @@ const dateText = premiumDateText;
 /** Shown instead of the plans when Supabase says the user already has Premium. */
 function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
   const [busy, setBusy] = useState(false);
-  const line = !sub.expiresAt
-    ? 'Premium is active.'
-    : sub.canceled
-      ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(sub.expiresAt)}.`
-      : `Premium is on until ${premiumDateTimeText(sub.expiresAt)}.`;
+  // Flips the button right away after Cancel / Resume, until the saved status catches up.
+  const [override, setOverride] = useState<boolean | null>(null);
+  if (override !== null && override === sub.canceled) setOverride(null);
+  const canceled = override ?? sub.canceled;
+  // A subscription renews, so the end date and countdown only show once it's canceled.
+  const ending = canceled && sub.expiresAt ? sub.expiresAt : null;
+  const line = ending
+    ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(ending)}.`
+    : canceled
+      ? 'Your subscription was canceled.'
+      : 'Your subscription is active.';
 
-  const run = async (change: () => Promise<boolean>, done: { title: string; message: string }) => {
+  const run = async (change: () => Promise<boolean>, nextCanceled: boolean, done: { title: string; message: string }) => {
     setBusy(true);
     try {
       const changed = await change();
+      setOverride(nextCanceled);
       showNotice(changed ? { ...done, icon: 'crown' } : { title: 'Nothing to change', message: 'Your subscription is already up to date.' });
     } catch {
       showNotice({ title: 'Could not update your subscription', message: 'Check your internet connection and try again.' });
@@ -315,7 +322,7 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
       buttonLabel: 'Cancel subscription',
       cancelLabel: 'Keep Premium',
       onPress: () =>
-        void run(cancelSubscription, {
+        void run(cancelSubscription, true, {
           title: 'Subscription canceled',
           message: until ? `Premium stays on until ${until}.` : 'You are back on Free.',
         }),
@@ -323,7 +330,7 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
   };
 
   const resume = () =>
-    void run(resumeSubscription, { title: 'Welcome back!', message: 'Your subscription is active again.' });
+    void run(resumeSubscription, false, { title: 'Welcome back!', message: 'Your subscription is active again.' });
 
   return (
     <NeoBox backgroundColor={colors.white} shadowColor={colors.tealDark} offset={4} style={styles.status}>
@@ -331,10 +338,10 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
         <Icon name="crown" size={22} color={colors.ink} fill={colors.gold} strokeWidth={1.4} />
         <Text style={styles.statusTitle}>You&apos;re Premium</Text>
       </View>
-      {sub.expiresAt ? <Text style={styles.statusLeft}>{timeLeftText(sub.expiresAt, now)}</Text> : null}
+      {ending ? <Text style={styles.statusLeft}>{timeLeftText(ending, now)}</Text> : null}
       <Text style={styles.statusLine}>{line}</Text>
       <View style={styles.statusAction}>
-        {sub.canceled ? (
+        {canceled ? (
           <NeoButton
             label={busy ? 'Please wait…' : 'Resume subscription'}
             onPress={resume}

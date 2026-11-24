@@ -25,6 +25,7 @@ export async function refreshSubscription(): Promise<void> {
   const now = Date.now();
   db.insert(settings).values({ key: SUBSCRIPTION_SETTING_KEY, value, updatedAt: now })
     .onConflictDoUpdate({ target: settings.key, set: { value, updatedAt: now } }).run();
+  bumpData(); // screens (Premium card, Subscription page) update now, not after the schedules below
   // A plan change switches scheduling capabilities on or off straight away.
   await regenerateSchedules().catch(error => console.warn('[subscription] Could not refresh schedules', error));
   bumpData();

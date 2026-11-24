@@ -14,10 +14,10 @@ const MASCOT = require('../../../assets/images/areti-mascot.png');
  * Tapping it opens the Subscription page, which shows the full status.
  */
 export function PremiumCard({ info, now }: { info: PremiumInfo; now: number }) {
-  const left = info.expiresAt ? timeLeftText(info.expiresAt, now) : 'Active';
-  const until = info.expiresAt
-    ? `${info.canceled ? 'Canceled · ends' : 'Until'} ${premiumDateTimeText(info.expiresAt)}`
-    : 'Thanks for supporting areti!';
+  // A subscription renews, so the end date only matters once it's canceled.
+  const ending = info.canceled && info.expiresAt ? info.expiresAt : null;
+  const left = ending ? timeLeftText(ending, now) : 'Active';
+  const until = ending ? `Canceled · ends ${premiumDateTimeText(ending)}` : 'Thanks for supporting areti!';
   return (
     <Pressable
       onPress={() => router.push('/settings/subscription')}
