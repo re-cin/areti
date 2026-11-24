@@ -56,10 +56,15 @@ export default function SubscriptionScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ flexGrow: 1 }}>
         {/* Teal hero: back button, wordmark, outlined "Premium" */}
-        <View style={[styles.hero, { paddingTop: insets.top + 30 }]}>
-          <Wordmark width={127} backgroundColor={colors.welcomeTeal} />
-          <OutlinedTitle text="Premium" />
-          <FloatingReti />
+        <View style={[styles.hero, { paddingTop: insets.top + 84 }]}>
+          {/* Reti on the left, wordmark + title stacked on the right */}
+          <View style={styles.heroRow}>
+            <FloatingReti />
+            <View style={styles.heroText}>
+              <Wordmark width={110} backgroundColor={colors.welcomeTeal} />
+              <OutlinedTitle text="Premium" />
+            </View>
+          </View>
           <Pressable
             onPress={() => router.back()}
             hitSlop={8}
@@ -298,8 +303,10 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 4, paddingBottom: 30 },
   backWrap: { position: 'absolute', left: 20 },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
-  reti: { width: 64, height: 75, resizeMode: 'contain', marginTop: 10 },
-  title: { fontFamily: fonts.semiBold, fontSize: 60, lineHeight: 72, letterSpacing: 1 },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  heroText: { alignItems: 'center', gap: 2 },
+  reti: { width: 64, height: 75, resizeMode: 'contain' },
+  title: { fontFamily: fonts.semiBold, fontSize: 52, lineHeight: 62, letterSpacing: 1 },
   sheet: {
     flex: 1,
     backgroundColor: colors.splash,
