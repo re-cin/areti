@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, Easing, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { router } from 'expo-router';
@@ -61,10 +61,8 @@ export default function SubscriptionScreen() {
           <Wordmark width={120} backgroundColor={colors.welcomeTeal} />
           <View style={styles.titleWrap}>
             <OutlinedTitle text="Premium" />
-            <View style={styles.retiPerch} pointerEvents="none">
-              <FloatingReti />
-            </View>
           </View>
+          <RunningReti />
           <Pressable
             onPress={() => router.back()}
             hitSlop={8}
@@ -218,33 +216,69 @@ function OutlinedTitle({ text }: { text: string }) {
   );
 }
 
-/** Small Reti floating gently up and down (still when Reduce Motion is on). */
-function FloatingReti() {
-  const [float] = useState(() => new Animated.Value(0));
+const RETI_W = 54;
+const RUN_LEG_MS = 2600; // one trip from one side to the other
+const STEP_MS = 170; // one bounce of a running step
+
+/**
+ * Small Reti running back and forth under the title without stopping: he leans into the
+ * direction he runs, turns around at each side, and bobs with every step.
+ * Stays still in the middle when Reduce Motion is on.
+ */
+function RunningReti() {
+  const { width } = useWindowDimensions();
+  const range = Math.max(0, width / 2 - RETI_W / 2 - 28); // how far from the middle he runs
+  const [run] = useState(() => new Animated.Value(0.5)); // 0 → 1 = left → right, 1 → 2 = right → left
+  const [step] = useState(() => new Animated.Value(0));
+
   useEffect(() => {
-    let loop: Animated.CompositeAnimation | null = null;
+    const loops: Animated.CompositeAnimation[] = [];
     let cancelled = false;
     AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (reduce || cancelled) return;
-      loop = Animated.loop(
+      // Start from the middle heading right, then loop full laps.
+      const lap = Animated.loop(
         Animated.sequence([
-          Animated.timing(float, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-          Animated.timing(float, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
+          Animated.timing(run, { toValue: 2, duration: RUN_LEG_MS * 1.5, easing: Easing.linear, useNativeDriver: true }),
+          Animated.timing(run, { toValue: 0, duration: 0, useNativeDriver: true }),
+          Animated.timing(run, { toValue: 0.5, duration: RUN_LEG_MS / 2, easing: Easing.linear, useNativeDriver: true }),
         ]),
       );
-      loop.start();
+      const bob = Animated.loop(
+        Animated.sequence([
+          Animated.timing(step, { toValue: 1, duration: STEP_MS, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+          Animated.timing(step, { toValue: 0, duration: STEP_MS, easing: Easing.in(Easing.quad), useNativeDriver: true }),
+        ]),
+      );
+      loops.push(lap, bob);
+      lap.start();
+      bob.start();
     });
     return () => {
       cancelled = true;
-      loop?.stop();
+      loops.forEach((l) => l.stop());
     };
-  }, [float]);
+  }, [run, step]);
+
+  const turn = [0, 0.999, 1, 1.999, 2];
   return (
-    <Animated.Image
-      source={MASCOT}
-      accessibilityLabel="Reti the ghost"
-      style={[styles.reti, { transform: [{ translateY: float.interpolate({ inputRange: [0, 1], outputRange: [0, -8] }) }] }]}
-    />
+    <View style={styles.runway} pointerEvents="none">
+      <Animated.Image
+        source={MASCOT}
+        accessibilityLabel="Reti the ghost running"
+        style={[
+          styles.reti,
+          {
+            transform: [
+              { translateX: run.interpolate({ inputRange: [0, 1, 2], outputRange: [-range, range, -range] }) },
+              { translateY: step.interpolate({ inputRange: [0, 1], outputRange: [0, -7] }) },
+              { scaleX: run.interpolate({ inputRange: turn, outputRange: [1, 1, -1, -1, 1] }) },
+              { rotate: '10deg' }, // leans forward; the flip above mirrors it when he runs left
+            ],
+          },
+        ]}
+      />
+    </View>
   );
 }
 
@@ -300,12 +334,12 @@ function Star() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.welcomeTeal },
-  hero: { alignItems: 'center', gap: 4, paddingBottom: 34 },
+  hero: { alignItems: 'center', gap: 4, paddingBottom: 24 },
   backWrap: { position: 'absolute', left: 20 },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 2 },
   titleWrap: { marginTop: 6 },
-  retiPerch: { position: 'absolute', top: -34, right: -30, transform: [{ rotate: '12deg' }] },
-  reti: { width: 54, height: 63, resizeMode: 'contain' },
+  runway: { alignSelf: 'stretch', alignItems: 'center', height: 74, justifyContent: 'flex-end', marginTop: 4 },
+  reti: { width: RETI_W, height: 63, resizeMode: 'contain' },
   title: { fontFamily: fonts.semiBold, fontSize: 60, lineHeight: 72, letterSpacing: 1 },
   sheet: {
     flex: 1,
