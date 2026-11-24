@@ -296,7 +296,9 @@ function PremiumStatus({ sub, now }: { sub: PremiumInfo; now: number }) {
     ? `Your subscription was canceled. Premium ends ${premiumDateTimeText(ending)}.`
     : canceled
       ? 'Your subscription was canceled.'
-      : 'Your subscription is active.';
+      : sub.expiresAt
+        ? `Your subscription is active. It auto-renews ${premiumDateTimeText(sub.expiresAt)}.`
+        : 'Your subscription is active.';
 
   const run = async (change: () => Promise<boolean>, nextCanceled: boolean, done: { title: string; message: string }) => {
     setBusy(true);
