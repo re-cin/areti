@@ -53,7 +53,7 @@ export default function UserSettingsScreen() {
 
       {/* Upgrade banner */}
       {profile.plan !== 'pro' && (
-        <Pressable onPress={() => comingSoon('Premium')} accessibilityRole="button" accessibilityLabel="Upgrade to Premium">
+        <Pressable onPress={() => router.push('/settings/subscription')} accessibilityRole="button" accessibilityLabel="Upgrade to Premium">
           <NeoBox backgroundColor={colors.terracotta} style={{ flexDirection: 'row', alignItems: 'center', padding: spacing.lg, gap: spacing.md }}>
             <View style={{ flex: 1, gap: 2 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
